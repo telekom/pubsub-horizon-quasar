@@ -34,6 +34,9 @@ func createStore(storeType string) (Store, error) {
 	case "redis":
 		return new(RedisStore), nil
 
+	case "hazelcast":
+		return new(HazelcastStore), nil
+
 	case "dummy":
 		return new(DummyStore), nil
 

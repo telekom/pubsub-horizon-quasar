@@ -37,6 +37,8 @@ func setDefaults() {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.initCommands", []string{})
+
+	viper.SetDefault("hazelcast.clusterName", "horizon")
 }
 
 func readConfig() *Configuration {
