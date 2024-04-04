@@ -19,10 +19,10 @@ type RedisStore struct {
 func (s *RedisStore) Initialize() {
 	s.ctx = context.Background()
 	s.client = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", config.Current.Redis.Host, config.Current.Redis.Port),
-		Username: config.Current.Redis.Username,
-		Password: config.Current.Redis.Password,
-		DB:       config.Current.Redis.Database,
+		Addr:     fmt.Sprintf("%s:%d", config.Current.Store.Redis.Host, config.Current.Store.Redis.Port),
+		Username: config.Current.Store.Redis.Username,
+		Password: config.Current.Store.Redis.Password,
+		DB:       config.Current.Store.Redis.Database,
 	})
 
 	log.Debug().Msg("Trying to reach redis...")
@@ -33,7 +33,7 @@ func (s *RedisStore) Initialize() {
 
 	log.Info().Msg("Redis connection established...")
 
-	for _, cmd := range config.Current.Redis.InitCommands {
+	for _, cmd := range config.Current.Store.Redis.InitCommands {
 		log.Debug().Fields(map[string]any{
 			"command": cmd,
 		}).Msg("Executing init command")

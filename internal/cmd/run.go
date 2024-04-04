@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/k8s"
+	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/client-go/dynamic"
 )
@@ -34,6 +35,7 @@ var runCmd = &cobra.Command{
 			log.Fatal().Err(err).Msg("Could not create resource watcher!")
 		}
 
+		store.SetupStore()
 		go watcher.Start()
 		utils.WaitForExit()
 		watcher.Stop()

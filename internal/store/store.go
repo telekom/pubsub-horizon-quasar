@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var CurrentStore = setupStore()
+var CurrentStore Store
 
 type Store interface {
 	Initialize()
@@ -16,16 +16,16 @@ type Store interface {
 	OnDelete(obj *unstructured.Unstructured)
 }
 
-func setupStore() Store {
-	var storeType = config.Current.StoreType
-	store, err := createStore(storeType)
+func SetupStore() {
+	var storeType = config.Current.Store.StoreType
+	var err error
+	CurrentStore, err = createStore(storeType)
 	if err != nil {
 		log.Fatal().Fields(map[string]any{
 			"storageType": storeType,
 		}).Err(err).Msg("Could not create store!")
 	}
-	store.Initialize()
-	return store
+	CurrentStore.Initialize()
 }
 
 func createStore(storeType string) (Store, error) {

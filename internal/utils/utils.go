@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -61,4 +63,9 @@ func WaitForExit() {
 	var sigChan = make(chan os.Signal)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
+}
+
+func GetGroupVersionId(obj *unstructured.Unstructured) string {
+	var gvk = obj.GroupVersionKind()
+	return strings.ToLower(fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Group, gvk.Version))
 }

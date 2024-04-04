@@ -27,18 +27,24 @@ func setDefaults() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	viper.SetDefault("logLevel", "info")
-	viper.SetDefault("storeType", "redis")
 	viper.SetDefault("namespace", "default")
 	viper.SetDefault("reSyncPeriod", "30s")
 
-	viper.SetDefault("redis.host", "localhost")
-	viper.SetDefault("redis.port", 6379)
-	viper.SetDefault("redis.username", "")
-	viper.SetDefault("redis.password", "")
-	viper.SetDefault("redis.database", 0)
-	viper.SetDefault("redis.initCommands", []string{})
+	viper.SetDefault("store.storeType", "redis")
 
-	viper.SetDefault("hazelcast.clusterName", "horizon")
+	viper.SetDefault("store.redis.host", "localhost")
+	viper.SetDefault("store.redis.port", 6379)
+	viper.SetDefault("store.redis.username", "")
+	viper.SetDefault("store.redis.password", "")
+	viper.SetDefault("store.redis.database", 0)
+	viper.SetDefault("store.redis.initCommands", []string{})
+
+	viper.SetDefault("store.hazelcast.clusterName", "horizon")
+	viper.SetDefault("store.hazelcast.mongo.enabled", true)
+	viper.SetDefault("store.hazelcast.mongo.url", "mongodb://localhost:27017")
+	viper.SetDefault("store.hazelcast.mongo.database", "horizon")
+	viper.SetDefault("store.hazelcast.mongo.bulkSize", 100)
+	viper.SetDefault("store.hazelcast.mongo.flushTimeout", "5s")
 }
 
 func readConfig() *Configuration {

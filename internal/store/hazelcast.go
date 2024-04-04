@@ -2,30 +2,35 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/mongo"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type HazelcastStore struct {
-	client *hazelcast.Client
-	ctx    context.Context
+	client   *hazelcast.Client
+	wtClient *mongo.WriteThroughClient
+	ctx      context.Context
 }
 
 func (s *HazelcastStore) Initialize() {
 	var hazelcastConfig = hazelcast.NewConfig()
 	var err error
 
-	hazelcastConfig.Cluster.Name = config.Current.Hazelcast.ClusterName
+	hazelcastConfig.Cluster.Name = config.Current.Store.Hazelcast.ClusterName
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
 	s.ctx = context.Background()
 	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create hazelcast client!")
+	}
+
+	if config.Current.Store.Hazelcast.Mongo.Enabled {
+		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Store.Hazelcast.Mongo)
 	}
 }
 
@@ -40,6 +45,10 @@ func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) {
 	if err := cacheMap.Set(s.ctx, obj.GetName(), string(json)); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not write resource to store!")
 	}
+
+	if s.wtClient != nil {
+		go s.wtClient.Add(obj)
+	}
 }
 
 func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
@@ -53,6 +62,10 @@ func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *uns
 	if err := cacheMap.Set(s.ctx, newObj.GetName(), string(json)); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not update resource in store!")
 	}
+
+	if s.wtClient != nil {
+		go s.wtClient.Update(newObj)
+	}
 }
 
 func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) {
@@ -61,15 +74,14 @@ func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) {
 	if err := cacheMap.Delete(s.ctx, obj.GetName()); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
 	}
-}
 
-func (*HazelcastStore) createMapName(obj *unstructured.Unstructured) string {
-	var gvk = obj.GroupVersionKind()
-	return fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Group, gvk.Version)
+	if s.wtClient != nil {
+		go s.wtClient.Delete(obj)
+	}
 }
 
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
-	var mapName = s.createMapName(obj)
+	var mapName = utils.GetGroupVersionId(obj)
 
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
