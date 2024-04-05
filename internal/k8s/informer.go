@@ -3,6 +3,8 @@ package k8s
 import (
 	"fmt"
 	"github.com/rs/zerolog/log"
+	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/mongo"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -32,7 +34,29 @@ func NewResourceWatcher(
 		stopChan: make(chan struct{}),
 	}
 
-	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	var performReplay = true
+	err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
+		if !informer.HasSynced() && config.Current.Fallback.Mongo.Enabled && performReplay {
+			performReplay = false
+			log.Info().Msg("The informer encountered an error before being in sync. Falling back to MongoDB...")
+
+			var fallbackClient = mongo.NewFallbackClient(config.Current)
+			var resource = config.Current.Kubernetes.GetGroupVersionResource()
+
+			replayedDocuments, err := fallbackClient.ReplayForResource(&resource, store.CurrentStore.OnAdd)
+			if err != nil {
+				log.Fatal().Err(err).Msg("Replay from MongoDB failed!")
+			}
+			log.Info().Fields(map[string]any{
+				"replayedDocuments": replayedDocuments,
+			}).Msg("Replay from MongoDB successful!")
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    watcher.add,
 		UpdateFunc: watcher.update,
 		DeleteFunc: watcher.delete,

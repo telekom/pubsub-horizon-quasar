@@ -20,7 +20,7 @@ type WriteThroughClient struct {
 }
 
 func NewWriteTroughClient(config *config.MongoConfiguration) *WriteThroughClient {
-	var client, err = mongo.Connect(context.Background(), options.Client().ApplyURI(config.Url))
+	var client, err = mongo.Connect(context.Background(), options.Client().ApplyURI(config.Uri))
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not connect to MongoDB")
 	}

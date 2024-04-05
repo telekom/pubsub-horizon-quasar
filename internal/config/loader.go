@@ -41,10 +41,13 @@ func setDefaults() {
 
 	viper.SetDefault("store.hazelcast.clusterName", "horizon")
 	viper.SetDefault("store.hazelcast.mongo.enabled", true)
-	viper.SetDefault("store.hazelcast.mongo.url", "mongodb://localhost:27017")
+	viper.SetDefault("store.hazelcast.mongo.uri", "mongodb://localhost:27017")
 	viper.SetDefault("store.hazelcast.mongo.database", "horizon")
-	viper.SetDefault("store.hazelcast.mongo.bulkSize", 100)
-	viper.SetDefault("store.hazelcast.mongo.flushTimeout", "5s")
+
+	viper.SetDefault("fallback.mongo.enabled", true)
+	viper.SetDefault("fallback.mongo.uri", "mongodb://localhost:27017")
+	viper.SetDefault("fallback.mongo.database", "horizon")
+	viper.SetDefault("fallback.mongo.batchSize", 100)
 }
 
 func readConfig() *Configuration {

@@ -30,7 +30,7 @@ var runCmd = &cobra.Command{
 			}
 		}
 
-		watcher, err := k8s.NewResourceWatcher(kubernetesClient, k8s.ResourceSubscription, config.Current.Namespace, config.Current.ReSyncPeriod)
+		watcher, err := k8s.NewResourceWatcher(kubernetesClient, config.Current.Kubernetes.GetGroupVersionResource(), config.Current.Namespace, config.Current.ReSyncPeriod)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Could not create resource watcher!")
 		}
