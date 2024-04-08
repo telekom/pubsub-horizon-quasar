@@ -21,6 +21,8 @@ func (s *HazelcastStore) Initialize() {
 	var err error
 
 	hazelcastConfig.Cluster.Name = config.Current.Store.Hazelcast.ClusterName
+	hazelcastConfig.Cluster.Security.Credentials.Username = config.Current.Store.Hazelcast.Username
+	hazelcastConfig.Cluster.Security.Credentials.Password = config.Current.Store.Hazelcast.Password
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
 	s.ctx = context.Background()

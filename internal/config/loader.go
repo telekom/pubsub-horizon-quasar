@@ -40,6 +40,8 @@ func setDefaults() {
 	viper.SetDefault("store.redis.initCommands", []string{})
 
 	viper.SetDefault("store.hazelcast.clusterName", "horizon")
+	viper.SetDefault("store.hazelcast.username", "")
+	viper.SetDefault("store.hazelcast.password", "")
 	viper.SetDefault("store.hazelcast.mongo.enabled", true)
 	viper.SetDefault("store.hazelcast.mongo.uri", "mongodb://localhost:27017")
 	viper.SetDefault("store.hazelcast.mongo.database", "horizon")

@@ -31,6 +31,8 @@ type RedisConfiguration struct {
 
 type HazelcastConfiguration struct {
 	ClusterName string             `mapstructure:"clusterName"`
+	Username    string             `mapstructure:"username"`
+	Password    string             `mapstructure:"password"`
 	Mongo       MongoConfiguration `mapstructure:"mongo"`
 }
 
