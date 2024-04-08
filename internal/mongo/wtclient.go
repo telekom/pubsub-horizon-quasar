@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"context"
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
@@ -9,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"strings"
 	"sync"
 )
 
@@ -34,7 +36,25 @@ func NewWriteTroughClient(config *config.MongoConfiguration) *WriteThroughClient
 		config: config,
 		ctx:    context.Background(),
 	}
+}
 
+func (c *WriteThroughClient) EnsureIndexes() {
+	for _, index := range c.config.Indexes {
+		var resource = config.Current.Kubernetes.GetGroupVersionResource()
+		var colName = strings.ToLower(fmt.Sprintf("%s.%s.%s", resource.Resource, resource.Group, resource.Version))
+		var col = c.client.Database(c.config.Database).Collection(colName)
+
+		indexName, err := col.Indexes().CreateOne(c.ctx, index.ToIndexModel())
+		if err != nil {
+			log.Error().Fields(map[string]any{
+				"index": indexName,
+			}).Err(err).Msg("Could not create index")
+			continue
+		}
+		log.Debug().Fields(map[string]any{
+			"index": indexName,
+		}).Msg("Created index")
+	}
 }
 
 func (c *WriteThroughClient) Add(obj *unstructured.Unstructured) {

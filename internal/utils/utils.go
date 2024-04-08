@@ -67,5 +67,5 @@ func WaitForExit() {
 
 func GetGroupVersionId(obj *unstructured.Unstructured) string {
 	var gvk = obj.GroupVersionKind()
-	return strings.ToLower(fmt.Sprintf("%s.%s.%s", gvk.Kind, gvk.Group, gvk.Version))
+	return strings.ToLower(fmt.Sprintf("%ss.%s.%s", gvk.Kind, gvk.Group, gvk.Version))
 }

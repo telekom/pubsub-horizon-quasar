@@ -1,6 +1,8 @@
 package config
 
 import (
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"time"
 )
@@ -34,12 +36,35 @@ type HazelcastConfiguration struct {
 	Username    string             `mapstructure:"username"`
 	Password    string             `mapstructure:"password"`
 	Mongo       MongoConfiguration `mapstructure:"mongo"`
+	Indexes     []HazelcastIndex   `mapstructure:"indexes"`
+}
+
+type HazelcastIndex struct {
+	Name   string   `mapstructure:"name"`
+	Fields []string `mapstructure:"fields"`
+	Type   string   `mapstructure:"type"`
 }
 
 type MongoConfiguration struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	Uri      string `mapstructure:"uri"`
-	Database string `mapstructure:"database"`
+	Enabled  bool         `mapstructure:"enabled"`
+	Uri      string       `mapstructure:"uri"`
+	Database string       `mapstructure:"database"`
+	Indexes  []MongoIndex `mapstructure:"indexes"`
+}
+
+type MongoIndex struct {
+	Fields map[string]int `mapstructure:"fields"`
+}
+
+func (i *MongoIndex) ToIndexModel() mongo.IndexModel {
+	var keys = bson.D{}
+	for field, direction := range i.Fields {
+		keys = append(keys, bson.E{Key: field, Value: direction})
+	}
+
+	return mongo.IndexModel{
+		Keys: keys,
+	}
 }
 
 type KubernetesConfiguration struct {
