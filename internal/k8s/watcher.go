@@ -8,40 +8,40 @@ import (
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 	"time"
 )
 
 type ResourceWatcher struct {
-	resource schema.GroupVersionResource
-	informer cache.SharedIndexInformer
-	stopChan chan struct{}
+	resourceConfig *config.ResourceConfiguration
+	informer       cache.SharedIndexInformer
+	stopChan       chan struct{}
 }
 
 func NewResourceWatcher(
 	client *dynamic.DynamicClient,
-	resource schema.GroupVersionResource,
-	namespace string,
+	resourceConfig *config.ResourceConfiguration,
 	reSyncPeriod time.Duration,
 ) (*ResourceWatcher, error) {
 
+	var resource = resourceConfig.GetGroupVersionResource()
+	var namespace = resourceConfig.Kubernetes.Namespace
 	var informer = createInformer(client, resource, namespace, reSyncPeriod)
 	var watcher = ResourceWatcher{
-		resource: resource,
-		informer: informer,
-		stopChan: make(chan struct{}),
+		resourceConfig: resourceConfig,
+		informer:       informer,
+		stopChan:       make(chan struct{}),
 	}
 
 	var performReplay = true
 	err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
-		if !informer.HasSynced() && config.Current.Fallback.Mongo.Enabled && performReplay {
+		if !informer.HasSynced() && performReplay {
 			performReplay = false
 			log.Info().Msg("The informer encountered an error before being in sync. Falling back to MongoDB...")
 
 			var fallbackClient = mongo.NewFallbackClient(config.Current)
-			var resource = config.Current.Kubernetes.GetGroupVersionResource()
+			var resource = resourceConfig.GetGroupVersionResource()
 
 			replayedDocuments, err := fallbackClient.ReplayForResource(&resource, store.CurrentStore.OnAdd)
 			if err != nil {
@@ -109,6 +109,8 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
+	store.CurrentStore.InitializeResource(w.resourceConfig)
+
 	defer func() {
 		if err := recover(); err != nil {
 			log.Fatal().Fields(map[string]any{
@@ -117,7 +119,9 @@ func (w *ResourceWatcher) Start() {
 		}
 	}()
 	w.informer.Run(w.stopChan)
-	log.Info().Fields(utils.CreateFieldForResource(&w.resource)).Msg("Resource watcher stopped!")
+
+	var resource = w.resourceConfig.GetGroupVersionResource()
+	log.Info().Fields(utils.CreateFieldForResource(&resource)).Msg("Resource watcher stopped!")
 }
 
 func (w *ResourceWatcher) Stop() {

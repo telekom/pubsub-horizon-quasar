@@ -25,7 +25,7 @@ type FallbackClient struct {
 func NewFallbackClient(config *config.Configuration) *FallbackClient {
 	var ctx = context.Background()
 
-	var client, err = mongo.Connect(ctx, options.Client().ApplyURI(config.Fallback.Mongo.Uri))
+	var client, err = mongo.Connect(ctx, options.Client().ApplyURI(config.Fallback.Uri))
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not connect to MongoDB")
 	}
@@ -80,5 +80,5 @@ func (c *FallbackClient) ReplayForResource(gvr *schema.GroupVersionResource, rep
 
 func (c *FallbackClient) getCollection(gvr *schema.GroupVersionResource) *mongo.Collection {
 	var collectionName = strings.ToLower(fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version))
-	return c.client.Database(c.config.Fallback.Mongo.Database).Collection(collectionName)
+	return c.client.Database(c.config.Fallback.Database).Collection(collectionName)
 }

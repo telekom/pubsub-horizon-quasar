@@ -11,9 +11,10 @@ import (
 
 type ResourceConfiguration struct {
 	Kubernetes struct {
-		Group    string `mapstructure:"group"`
-		Version  string `mapstructure:"version"`
-		Resource string `mapstructure:"resource"`
+		Group     string `mapstructure:"group"`
+		Version   string `mapstructure:"version"`
+		Resource  string `mapstructure:"resource"`
+		Namespace string `mapstructure:"namespace"`
 	} `mapstructure:"kubernetes"`
 	MongoIndexes     []MongoResourceIndex     `mapstructure:"mongoIndexes"`
 	HazelcastIndexes []HazelcastResourceIndex `mapstructure:"hazelcastIndexes"`

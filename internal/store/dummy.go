@@ -2,12 +2,17 @@ package store
 
 import (
 	"fmt"
+	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type DummyStore struct{}
 
 func (DummyStore) Initialize() {
+	// Nothing to implement here!
+}
+
+func (DummyStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
 	// Nothing to implement here!
 }
 

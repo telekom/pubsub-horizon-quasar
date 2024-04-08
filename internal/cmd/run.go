@@ -30,15 +30,17 @@ var runCmd = &cobra.Command{
 			}
 		}
 
-		watcher, err := k8s.NewResourceWatcher(kubernetesClient, config.Current.Kubernetes.GetGroupVersionResource(), config.Current.Namespace, config.Current.ReSyncPeriod)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Could not create resource watcher!")
+		store.SetupStore()
+
+		for _, resourceConfig := range config.Current.Resources {
+			watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
+			if err != nil {
+				log.Fatal().Err(err).Msg("Could not create resource watcher!")
+			}
+			go watcher.Start()
 		}
 
-		store.SetupStore()
-		go watcher.Start()
 		utils.WaitForExit()
-		watcher.Stop()
 	},
 }
 

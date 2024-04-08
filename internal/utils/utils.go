@@ -2,8 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"os"
@@ -35,7 +33,7 @@ func CreateFieldForResource(resource *schema.GroupVersionResource) map[string]an
 }
 
 func AddMissingEnvironment(obj *unstructured.Unstructured) {
-	var raw = obj.UnstructuredContent()
+	/*var raw = obj.UnstructuredContent()
 	_, ok, err := unstructured.NestedString(raw, "spec", "environment")
 	if err != nil {
 		log.Warn().Fields(GetFieldsOfObject(obj)).Err(err).Msg("Environment is not a string (spec.environment)")
@@ -48,7 +46,7 @@ func AddMissingEnvironment(obj *unstructured.Unstructured) {
 		}
 	}
 
-	obj.SetUnstructuredContent(raw)
+	obj.SetUnstructuredContent(raw)*/
 }
 
 func AsAnySlice(args []string) []any {

@@ -27,7 +27,6 @@ func setDefaults() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	viper.SetDefault("logLevel", "info")
-	viper.SetDefault("namespace", "default")
 	viper.SetDefault("reSyncPeriod", "30s")
 
 	viper.SetDefault("store.storeType", "redis")
@@ -37,19 +36,16 @@ func setDefaults() {
 	viper.SetDefault("store.redis.username", "")
 	viper.SetDefault("store.redis.password", "")
 	viper.SetDefault("store.redis.database", 0)
-	viper.SetDefault("store.redis.initCommands", []string{})
 
 	viper.SetDefault("store.hazelcast.clusterName", "horizon")
 	viper.SetDefault("store.hazelcast.username", "")
 	viper.SetDefault("store.hazelcast.password", "")
-	viper.SetDefault("store.hazelcast.mongo.enabled", true)
-	viper.SetDefault("store.hazelcast.mongo.uri", "mongodb://localhost:27017")
-	viper.SetDefault("store.hazelcast.mongo.database", "horizon")
+	viper.SetDefault("store.hazelcast.writeBehind", true)
 
-	viper.SetDefault("fallback.mongo.enabled", true)
-	viper.SetDefault("fallback.mongo.uri", "mongodb://localhost:27017")
-	viper.SetDefault("fallback.mongo.database", "horizon")
-	viper.SetDefault("fallback.mongo.batchSize", 100)
+	viper.SetDefault("resources", []ResourceConfiguration{})
+
+	viper.SetDefault("fallback.uri", "mongodb://localhost:27017")
+	viper.SetDefault("fallback.database", "horizon")
 }
 
 func readConfig() *Configuration {
