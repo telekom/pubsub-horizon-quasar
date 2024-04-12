@@ -1,0 +1,7 @@
+include:
+  - project: 'dhei/teams/pandora/gitlab-ci-templates'
+    file: 'products/gocomponents/GoComponent.Pipeline.gitlab-ci.yml'
+    ref: develop
+
+variables:
+  TARGET_IMAGE_SUBGROUP: horizon
