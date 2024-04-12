@@ -2,7 +2,6 @@ package mongo
 
 import (
 	"context"
-	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
@@ -10,7 +9,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"strings"
 	"sync"
 )
 
@@ -35,25 +33,6 @@ func NewWriteTroughClient(config *config.MongoConfiguration) *WriteThroughClient
 		client: client,
 		config: config,
 		ctx:    context.Background(),
-	}
-}
-
-func (c *WriteThroughClient) EnsureIndexes() {
-	for _, index := range c.config.Indexes {
-		var resource = config.Current.Kubernetes.GetGroupVersionResource()
-		var colName = strings.ToLower(fmt.Sprintf("%s.%s.%s", resource.Resource, resource.Group, resource.Version))
-		var col = c.client.Database(c.config.Database).Collection(colName)
-
-		indexName, err := col.Indexes().CreateOne(c.ctx, index.ToIndexModel())
-		if err != nil {
-			log.Error().Fields(map[string]any{
-				"index": indexName,
-			}).Err(err).Msg("Could not create index")
-			continue
-		}
-		log.Debug().Fields(map[string]any{
-			"index": indexName,
-		}).Msg("Created index")
 	}
 }
 
@@ -108,6 +87,18 @@ func (c *WriteThroughClient) Delete(obj *unstructured.Unstructured) {
 	log.Debug().Fields(utils.CreateFieldsForOp("wt-delete", obj)).Msg("Object deleted from MongoDB")
 }
 
+func (c *WriteThroughClient) EnsureIndexesOfResource(resourceConfig *config.ResourceConfiguration) {
+	for _, index := range resourceConfig.MongoIndexes {
+		var model = index.ToIndexModel()
+		var collection = c.client.Database(config.Current.Fallback.Database).Collection(resourceConfig.GetCacheName())
+		_, err := collection.Indexes().CreateOne(c.ctx, model)
+		if err != nil {
+			var resource = resourceConfig.GetGroupVersionResource()
+			log.Warn().Fields(utils.CreateFieldForResource(&resource)).Err(err).Msg("Could not create index in MongoDB")
+		}
+	}
+}
+
 func (*WriteThroughClient) createFilterAndUpdate(obj *unstructured.Unstructured) (bson.M, bson.D) {
 	var objCopy = obj.DeepCopy().Object
 	objCopy["_id"] = obj.GetUID()
@@ -116,4 +107,10 @@ func (*WriteThroughClient) createFilterAndUpdate(obj *unstructured.Unstructured)
 
 func (c *WriteThroughClient) getCollection(obj *unstructured.Unstructured) *mongo.Collection {
 	return c.client.Database(c.config.Database).Collection(utils.GetGroupVersionId(obj))
+}
+
+func (c *WriteThroughClient) Disconnect() {
+	if err := c.client.Disconnect(c.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not disconnect from MongoDB")
+	}
 }

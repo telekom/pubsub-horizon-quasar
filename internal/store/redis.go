@@ -8,7 +8,6 @@ import (
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"strings"
 )
 
 type RedisStore struct {
@@ -32,19 +31,10 @@ func (s *RedisStore) Initialize() {
 	}
 
 	log.Info().Msg("Redis connection established...")
+}
 
-	for _, cmd := range config.Current.Store.Redis.InitCommands {
-		log.Debug().Fields(map[string]any{
-			"command": cmd,
-		}).Msg("Executing init command")
-
-		args := utils.AsAnySlice(strings.Split(cmd, " "))
-		if err := s.client.Do(s.ctx, args...).Err(); err != nil {
-			if err.Error() != "Index already exists" {
-				log.Warn().Err(err).Msg("Could not executed init command!")
-			}
-		}
-	}
+func (s *RedisStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+	// Nothing to do here
 }
 
 func (s *RedisStore) OnAdd(obj *unstructured.Unstructured) {
@@ -66,4 +56,8 @@ func (s *RedisStore) OnDelete(obj *unstructured.Unstructured) {
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
 	}
+}
+
+func (s *RedisStore) Shutdown() {
+
 }

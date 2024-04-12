@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/serialization"
-	"github.com/hazelcast/hazelcast-go-client/types"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/mongo"
@@ -35,11 +34,32 @@ func (s *HazelcastStore) Initialize() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create hazelcast client!")
 	}
-	s.ensureIndexes()
 
-	if config.Current.Store.Hazelcast.Mongo.Enabled {
-		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Store.Hazelcast.Mongo)
-		s.wtClient.EnsureIndexes()
+	if config.Current.Store.Hazelcast.WriteBehind {
+		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Fallback)
+	}
+}
+
+func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+	if s.wtClient != nil {
+		s.wtClient.EnsureIndexesOfResource(resourceConfig)
+	}
+
+	var mapName = resourceConfig.GetCacheName()
+	cacheMap, err := s.client.GetMap(s.ctx, mapName)
+	if err != nil {
+		log.Fatal().Fields(map[string]any{
+			"name": mapName,
+		}).Msg("Could not find map")
+	}
+
+	for _, index := range resourceConfig.HazelcastIndexes {
+		var hazelcastIndex = index.ToIndexConfig()
+		if err := cacheMap.AddIndex(s.ctx, hazelcastIndex); err != nil {
+			log.Fatal().Fields(map[string]any{
+				"indexName": hazelcastIndex.Name,
+			}).Err(err).Msg("Could not create hazelcast index")
+		}
 	}
 }
 
@@ -89,19 +109,13 @@ func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) {
 	}
 }
 
-func (s *HazelcastStore) ensureIndexes() {
-	var resource = config.Current.Kubernetes.GetGroupVersionResource()
-	var cacheMap = s.getMapByGvr(&resource)
+func (s *HazelcastStore) Shutdown() {
+	if err := s.client.Shutdown(s.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+	}
 
-	for _, index := range config.Current.Store.Hazelcast.Indexes {
-		err := cacheMap.AddIndex(s.ctx, types.IndexConfig{
-			Name:       index.Name,
-			Attributes: index.Fields,
-			Type:       types.IndexTypeSorted,
-		})
-		if err != nil {
-			log.Error().Err(err).Msg("Could not create hazelcast index!")
-		}
+	if s.wtClient != nil {
+		s.wtClient.Disconnect()
 	}
 }
 
