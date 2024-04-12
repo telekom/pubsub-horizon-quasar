@@ -4,5 +4,7 @@
 
 *.exe
 *.yml
+!.gitlab-ci.yml
+
 *.cmd
 *.bat
