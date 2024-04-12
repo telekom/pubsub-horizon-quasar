@@ -2,12 +2,10 @@ package utils
 
 import (
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 )
 
 func GetFieldsOfObject(obj *unstructured.Unstructured) map[string]any {
@@ -33,7 +31,7 @@ func CreateFieldForResource(resource *schema.GroupVersionResource) map[string]an
 }
 
 func AddMissingEnvironment(obj *unstructured.Unstructured) {
-	/*var raw = obj.UnstructuredContent()
+	var raw = obj.UnstructuredContent()
 	_, ok, err := unstructured.NestedString(raw, "spec", "environment")
 	if err != nil {
 		log.Warn().Fields(GetFieldsOfObject(obj)).Err(err).Msg("Environment is not a string (spec.environment)")
@@ -41,12 +39,12 @@ func AddMissingEnvironment(obj *unstructured.Unstructured) {
 	}
 
 	if !ok {
-		if err := unstructured.SetNestedField(raw, config.Current.Namespace, "spec", "environment"); err != nil {
+		if err := unstructured.SetNestedField(raw, "default", "spec", "environment"); err != nil {
 			log.Warn().Fields(GetFieldsOfObject(obj)).Err(err).Msg("Could not modify environment (spec.environment)")
 		}
 	}
 
-	obj.SetUnstructuredContent(raw)*/
+	obj.SetUnstructuredContent(raw)
 }
 
 func AsAnySlice(args []string) []any {
@@ -55,12 +53,6 @@ func AsAnySlice(args []string) []any {
 		slice[i] = arg
 	}
 	return slice
-}
-
-func WaitForExit() {
-	var sigChan = make(chan os.Signal)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
 }
 
 func GetGroupVersionId(obj *unstructured.Unstructured) string {

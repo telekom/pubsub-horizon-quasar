@@ -108,3 +108,9 @@ func (*WriteThroughClient) createFilterAndUpdate(obj *unstructured.Unstructured)
 func (c *WriteThroughClient) getCollection(obj *unstructured.Unstructured) *mongo.Collection {
 	return c.client.Database(c.config.Database).Collection(utils.GetGroupVersionId(obj))
 }
+
+func (c *WriteThroughClient) Disconnect() {
+	if err := c.client.Disconnect(c.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not disconnect from MongoDB")
+	}
+}

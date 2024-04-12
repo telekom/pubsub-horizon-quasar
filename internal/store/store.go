@@ -15,6 +15,7 @@ type Store interface {
 	OnAdd(obj *unstructured.Unstructured)
 	OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured)
 	OnDelete(obj *unstructured.Unstructured)
+	Shutdown()
 }
 
 func SetupStore() {

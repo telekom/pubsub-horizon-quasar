@@ -109,6 +109,16 @@ func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) {
 	}
 }
 
+func (s *HazelcastStore) Shutdown() {
+	if err := s.client.Shutdown(s.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+	}
+
+	if s.wtClient != nil {
+		s.wtClient.Disconnect()
+	}
+}
+
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 	var mapName = utils.GetGroupVersionId(obj)
 

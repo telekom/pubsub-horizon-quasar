@@ -57,3 +57,7 @@ func (s *RedisStore) OnDelete(obj *unstructured.Unstructured) {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
 	}
 }
+
+func (s *RedisStore) Shutdown() {
+
+}

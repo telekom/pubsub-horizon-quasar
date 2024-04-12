@@ -31,6 +31,7 @@ var runCmd = &cobra.Command{
 		}
 
 		store.SetupStore()
+		utils.RegisterShutdownHook(store.CurrentStore.Shutdown, 1)
 
 		for _, resourceConfig := range config.Current.Resources {
 			watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
@@ -38,9 +39,10 @@ var runCmd = &cobra.Command{
 				log.Fatal().Err(err).Msg("Could not create resource watcher!")
 			}
 			go watcher.Start()
+			utils.RegisterShutdownHook(watcher.Stop, 0)
 		}
 
-		utils.WaitForExit()
+		utils.GracefulShutdown()
 	},
 }
 

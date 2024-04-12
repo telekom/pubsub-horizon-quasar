@@ -27,3 +27,7 @@ func (DummyStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructur
 func (DummyStore) OnDelete(obj *unstructured.Unstructured) {
 	fmt.Printf("Deleted: %+v\n", obj.GetName())
 }
+
+func (DummyStore) Shutdown() {
+	// Nothing to implement here!
+}
