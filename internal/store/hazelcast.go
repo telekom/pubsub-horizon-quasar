@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/serialization"
 	"github.com/rs/zerolog/log"
@@ -10,8 +9,6 @@ import (
 	"github.com/telekom/quasar/internal/mongo"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 )
 
 type HazelcastStore struct {
@@ -32,7 +29,7 @@ func (s *HazelcastStore) Initialize() {
 	s.ctx = context.Background()
 	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Could not create hazelcast client!")
+		log.Panic().Err(err).Msg("Could not create hazelcast client!")
 	}
 
 	if config.Current.Store.Hazelcast.WriteBehind {
@@ -48,7 +45,7 @@ func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfi
 	var mapName = resourceConfig.GetCacheName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
-		log.Fatal().Fields(map[string]any{
+		log.Panic().Fields(map[string]any{
 			"name": mapName,
 		}).Msg("Could not find map")
 	}
@@ -56,7 +53,7 @@ func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfi
 	for _, index := range resourceConfig.HazelcastIndexes {
 		var hazelcastIndex = index.ToIndexConfig()
 		if err := cacheMap.AddIndex(s.ctx, hazelcastIndex); err != nil {
-			log.Fatal().Fields(map[string]any{
+			log.Panic().Fields(map[string]any{
 				"indexName": hazelcastIndex.Name,
 			}).Err(err).Msg("Could not create hazelcast index")
 		}
@@ -124,20 +121,7 @@ func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
-		log.Fatal().Fields(map[string]any{
-			"name": mapName,
-		}).Msg("Could not find map!")
-	}
-
-	return cacheMap
-}
-
-func (s *HazelcastStore) getMapByGvr(schema *schema.GroupVersionResource) *hazelcast.Map {
-	var mapName = strings.ToLower(fmt.Sprintf("%s.%s.%s", schema.Resource, schema.Group, schema.Version))
-
-	cacheMap, err := s.client.GetMap(s.ctx, mapName)
-	if err != nil {
-		log.Fatal().Fields(map[string]any{
+		log.Panic().Fields(map[string]any{
 			"name": mapName,
 		}).Msg("Could not find map!")
 	}
