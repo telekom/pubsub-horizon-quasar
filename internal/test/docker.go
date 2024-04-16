@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"os"
+	"time"
 )
 
 var (
@@ -69,6 +70,9 @@ func SetupDocker(opts *Options) {
 			log.Fatalf("Could not setup hazelcast: %s", err)
 		}
 	}
+
+	// Wait no longer than 30 seconds
+	pool.MaxWait = 30 * time.Second
 
 	err = pool.Retry(func() error {
 
