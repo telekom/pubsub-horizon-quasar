@@ -4,6 +4,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/ory/dockertest/v3"
@@ -77,6 +78,7 @@ func SetupDocker(opts *Options) {
 				return err
 			}
 		}
+		log.Println("MongoDB is ready!")
 
 		// Hazelcast rediness
 		if opts.Hazelcast {
@@ -84,6 +86,7 @@ func SetupDocker(opts *Options) {
 				return err
 			}
 		}
+		log.Println("Hazelcast is ready!")
 
 		return nil
 	})
@@ -104,8 +107,9 @@ func TeardownDocker() {
 
 func pingMongoDb() error {
 	var ctx = context.Background()
-	client, err := mongo.Connect(ctx, options.Client())
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)))
 	if err != nil {
+		log.Printf("Could not reach mongodb: %s\n", err)
 		return err
 	}
 
@@ -154,6 +158,7 @@ func pingHazelcast() error {
 
 	client, err := hazelcast.StartNewClientWithConfig(ctx, config)
 	if err != nil {
+		log.Printf("Could not connect to hazelcast: %s\n", err)
 		return err
 	}
 
