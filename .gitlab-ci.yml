@@ -5,3 +5,7 @@ include:
 
 variables:
   TARGET_IMAGE_SUBGROUP: horizon
+
+test:
+  variables:
+    GO_TEST_TAGS: testing
