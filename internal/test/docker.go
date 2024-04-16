@@ -16,13 +16,17 @@ import (
 
 var (
 	pool      *dockertest.Pool
-	resources []*dockertest.Resource = make([]*dockertest.Resource, 0)
+	resources = make([]*dockertest.Resource, 0)
 
-	hazelcastHost string = envOrDefault("HAZELCAST_HOST", "localhost")
-	hazelcastPort string = envOrDefault("HAZELCAST_PORT", "5701")
+	hazelcastImage = envOrDefault("HAZELCAST_IMAGE", "hazelcast/hazelcast")
+	hazelcastTag   = envOrDefault("HAZELCAST_TAG", "5.3.6")
+	hazelcastHost  = envOrDefault("HAZELCAST_HOST", "localhost")
+	hazelcastPort  = envOrDefault("HAZELCAST_PORT", "5701")
 
-	mongoHost string = envOrDefault("MONGO_HOST", "localhost")
-	mongoPort string = envOrDefault("MONGO_PORT", "27017")
+	mongoImage = envOrDefault("MONGO_IMAGE", "mongo")
+	mongoTag   = envOrDefault("MONGO_TAG", "7.0.5-rc0")
+	mongoHost  = envOrDefault("MONGO_HOST", "localhost")
+	mongoPort  = envOrDefault("MONGO_PORT", "27017")
 
 	alreadySetUp bool = false
 )
@@ -111,11 +115,11 @@ func pingMongoDb() error {
 func setupMongoDb() error {
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Name:         "quasar-mongodb",
-		Repository:   envOrDefault("MONGO_IMAGE", "mongo"),
-		Tag:          envOrDefault("MONGO_TAG", "7.0.5-rc0"),
+		Repository:   mongoImage,
+		Tag:          mongoTag,
 		ExposedPorts: []string{"27017/tcp"},
 		PortBindings: map[docker.Port][]docker.PortBinding{
-			"27017/tcp": {{HostIP: "localhost", HostPort: "27017"}},
+			"27017/tcp": {{HostIP: mongoHost, HostPort: mongoPort}},
 		},
 	}, configureTeardown)
 	resources = append(resources, resource)
@@ -125,11 +129,11 @@ func setupMongoDb() error {
 func setupHazelcast() error {
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Name:         "quasar-hazelcast",
-		Repository:   envOrDefault("HAZELCAST_IMAGE", "hazelcast/hazelcast"),
-		Tag:          envOrDefault("HAZELCAST_TAG", "5.3.6"),
+		Repository:   hazelcastImage,
+		Tag:          hazelcastTag,
 		ExposedPorts: []string{"5701/tcp"},
 		PortBindings: map[docker.Port][]docker.PortBinding{
-			"5701/tcp": {{HostIP: "localhost", HostPort: "5701"}},
+			"5701/tcp": {{HostIP: hazelcastHost, HostPort: hazelcastPort}},
 		},
 		Env: []string{
 			"HZ_CLUSTERNAME=horizon",
