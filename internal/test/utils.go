@@ -28,3 +28,11 @@ func ReadTestSubscriptions(file string) []*unstructured.Unstructured {
 
 	return uSubscriptions
 }
+
+func EnvOrDefault(name string, fallback string) string {
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fallback
+	}
+	return value
+}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
@@ -29,10 +30,11 @@ func TestMain(m *testing.M) {
 
 func buildTestConfig() *config.Configuration {
 	var testConfig = new(config.Configuration)
-	testConfig.Fallback.Uri = "mongodb://localhost:27017"
+	testConfig.Fallback.Uri = fmt.Sprintf("mongodb://%s:%s", test.EnvOrDefault("MONGO_HOST", "localhost"), test.EnvOrDefault("MONGO_PORT", "27017"))
 	testConfig.Fallback.Database = "horizon"
 	testConfig.Store.Hazelcast = config.HazelcastConfiguration{
 		ClusterName: "horizon",
+		Addresses:   []string{test.EnvOrDefault("HAZELCAST_HOST", "localhost")},
 		WriteBehind: true,
 	}
 
