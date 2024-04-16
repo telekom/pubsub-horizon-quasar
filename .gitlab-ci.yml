@@ -1,10 +1,18 @@
 include:
-  - project: 'dhei/teams/pandora/gitlab-ci-templates'
-    file: 'products/gocomponents/GoComponent.Pipeline.gitlab-ci.yml'
+  - project: dhei/teams/pandora/gitlab-ci-templates
+    file: products/gocomponents/GoComponent.Pipeline.gitlab-ci.yml
     ref: develop
 
 variables:
   TARGET_IMAGE_SUBGROUP: horizon
+
+  HAZELCAST_HOST: docker
+  HAZELCAST_IMAGE: dockerhub.devops.telekom.de/hazelcast/hazelcast
+  HAZELCAST_TAG: 5.3.6
+
+  MONGO_HOST: docker
+  MONGO_IMAGE: dockerhub.devops.telekom.de/mongo
+  MONGO_TAG: 7.0.5-rc0
 
 test:
   variables:
