@@ -24,6 +24,7 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.Name = config.Current.Store.Hazelcast.ClusterName
 	hazelcastConfig.Cluster.Security.Credentials.Username = config.Current.Store.Hazelcast.Username
 	hazelcastConfig.Cluster.Security.Credentials.Password = config.Current.Store.Hazelcast.Password
+	hazelcastConfig.Cluster.Network.Addresses = config.Current.Store.Hazelcast.Addresses
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
 	s.ctx = context.Background()

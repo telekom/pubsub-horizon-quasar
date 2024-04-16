@@ -152,6 +152,7 @@ func pingHazelcast() error {
 	config := hazelcast.NewConfig()
 
 	config.Cluster.Name = "horizon"
+	config.Cluster.Network.SetAddresses(hazelcastHost)
 	config.Cluster.ConnectionStrategy.ReconnectMode = cluster.ReconnectModeOff
 
 	config.Failover.TryCount = 5
