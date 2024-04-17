@@ -38,7 +38,7 @@ func CreateKubeConfigClient(kubeConfigPath string) (*dynamic.DynamicClient, erro
 	return client, nil
 }
 
-func createInformer(client *dynamic.DynamicClient, resource schema.GroupVersionResource, namespace string, reSyncPeriod time.Duration) cache.SharedIndexInformer {
+func createInformer(client dynamic.Interface, resource schema.GroupVersionResource, namespace string, reSyncPeriod time.Duration) cache.SharedIndexInformer {
 	var factory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(client, reSyncPeriod, namespace, nil)
 	return factory.ForResource(resource).Informer()
 }
