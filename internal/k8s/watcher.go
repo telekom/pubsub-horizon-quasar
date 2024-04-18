@@ -20,7 +20,7 @@ type ResourceWatcher struct {
 }
 
 func NewResourceWatcher(
-	client *dynamic.DynamicClient,
+	client dynamic.Interface,
 	resourceConfig *config.ResourceConfiguration,
 	reSyncPeriod time.Duration,
 ) (*ResourceWatcher, error) {
@@ -113,7 +113,7 @@ func (w *ResourceWatcher) Start() {
 
 	defer func() {
 		if err := recover(); err != nil {
-			log.Fatal().Fields(map[string]any{
+			log.Panic().Fields(map[string]any{
 				"error": fmt.Sprintf("%+v", err),
 			}).Msg("Informer failed!")
 		}

@@ -25,10 +25,11 @@ type RedisConfiguration struct {
 }
 
 type HazelcastConfiguration struct {
-	ClusterName string `mapstructure:"clusterName"`
-	Username    string `mapstructure:"username"`
-	Password    string `mapstructure:"password"`
-	WriteBehind bool   `mapstructure:"writeBehind"`
+	ClusterName string   `mapstructure:"clusterName"`
+	Username    string   `mapstructure:"username"`
+	Password    string   `mapstructure:"password"`
+	Addresses   []string `mapstructure:"addresses"`
+	WriteBehind bool     `mapstructure:"writeBehind"`
 }
 
 type MongoConfiguration struct {

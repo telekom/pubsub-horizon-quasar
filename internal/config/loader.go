@@ -37,6 +37,7 @@ func setDefaults() {
 	viper.SetDefault("store.redis.password", "")
 	viper.SetDefault("store.redis.database", 0)
 
+	viper.SetDefault("store.hazelcast.addresses", []string{})
 	viper.SetDefault("store.hazelcast.clusterName", "horizon")
 	viper.SetDefault("store.hazelcast.username", "")
 	viper.SetDefault("store.hazelcast.password", "")

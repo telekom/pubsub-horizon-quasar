@@ -110,6 +110,8 @@ func (c *WriteThroughClient) getCollection(obj *unstructured.Unstructured) *mong
 }
 
 func (c *WriteThroughClient) Disconnect() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if err := c.client.Disconnect(c.ctx); err != nil {
 		log.Error().Err(err).Msg("Could not disconnect from MongoDB")
 	}
