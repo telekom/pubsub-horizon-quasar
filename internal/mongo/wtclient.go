@@ -63,7 +63,7 @@ func (c *WriteThroughClient) Update(obj *unstructured.Unstructured) {
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
-		}).Err(err).Msg("Could not update object to MongoDB")
+		}).Err(err).Msg("Could not update object in MongoDB")
 		return
 	}
 
