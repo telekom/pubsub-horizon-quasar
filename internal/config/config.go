@@ -13,7 +13,8 @@ type Configuration struct {
 		Redis     RedisConfiguration     `mapstructure:"redis"`
 		Hazelcast HazelcastConfiguration `mapstructure:"hazelcast"`
 	} `mapstructure:"store"`
-	Fallback MongoConfiguration `mapstructure:"fallback"`
+	Fallback MongoConfiguration   `mapstructure:"fallback"`
+	Metrics  MetricsConfiguration `mapstructure:"metrics"`
 }
 
 type RedisConfiguration struct {
@@ -35,4 +36,10 @@ type HazelcastConfiguration struct {
 type MongoConfiguration struct {
 	Uri      string `mapstructure:"uri"`
 	Database string `mapstructure:"database"`
+}
+
+type MetricsConfiguration struct {
+	Enabled bool          `mapstructure:"enabled"`
+	Port    int           `mapstructure:"port"`
+	Timeout time.Duration `mapstructure:"timeout"`
 }

@@ -18,6 +18,7 @@ type ResourceConfiguration struct {
 	} `mapstructure:"kubernetes"`
 	MongoIndexes     []MongoResourceIndex     `mapstructure:"mongoIndexes"`
 	HazelcastIndexes []HazelcastResourceIndex `mapstructure:"hazelcastIndexes"`
+	Prometheus       PrometheusConfiguration  `mapstructure:"prometheus"`
 }
 
 func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionResource {

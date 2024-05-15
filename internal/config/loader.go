@@ -47,6 +47,10 @@ func setDefaults() {
 
 	viper.SetDefault("fallback.uri", "mongodb://localhost:27017")
 	viper.SetDefault("fallback.database", "horizon")
+
+	viper.SetDefault("metrics.enabled", false)
+	viper.SetDefault("metrics.port", 8080)
+	viper.SetDefault("metrics.timeout", "5s")
 }
 
 func readConfig() *Configuration {
