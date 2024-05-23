@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/mongo"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
@@ -70,6 +71,12 @@ func (w *ResourceWatcher) add(obj any) {
 	if ok {
 		utils.AddMissingEnvironment(uObj)
 		store.CurrentStore.OnAdd(uObj)
+
+		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
+			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
+			metrics.GetOrCreate(w.resourceConfig).With(labels).Inc()
+		}
+
 		log.Debug().Fields(utils.CreateFieldsForOp("add", uObj)).Msg("Added dataset")
 	} else {
 		log.Warn().Fields(map[string]any{
@@ -100,6 +107,11 @@ func (w *ResourceWatcher) delete(obj any) {
 	if ok {
 		store.CurrentStore.OnDelete(uObj)
 		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Fields("Deleted dataset")
+
+		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
+			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
+			metrics.GetOrCreate(w.resourceConfig).With(labels).Dec()
+		}
 	} else {
 		log.Warn().Fields(map[string]any{
 			"object":    fmt.Sprintf("%+v", obj),
