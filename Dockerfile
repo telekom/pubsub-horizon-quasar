@@ -1,3 +1,7 @@
+# Copyright 2024 Deutsche Telekom IT GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 FROM golang:1.22-alpine AS build
 
 ARG HTTP_PROXY

@@ -1,0 +1,14 @@
+repos:
+  -   repo: https://github.com/fsfe/reuse-tool
+      rev: v1.0.0
+      hooks:
+        - id: reuse
+          stages:
+            - pre-commit
+  -   repo: https://github.com/compilerla/conventional-pre-commit
+      rev: v3.1.0
+      hooks:
+        - id: conventional-pre-commit
+          stages:
+            - commit-msg
+          args: []
