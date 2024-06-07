@@ -29,7 +29,7 @@ func setDefaults() {
 	viper.SetDefault("logLevel", "info")
 	viper.SetDefault("reSyncPeriod", "30s")
 
-	viper.SetDefault("store.storeType", "redis")
+	viper.SetDefault("store.storeType", "hazelcast")
 
 	viper.SetDefault("store.redis.host", "localhost")
 	viper.SetDefault("store.redis.port", 6379)
