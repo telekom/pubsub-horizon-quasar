@@ -1,3 +1,7 @@
+# Copyright 2024 Deutsche Telekom IT GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 include:
   - project: dhei/teams/pandora/gitlab-ci-templates
     file: products/gocomponents/GoComponent.Pipeline.gitlab-ci.yml
