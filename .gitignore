@@ -5,6 +5,7 @@
 *.exe
 *.yml
 !.gitlab-ci.yml
+!.github/workflows/*.yml
 
 *.cmd
 *.bat
