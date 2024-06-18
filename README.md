@@ -30,6 +30,7 @@ Quasar is the config-controller powering the Horizon ecosystem.
 
 ## Prerequisites
 - A running [Kubernetes](https://github.com/kubernetes/kubernetes) cluster
+- A running instance of [MongoDB](https://www.mongodb.com/) or [Redis (_not fully supported yet_)](https://redis.io)
 
 ## Building Quasar
 ### Go build
