@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,10 @@ func processSubscriptions(action string) {
 			_, _ = resource.Create(ctx, subscription, v1.CreateOptions{})
 
 		case "update":
+			resourceVersion, _ := strconv.Atoi(subscription.GetResourceVersion())
+			resourceVersion++
+
+			subscription.SetResourceVersion(fmt.Sprintf("%d", resourceVersion))
 			_, _ = resource.Update(ctx, subscription, v1.UpdateOptions{})
 
 		case "delete":
