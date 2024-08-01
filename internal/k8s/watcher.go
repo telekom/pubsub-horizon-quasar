@@ -94,6 +94,10 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 	uOldObj, oldOk := oldObj.(*unstructured.Unstructured)
 	uNewObj, newOk := newObj.(*unstructured.Unstructured)
 	if oldOk && newOk {
+		if uNewObj.GetResourceVersion() == uOldObj.GetResourceVersion() {
+			return
+		}
+
 		utils.AddMissingEnvironment(uNewObj)
 		store.CurrentStore.OnUpdate(uOldObj, uNewObj)
 		log.Debug().Fields(utils.CreateFieldsForOp("update", uOldObj)).Msg("Updated dataset")
