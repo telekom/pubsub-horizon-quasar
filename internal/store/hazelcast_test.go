@@ -34,8 +34,8 @@ func TestMain(m *testing.M) {
 
 func buildTestConfig() *config.Configuration {
 	var testConfig = new(config.Configuration)
-	testConfig.Fallback.Uri = fmt.Sprintf("mongodb://%s:%s", test.EnvOrDefault("MONGO_HOST", "localhost"), test.EnvOrDefault("MONGO_PORT", "27017"))
-	testConfig.Fallback.Database = "horizon"
+	testConfig.Fallback.Mongo.Uri = fmt.Sprintf("mongodb://%s:%s", test.EnvOrDefault("MONGO_HOST", "localhost"), test.EnvOrDefault("MONGO_PORT", "27017"))
+	testConfig.Fallback.Mongo.Database = "horizon"
 	testConfig.Store.Hazelcast = config.HazelcastConfiguration{
 		ClusterName: "horizon",
 		Addresses:   []string{test.EnvOrDefault("HAZELCAST_HOST", "localhost")},

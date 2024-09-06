@@ -13,12 +13,15 @@ type Configuration struct {
 	ReSyncPeriod time.Duration           `mapstructure:"reSyncPeriod"`
 	Resources    []ResourceConfiguration `mapstructure:"resources"`
 	Store        struct {
-		StoreType string                 `mapstructure:"storeType"`
+		Type      string                 `mapstructure:"type"`
 		Redis     RedisConfiguration     `mapstructure:"redis"`
 		Hazelcast HazelcastConfiguration `mapstructure:"hazelcast"`
 	} `mapstructure:"store"`
-	Fallback MongoConfiguration   `mapstructure:"fallback"`
-	Metrics  MetricsConfiguration `mapstructure:"metrics"`
+	Fallback struct {
+		Type  string             `mapstructure:"type"`
+		Mongo MongoConfiguration `mapstructure:"mongo"`
+	} `mapstructure:"fallback"`
+	Metrics MetricsConfiguration `mapstructure:"metrics"`
 }
 
 type RedisConfiguration struct {

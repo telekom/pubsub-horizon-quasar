@@ -1,11 +1,8 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
-//
-// SPDX-License-Identifier: Apache-2.0
-
-package mongo
+package fallback
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
@@ -15,21 +12,17 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/json"
 	"strings"
 )
 
-type ReplayFunc func(obj *unstructured.Unstructured)
-type FallbackClient struct {
+type MongoFallback struct {
 	client *mongo.Client
-	config *config.Configuration
-	ctx    context.Context
 }
 
-func NewFallbackClient(config *config.Configuration) *FallbackClient {
+func (m *MongoFallback) Initialize() {
 	var ctx = context.Background()
 
-	var client, err = mongo.Connect(ctx, options.Client().ApplyURI(config.Fallback.Uri))
+	var client, err = mongo.Connect(ctx, options.Client().ApplyURI(config.Current.Fallback.Mongo.Uri))
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not connect to MongoDB")
 	}
@@ -37,17 +30,13 @@ func NewFallbackClient(config *config.Configuration) *FallbackClient {
 	if err := client.Ping(context.Background(), nil); err != nil {
 		log.Fatal().Err(err).Msg("Could not reach MongoDB")
 	}
-
-	return &FallbackClient{
-		client: client,
-		config: config,
-		ctx:    ctx,
-	}
 }
 
-func (c *FallbackClient) ReplayForResource(gvr *schema.GroupVersionResource, replayFunc ReplayFunc) (int64, error) {
-	var col = c.getCollection(gvr)
-	count, err := col.EstimatedDocumentCount(c.ctx)
+func (m *MongoFallback) ReplayResource(gvr *schema.GroupVersionResource, replayFunc ReplayFunc) (int64, error) {
+	var ctx = context.Background()
+
+	var col = m.getCollection(gvr)
+	count, err := col.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -56,13 +45,13 @@ func (c *FallbackClient) ReplayForResource(gvr *schema.GroupVersionResource, rep
 	fields["estDocumentCount"] = count
 	log.Debug().Fields(fields).Msg("Starting replay of resource")
 
-	cursor, err := col.Find(c.ctx, bson.D{})
+	cursor, err := col.Find(ctx, bson.D{})
 	if err != nil {
 		return 0, err
 	}
 
 	var replayedDocuments int64
-	for cursor.Next(c.ctx) {
+	for cursor.Next(ctx) {
 		var retrieved map[string]any
 		if err := cursor.Decode(&retrieved); err != nil {
 			log.Error().Err(err).Msg("Could not decode retrieved document")
@@ -82,7 +71,7 @@ func (c *FallbackClient) ReplayForResource(gvr *schema.GroupVersionResource, rep
 	return replayedDocuments, nil
 }
 
-func (c *FallbackClient) getCollection(gvr *schema.GroupVersionResource) *mongo.Collection {
+func (m *MongoFallback) getCollection(gvr *schema.GroupVersionResource) *mongo.Collection {
 	var collectionName = strings.ToLower(fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version))
-	return c.client.Database(c.config.Fallback.Database).Collection(collectionName)
+	return m.client.Database(config.Current.Fallback.Mongo.Database).Collection(collectionName)
 }
