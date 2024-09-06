@@ -45,15 +45,10 @@ func (m *MongoStore) InitializeResource(resourceConfig *config.ResourceConfigura
 }
 
 func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
-	json, err := obj.MarshalJSON()
-	if err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not marshal resource to json string!")
-	}
-
 	var filter = bson.M{"_id": string(obj.GetUID())}
 	var collection = m.getCollection(obj)
 
-	_, err = collection.ReplaceOne(context.Background(), filter, json, options.Replace().SetUpsert(true))
+	_, err := collection.ReplaceOne(context.Background(), filter, obj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
@@ -64,15 +59,10 @@ func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
 }
 
 func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
-	json, err := newObj.MarshalJSON()
-	if err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not marshal resource to json string!")
-	}
-
 	var filter = bson.M{"_id": string(oldObj.GetUID())}
 	var collection = m.getCollection(oldObj)
 
-	_, err = collection.ReplaceOne(context.Background(), filter, json, options.Replace().SetUpsert(true))
+	_, err := collection.ReplaceOne(context.Background(), filter, newObj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": newObj.GetUID(),
