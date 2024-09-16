@@ -43,6 +43,9 @@ func createStore(storeType string) (Store, error) {
 	case "hazelcast":
 		return new(HazelcastStore), nil
 
+	case "mongo":
+		return new(MongoStore), nil
+
 	default:
 		return nil, ErrUnknownStoreType
 

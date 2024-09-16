@@ -16,6 +16,7 @@ type Configuration struct {
 		Type      string                 `mapstructure:"type"`
 		Redis     RedisConfiguration     `mapstructure:"redis"`
 		Hazelcast HazelcastConfiguration `mapstructure:"hazelcast"`
+		Mongo     MongoConfiguration     `mapstructure:"mongo"`
 	} `mapstructure:"store"`
 	Fallback struct {
 		Type  string             `mapstructure:"type"`
