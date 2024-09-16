@@ -94,7 +94,7 @@ func (c *WriteThroughClient) Delete(obj *unstructured.Unstructured) {
 func (c *WriteThroughClient) EnsureIndexesOfResource(resourceConfig *config.ResourceConfiguration) {
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
-		var collection = c.client.Database(config.Current.Fallback.Database).Collection(resourceConfig.GetCacheName())
+		var collection = c.client.Database(config.Current.Fallback.Mongo.Database).Collection(resourceConfig.GetCacheName())
 		_, err := collection.Indexes().CreateOne(c.ctx, model)
 		if err != nil {
 			var resource = resourceConfig.GetGroupVersionResource()

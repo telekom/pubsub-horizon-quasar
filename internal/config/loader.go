@@ -33,7 +33,7 @@ func setDefaults() {
 	viper.SetDefault("logLevel", "info")
 	viper.SetDefault("reSyncPeriod", "30s")
 
-	viper.SetDefault("store.storeType", "hazelcast")
+	viper.SetDefault("store.type", "hazelcast")
 
 	viper.SetDefault("store.redis.host", "localhost")
 	viper.SetDefault("store.redis.port", 6379)
@@ -49,8 +49,9 @@ func setDefaults() {
 
 	viper.SetDefault("resources", []ResourceConfiguration{})
 
-	viper.SetDefault("fallback.uri", "mongodb://localhost:27017")
-	viper.SetDefault("fallback.database", "horizon")
+	viper.SetDefault("fallback.type", "mongo")
+	viper.SetDefault("fallback.mongo.uri", "mongodb://localhost:27017")
+	viper.SetDefault("fallback.mongo.database", "horizon")
 
 	viper.SetDefault("metrics.enabled", false)
 	viper.SetDefault("metrics.port", 8080)

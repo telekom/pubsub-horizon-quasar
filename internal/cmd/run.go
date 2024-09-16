@@ -8,11 +8,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/fallback"
 	"github.com/telekom/quasar/internal/k8s"
 	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/client-go/dynamic"
+	"strings"
 )
 
 var runCmd = &cobra.Command{
@@ -37,6 +39,12 @@ var runCmd = &cobra.Command{
 
 		if config.Current.Metrics.Enabled {
 			go metrics.ExposeMetrics()
+		}
+
+		if strings.ToLower(config.Current.Fallback.Type) != "none" {
+			fallback.SetupFallback()
+		} else {
+			log.Warn().Msg("No fallback is configured. Quasar won't be able to restore data if the kubernetes api fails")
 		}
 
 		store.SetupStore()

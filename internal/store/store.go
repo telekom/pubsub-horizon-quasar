@@ -23,7 +23,7 @@ type Store interface {
 }
 
 func SetupStore() {
-	var storeType = config.Current.Store.StoreType
+	var storeType = config.Current.Store.Type
 	var err error
 	CurrentStore, err = createStore(storeType)
 	if err != nil {
