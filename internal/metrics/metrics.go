@@ -49,7 +49,7 @@ func GetOrCreate(resourceConfig *config.ResourceConfiguration) *prometheus.Gauge
 }
 
 func GetOrCreateCustom(name string) *prometheus.GaugeVec {
-	var gaugeName = strings.ToLower(name)
+	var gaugeName = strings.ReplaceAll(name, ".", "_")
 
 	gauge, ok := gauges[name]
 	if !ok {
