@@ -10,9 +10,11 @@ import (
 	"github.com/hazelcast/hazelcast-go-client/serialization"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/mongo"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"time"
 )
 
 type HazelcastStore struct {
@@ -63,6 +65,8 @@ func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfi
 			}).Err(err).Msg("Could not create hazelcast index")
 		}
 	}
+
+	go s.collectMetrics(resourceConfig.GetCacheName())
 }
 
 func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) {
@@ -132,4 +136,33 @@ func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 	}
 
 	return cacheMap
+}
+
+func (s *HazelcastStore) collectMetrics(resourceName string) {
+	if err := recover(); err != nil {
+		log.Error().Msgf("Recovered from %s during hazelcast metric collection", err)
+		return
+	}
+
+	for {
+		hzMap, err := s.client.GetMap(context.Background(), resourceName)
+		if err != nil {
+			log.Error().Err(err).Fields(map[string]any{
+				"map": hzMap.Name(),
+			}).Msg("Could not collect data")
+		}
+
+		size, err := hzMap.Size(context.Background())
+		if err != nil {
+			log.Error().Err(err).Fields(map[string]any{
+				"map": hzMap.Name(),
+			}).Msg("Could not retrieve size")
+
+			time.Sleep(15 * time.Second)
+			continue
+		}
+
+		metrics.GetOrCreateCustom(resourceName + "_hazelcast_count").WithLabelValues().Set(float64(size))
+		time.Sleep(15 * time.Second)
+	}
 }

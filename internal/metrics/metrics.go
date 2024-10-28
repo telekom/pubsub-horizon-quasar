@@ -47,3 +47,26 @@ func GetOrCreate(resourceConfig *config.ResourceConfiguration) *prometheus.Gauge
 
 	return gauge
 }
+
+func GetOrCreateCustom(name string) *prometheus.GaugeVec {
+	var gaugeName = strings.ToLower(name)
+
+	gauge, ok := gauges[name]
+	if !ok {
+		gauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      fmt.Sprintf(gaugeName),
+		}, []string{})
+
+		gauges[gaugeName] = gauge
+		if err := registry.Register(gauge); err != nil {
+			log.Error().Err(err).
+				Fields(map[string]any{
+					"name": fmt.Sprintf("%s_%s", namespace, gaugeName),
+				}).
+				Msg("Could not create metric")
+		}
+	}
+
+	return gauge
+}
