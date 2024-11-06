@@ -65,3 +65,13 @@ func (s *RedisStore) OnDelete(obj *unstructured.Unstructured) {
 func (s *RedisStore) Shutdown() {
 
 }
+
+func (s *RedisStore) Count(mapName string) (int, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *RedisStore) Keys(mapName string) ([]string, error) {
+	//TODO implement me
+	panic("implement me")
+}

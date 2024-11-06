@@ -121,6 +121,39 @@ func (s *HazelcastStore) Shutdown() {
 	}
 }
 
+func (s *HazelcastStore) Count(mapName string) (int, error) {
+	hzMap, err := s.client.GetMap(context.Background(), mapName)
+	if err != nil {
+		return 0, err
+	}
+
+	size, err := hzMap.Size(context.Background())
+	if err != nil {
+		return 0, err
+	}
+
+	return size, err
+}
+
+func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
+	hzMap, err := s.client.GetMap(context.Background(), mapName)
+	if err != nil {
+		return nil, err
+	}
+
+	keySet, err := hzMap.GetKeySet(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var keys = make([]string, 0)
+	for _, key := range keySet {
+		keys = append(keys, key.(string))
+	}
+
+	return keys, nil
+}
+
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 	var mapName = utils.GetGroupVersionId(obj)
 
