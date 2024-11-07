@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/test"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/fake"
 	"os"
 	"testing"
 )
@@ -75,7 +78,7 @@ func TestHazelcastStore_InitializeResource(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	var testResource = config.Current.Resources[0]
-	hazelcastStore.InitializeResource(&testResource)
+	hazelcastStore.InitializeResource(createFakeDynamicClient(), &testResource)
 
 	var errorCount = test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
 	assertions.Equal(0, errorCount, "unexpected errors have been logged")
@@ -118,4 +121,10 @@ func TestHazelcastStore_Shutdown(t *testing.T) {
 	var assertions = assert.New(t)
 	hazelcastStore.Shutdown()
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel, zerolog.WarnLevel), "shutdown produces errors and/or warnings")
+}
+
+func createFakeDynamicClient() dynamic.Interface {
+	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	var scheme = runtime.NewScheme()
+	return fake.NewSimpleDynamicClient(scheme, subscriptions[0], subscriptions[1])
 }

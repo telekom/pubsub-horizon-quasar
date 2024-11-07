@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 type DummyStore struct {
@@ -25,7 +26,7 @@ func (s *DummyStore) Initialize() {
 	s.IsInitialized = true
 }
 
-func (s *DummyStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
 	s.HasInitializedResource = true
 }
 
@@ -42,6 +43,14 @@ func (s *DummyStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstruc
 func (s *DummyStore) OnDelete(obj *unstructured.Unstructured) {
 	fmt.Printf("Deleted: %+v\n", obj.GetName())
 	s.DeleteCalls++
+}
+
+func (s *DummyStore) Count(mapName string) (int, error) {
+	panic("not implemented")
+}
+
+func (s *DummyStore) Keys(mapName string) ([]string, error) {
+	panic("not implemented")
 }
 
 func (s *DummyStore) Shutdown() {
