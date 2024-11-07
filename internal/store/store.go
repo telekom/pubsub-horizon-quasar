@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 	"strings"
 )
 
@@ -15,7 +16,7 @@ var CurrentStore Store
 
 type Store interface {
 	Initialize()
-	InitializeResource(resourceConfig *config.ResourceConfiguration)
+	InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration)
 	OnAdd(obj *unstructured.Unstructured)
 	OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured)
 	OnDelete(obj *unstructured.Unstructured)

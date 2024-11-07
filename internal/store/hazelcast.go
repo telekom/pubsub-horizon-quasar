@@ -7,12 +7,15 @@ package store
 import (
 	"context"
 	"github.com/hazelcast/hazelcast-go-client"
+	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/hazelcast/hazelcast-go-client/serialization"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/mongo"
+	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 type HazelcastStore struct {
@@ -42,7 +45,7 @@ func (s *HazelcastStore) Initialize() {
 	}
 }
 
-func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
 	if s.wtClient != nil {
 		s.wtClient.EnsureIndexesOfResource(resourceConfig)
 	}
@@ -62,6 +65,23 @@ func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfi
 				"indexName": hazelcastIndex.Name,
 			}).Err(err).Msg("Could not create hazelcast index")
 		}
+	}
+
+	var reconciliation = reconciler.NewReconciliation(kubernetesClient, resourceConfig)
+	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
+		if event.State == cluster.MembershipStateRemoved {
+			reconciliation.Reconcile(reconciler.Functions{
+				AddFunc:   s.OnAdd,
+				CountFunc: s.Count,
+				KeysFunc:  s.Keys,
+			})
+		}
+	})
+
+	if err != nil {
+		log.Error().Err(err).Fields(map[string]any{
+			"cache": resourceConfig.GetCacheName(),
+		}).Msg("Could not register membership listener for reconciliation")
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 )
 
 type ResourceWatcher struct {
+	client         dynamic.Interface
 	resourceConfig *config.ResourceConfiguration
 	informer       cache.SharedIndexInformer
 	stopChan       chan struct{}
@@ -34,6 +35,7 @@ func NewResourceWatcher(
 	var namespace = resourceConfig.Kubernetes.Namespace
 	var informer = createInformer(client, resource, namespace, reSyncPeriod)
 	var watcher = ResourceWatcher{
+		client:         client,
 		resourceConfig: resourceConfig,
 		informer:       informer,
 		stopChan:       make(chan struct{}),
@@ -129,7 +131,7 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	store.CurrentStore.InitializeResource(w.resourceConfig)
+	store.CurrentStore.InitializeResource(w.client, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {
