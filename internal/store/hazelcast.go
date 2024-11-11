@@ -71,11 +71,7 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 	var reconciliation = reconciler.NewReconciliation(kubernetesClient, resourceConfig)
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
 		if event.State == cluster.MembershipStateRemoved {
-			reconciliation.Reconcile(reconciler.Functions{
-				AddFunc:   s.OnAdd,
-				CountFunc: s.Count,
-				KeysFunc:  s.Keys,
-			})
+			reconciliation.Reconcile(s)
 		}
 	})
 

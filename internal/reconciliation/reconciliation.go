@@ -19,11 +19,17 @@ type Reconciliation struct {
 	resource *config.ResourceConfiguration
 }
 
+type Reconcilable interface {
+	OnAdd(obj *unstructured.Unstructured)
+	Count(mapName string) (int, error)
+	Keys(mapName string) ([]string, error)
+}
+
 func NewReconciliation(client dynamic.Interface, resource *config.ResourceConfiguration) *Reconciliation {
 	return &Reconciliation{client, resource}
 }
 
-func (r *Reconciliation) Reconcile(reconcileFuncs Functions) {
+func (r *Reconciliation) Reconcile(reconcilable Reconcilable) {
 	resources, err := r.client.Resource(r.resource.GetGroupVersionResource()).
 		Namespace(r.resource.Kubernetes.Namespace).
 		List(context.Background(), v1.ListOptions{})
@@ -36,7 +42,7 @@ func (r *Reconciliation) Reconcile(reconcileFuncs Functions) {
 	}
 
 	resourceCount := len(resources.Items)
-	storeSize, err := reconcileFuncs.CountFunc(r.resource.GetCacheName())
+	storeSize, err := reconcilable.Count(r.resource.GetCacheName())
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
 			"cache": r.resource.GetCacheName(),
@@ -55,7 +61,7 @@ func (r *Reconciliation) Reconcile(reconcileFuncs Functions) {
 			"cache": r.resource.GetCacheName(),
 		}).Msg("Store size does not match resource count. Generating diff for reconciliation...")
 
-		storeKeys, err := reconcileFuncs.KeysFunc(r.resource.GetCacheName())
+		storeKeys, err := reconcilable.Keys(r.resource.GetCacheName())
 		if err != nil {
 			log.Error().Err(err).Msg("Could no retrieve store keys")
 		}
@@ -63,7 +69,7 @@ func (r *Reconciliation) Reconcile(reconcileFuncs Functions) {
 		missingEntries := r.generateDiff(resources.Items, storeKeys)
 		log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingEntries))
 		for _, entry := range missingEntries {
-			reconcileFuncs.AddFunc(&entry)
+			reconcilable.OnAdd(&entry)
 			log.Warn().Fields(utils.CreateFieldsForOp("restore", &entry)).Msg("Restored")
 		}
 	}
