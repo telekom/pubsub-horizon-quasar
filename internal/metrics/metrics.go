@@ -51,7 +51,7 @@ func GetOrCreate(resourceConfig *config.ResourceConfiguration) *prometheus.Gauge
 func GetOrCreateCustom(name string) *prometheus.GaugeVec {
 	var gaugeName = strings.ReplaceAll(name, ".", "_")
 
-	gauge, ok := gauges[name]
+	gauge, ok := gauges[gaugeName]
 	if !ok {
 		gauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
