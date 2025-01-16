@@ -44,7 +44,7 @@ func (s *HazelcastStore) Initialize() {
 	}
 
 	if config.Current.Store.Hazelcast.WriteBehind {
-		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Fallback)
+		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Fallback.Mongo)
 	}
 }
 

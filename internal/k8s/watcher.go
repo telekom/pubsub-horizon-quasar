@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/fallback"
 	"github.com/telekom/quasar/internal/metrics"
-	"github.com/telekom/quasar/internal/mongo"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,10 +49,9 @@ func NewResourceWatcher(
 			performReplay = false
 			log.Info().Msg("The informer encountered an error before being in sync. Falling back to MongoDB...")
 
-			var fallbackClient = mongo.NewFallbackClient(config.Current)
 			var resource = resourceConfig.GetGroupVersionResource()
 
-			replayedDocuments, err := fallbackClient.ReplayForResource(&resource, store.CurrentStore.OnAdd)
+			replayedDocuments, err := fallback.CurrentFallback.ReplayResource(&resource, store.CurrentStore.OnAdd)
 			if err != nil {
 				log.Fatal().Err(err).Msg("Replay from MongoDB failed!")
 			}

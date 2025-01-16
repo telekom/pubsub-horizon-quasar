@@ -26,7 +26,7 @@ type Store interface {
 }
 
 func SetupStore() {
-	var storeType = config.Current.Store.StoreType
+	var storeType = config.Current.Store.Type
 	var err error
 	CurrentStore, err = createStore(storeType)
 	if err != nil {
@@ -45,6 +45,9 @@ func createStore(storeType string) (Store, error) {
 
 	case "hazelcast":
 		return new(HazelcastStore), nil
+
+	case "mongo":
+		return new(MongoStore), nil
 
 	default:
 		return nil, ErrUnknownStoreType
