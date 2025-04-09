@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 type MongoStore struct {
@@ -32,7 +33,7 @@ func (m *MongoStore) Initialize() {
 
 }
 
-func (m *MongoStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
 		var collection = m.client.Database(config.Current.Fallback.Mongo.Database).Collection(resourceConfig.GetCacheName())
@@ -82,6 +83,16 @@ func (m *MongoStore) OnDelete(obj *unstructured.Unstructured) {
 		}).Err(err).Msg("Could not delete object from MongoDB")
 		return
 	}
+}
+
+func (m *MongoStore) Count(mapName string) (int, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MongoStore) Keys(mapName string) ([]string, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m *MongoStore) getCollection(obj *unstructured.Unstructured) *mongo.Collection {
