@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/hazelcast/hazelcast-go-client/serialization"
@@ -17,6 +18,7 @@ import (
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
+	"os"
 	"time"
 )
 
@@ -30,7 +32,13 @@ func (s *HazelcastStore) Initialize() {
 	var hazelcastConfig = hazelcast.NewConfig()
 	var err error
 
+	instanceName := os.Getenv("POD_NAME")
+	if instanceName == "" {
+		instanceName = "golaris-" + uuid.New().String()
+	}
+
 	hazelcastConfig.Cluster.Name = config.Current.Store.Hazelcast.ClusterName
+	hazelcastConfig.ClientName = instanceName
 	hazelcastConfig.Cluster.Security.Credentials.Username = config.Current.Store.Hazelcast.Username
 	hazelcastConfig.Cluster.Security.Credentials.Password = config.Current.Store.Hazelcast.Password
 	hazelcastConfig.Cluster.Network.Addresses = config.Current.Store.Hazelcast.Addresses
