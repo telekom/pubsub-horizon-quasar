@@ -46,6 +46,7 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.username", "")
 	viper.SetDefault("store.hazelcast.password", "")
 	viper.SetDefault("store.hazelcast.writeBehind", true)
+	viper.SetDefault("store.hazelcast.unisocket", false)
 
 	viper.SetDefault("store.mongo.uri", "mongodb://localhost:27017")
 	viper.SetDefault("store.mongo.database", "horizon")

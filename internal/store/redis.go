@@ -12,6 +12,7 @@ import (
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 )
 
 type RedisStore struct {
@@ -37,7 +38,7 @@ func (s *RedisStore) Initialize() {
 	log.Info().Msg("Redis connection established...")
 }
 
-func (s *RedisStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+func (s *RedisStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
 	// Nothing to do here
 }
 
@@ -64,4 +65,14 @@ func (s *RedisStore) OnDelete(obj *unstructured.Unstructured) {
 
 func (s *RedisStore) Shutdown() {
 
+}
+
+func (s *RedisStore) Count(mapName string) (int, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *RedisStore) Keys(mapName string) ([]string, error) {
+	//TODO implement me
+	panic("implement me")
 }

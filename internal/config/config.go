@@ -39,6 +39,7 @@ type HazelcastConfiguration struct {
 	Password    string   `mapstructure:"password"`
 	Addresses   []string `mapstructure:"addresses"`
 	WriteBehind bool     `mapstructure:"writeBehind"`
+	Unisocket   bool     `mapstructure:"unisocket"`
 }
 
 type MongoConfiguration struct {

@@ -5,6 +5,7 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
@@ -19,6 +21,7 @@ import (
 )
 
 type ResourceWatcher struct {
+	client         dynamic.Interface
 	resourceConfig *config.ResourceConfiguration
 	informer       cache.SharedIndexInformer
 	stopChan       chan struct{}
@@ -34,6 +37,7 @@ func NewResourceWatcher(
 	var namespace = resourceConfig.Kubernetes.Namespace
 	var informer = createInformer(client, resource, namespace, reSyncPeriod)
 	var watcher = ResourceWatcher{
+		client:         client,
 		resourceConfig: resourceConfig,
 		informer:       informer,
 		stopChan:       make(chan struct{}),
@@ -65,6 +69,8 @@ func NewResourceWatcher(
 		UpdateFunc: watcher.update,
 		DeleteFunc: watcher.delete,
 	})
+
+	go watcher.collectMetrics(client, resourceConfig)
 
 	return &watcher, err
 }
@@ -128,7 +134,7 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	store.CurrentStore.InitializeResource(w.resourceConfig)
+	store.CurrentStore.InitializeResource(w.client, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -145,4 +151,30 @@ func (w *ResourceWatcher) Start() {
 
 func (w *ResourceWatcher) Stop() {
 	close(w.stopChan)
+}
+
+func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+	if err := recover(); err != nil {
+		log.Error().Msgf("Recovered from %s during kubernetes metric collection", err)
+		return
+	}
+
+	for {
+		list, err := client.Resource(resourceConfig.GetGroupVersionResource()).
+			Namespace(resourceConfig.Kubernetes.Namespace).
+			List(context.Background(), v1.ListOptions{})
+
+		if err != nil {
+			log.Error().Err(err).Fields(map[string]any{
+				"resource": resourceConfig.GetCacheName(),
+			}).Msg("Could not resource count")
+
+			time.Sleep(15 * time.Second)
+			continue
+		}
+
+		var gaugeName = resourceConfig.GetCacheName() + "_kubernetes_count"
+		metrics.GetOrCreateCustom(gaugeName).WithLabelValues().Set(float64(len(list.Items)))
+		time.Sleep(15 * time.Second)
+	}
 }

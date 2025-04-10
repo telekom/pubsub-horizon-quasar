@@ -7,12 +7,17 @@ package store
 import (
 	"context"
 	"github.com/hazelcast/hazelcast-go-client"
+	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/hazelcast/hazelcast-go-client/serialization"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/mongo"
+	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	"time"
 )
 
 type HazelcastStore struct {
@@ -29,6 +34,7 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.Security.Credentials.Username = config.Current.Store.Hazelcast.Username
 	hazelcastConfig.Cluster.Security.Credentials.Password = config.Current.Store.Hazelcast.Password
 	hazelcastConfig.Cluster.Network.Addresses = config.Current.Store.Hazelcast.Addresses
+	hazelcastConfig.Cluster.Unisocket = config.Current.Store.Hazelcast.Unisocket
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
 	s.ctx = context.Background()
@@ -42,7 +48,7 @@ func (s *HazelcastStore) Initialize() {
 	}
 }
 
-func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfiguration) {
+func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
 	if s.wtClient != nil {
 		s.wtClient.EnsureIndexesOfResource(resourceConfig)
 	}
@@ -63,6 +69,21 @@ func (s *HazelcastStore) InitializeResource(resourceConfig *config.ResourceConfi
 			}).Err(err).Msg("Could not create hazelcast index")
 		}
 	}
+
+	var reconciliation = reconciler.NewReconciliation(kubernetesClient, resourceConfig)
+	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
+		if event.State == cluster.MembershipStateRemoved {
+			reconciliation.Reconcile(s)
+		}
+	})
+
+	if err != nil {
+		log.Error().Err(err).Fields(map[string]any{
+			"cache": resourceConfig.GetCacheName(),
+		}).Msg("Could not register membership listener for reconciliation")
+	}
+
+	go s.collectMetrics(resourceConfig.GetCacheName())
 }
 
 func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) {
@@ -121,6 +142,39 @@ func (s *HazelcastStore) Shutdown() {
 	}
 }
 
+func (s *HazelcastStore) Count(mapName string) (int, error) {
+	hzMap, err := s.client.GetMap(context.Background(), mapName)
+	if err != nil {
+		return 0, err
+	}
+
+	size, err := hzMap.Size(context.Background())
+	if err != nil {
+		return 0, err
+	}
+
+	return size, err
+}
+
+func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
+	hzMap, err := s.client.GetMap(context.Background(), mapName)
+	if err != nil {
+		return nil, err
+	}
+
+	keySet, err := hzMap.GetKeySet(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var keys = make([]string, 0)
+	for _, key := range keySet {
+		keys = append(keys, key.(string))
+	}
+
+	return keys, nil
+}
+
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 	var mapName = utils.GetGroupVersionId(obj)
 
@@ -132,4 +186,33 @@ func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 	}
 
 	return cacheMap
+}
+
+func (s *HazelcastStore) collectMetrics(resourceName string) {
+	if err := recover(); err != nil {
+		log.Error().Msgf("Recovered from %s during hazelcast metric collection", err)
+		return
+	}
+
+	for {
+		hzMap, err := s.client.GetMap(context.Background(), resourceName)
+		if err != nil {
+			log.Error().Err(err).Fields(map[string]any{
+				"map": hzMap.Name(),
+			}).Msg("Could not collect data")
+		}
+
+		size, err := hzMap.Size(context.Background())
+		if err != nil {
+			log.Error().Err(err).Fields(map[string]any{
+				"map": hzMap.Name(),
+			}).Msg("Could not retrieve size")
+
+			time.Sleep(15 * time.Second)
+			continue
+		}
+
+		metrics.GetOrCreateCustom(resourceName + "_hazelcast_count").WithLabelValues().Set(float64(size))
+		time.Sleep(15 * time.Second)
+	}
 }
