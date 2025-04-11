@@ -1,0 +1,40 @@
+version = 1
+SPDX-PackageName = "Quasar"
+SPDX-PackageSupplier = "Deutsche Telekom AG <opensource@telekom.de>"
+SPDX-PackageDownloadLocation = "https://github.com/telekom/pubsub-horizon-quasar"
+
+[[annotations]]
+path = "docs/img/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2024 Deutsche Telekom IT GmbH"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+[[annotations]]
+path = ["go.mod", "go.sum"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2024 Deutsche Telekom IT GmbH"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ["LICENSE", "CODEOWNERS"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2024 Deutsche Telekom IT GmbH"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [".pre-commit-config.yaml", "REUSE.toml"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2024 Deutsche Telekom IT GmbH"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "testdata/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2024 Deutsche Telekom IT GmbH"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = ".github/dependabot.yml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright 2024 Deutsche Telekom IT GmbH"
+SPDX-License-Identifier = "Apache-2.0"
