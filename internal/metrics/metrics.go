@@ -55,7 +55,7 @@ func GetOrCreateCustom(name string) *prometheus.GaugeVec {
 	if !ok {
 		gauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
-			Name:      fmt.Sprintf(gaugeName),
+			Name:      gaugeName,
 		}, []string{})
 
 		gauges[gaugeName] = gauge
