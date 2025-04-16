@@ -32,9 +32,9 @@ func (s *HazelcastStore) Initialize() {
 	var hazelcastConfig = hazelcast.NewConfig()
 	var err error
 
-	instanceName := os.Getenv("POD_NAME")
-	if instanceName == "" {
-		instanceName = "golaris-" + uuid.New().String()
+	instanceName, ok := os.LookupEnv("POD_NAME")
+	if !ok {
+		instanceName = "quasar-" + uuid.New().String()
 	}
 
 	hazelcastConfig.Cluster.Name = config.Current.Store.Hazelcast.ClusterName
