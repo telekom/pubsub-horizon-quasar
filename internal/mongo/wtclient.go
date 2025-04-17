@@ -46,6 +46,7 @@ func (c *WriteThroughClient) Add(obj *unstructured.Unstructured) {
 
 	var opts = options.Replace().SetUpsert(true)
 	var filter = c.createFilter(obj)
+
 	_, err := c.getCollection(obj).ReplaceOne(c.ctx, filter, obj.Object, opts)
 	if err != nil {
 		log.Warn().Fields(map[string]any{
@@ -63,6 +64,7 @@ func (c *WriteThroughClient) Update(obj *unstructured.Unstructured) {
 
 	var opts = options.Replace().SetUpsert(false)
 	var filter = c.createFilter(obj)
+
 	_, err := c.getCollection(obj).ReplaceOne(c.ctx, filter, obj.Object, opts)
 	if err != nil {
 		log.Warn().Fields(map[string]any{

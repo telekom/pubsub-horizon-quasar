@@ -49,7 +49,6 @@ func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
 	var filter = bson.M{"_id": utils.GetMongoId(obj)}
 	var collection = m.getCollection(obj)
 
-	utils.ConvertCreationTimestamp(obj)
 	_, err := collection.ReplaceOne(context.Background(), filter, obj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
@@ -64,7 +63,6 @@ func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstruc
 	var filter = bson.M{"_id": utils.GetMongoId(newObj)}
 	var collection = m.getCollection(oldObj)
 
-	utils.ConvertCreationTimestamp(newObj)
 	_, err := collection.ReplaceOne(context.Background(), filter, newObj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
