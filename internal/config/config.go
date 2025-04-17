@@ -6,8 +6,6 @@ package config
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 	"time"
 )
 
@@ -28,23 +26,16 @@ type Configuration struct {
 	Metrics MetricsConfiguration `mapstructure:"metrics"`
 }
 
+// GetResourceConfiguration returns a resource configuration for the given object if applicable.
+// The second return values represents whether the resource exists.
 func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured) (*ResourceConfiguration, bool) {
+	// As GroupVersionKind and GroupVersionResource define two different things with the first describing a single resource
+	// and the latter describing the plural of a custom resource we need to do a name-check and perform a normalization by
+	// putting everything into lower-case.
 	gvk := obj.GroupVersionKind()
-	gvr := schema.GroupVersionResource{
-		Group:   gvk.Group,
-		Version: gvk.Version,
-	}
-
-	resource := gvk.Kind
-	if strings.HasSuffix(resource, "s") {
-		resource = strings.ToLower(resource)
-	} else {
-		resource = strings.ToLower(resource) + "s"
-	}
-	gvr.Resource = resource
 
 	for _, res := range c.Resources {
-		if res.Kubernetes.Group == gvr.Group && res.Kubernetes.Version == gvr.Version && res.Kubernetes.Resource == gvr.Resource {
+		if res.Kubernetes.Group == gvk.Group && res.Kubernetes.Version == gvk.Version && res.Kubernetes.Kind == gvk.Kind {
 			return &res, true
 		}
 	}
