@@ -105,12 +105,12 @@ func (c *WriteThroughClient) EnsureIndexesOfResource(resourceConfig *config.Reso
 
 func (*WriteThroughClient) createFilterAndUpdate(obj *unstructured.Unstructured) (bson.M, bson.D) {
 	var objCopy = obj.DeepCopy().Object
-	objCopy["_id"] = obj.GetUID()
-	return bson.M{"_id": obj.GetUID()}, bson.D{{"$set", objCopy}}
+	objCopy["_id"] = utils.GetMongoId(obj)
+	return bson.M{"_id": utils.GetMongoId(obj)}, bson.D{{"$set", objCopy}}
 }
 
 func (*WriteThroughClient) createFilter(obj *unstructured.Unstructured) bson.M {
-	return bson.M{"_id": obj.GetUID()}
+	return bson.M{"_id": utils.GetMongoId(obj)}
 }
 
 func (c *WriteThroughClient) getCollection(obj *unstructured.Unstructured) *mongo.Collection {

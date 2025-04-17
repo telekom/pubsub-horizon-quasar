@@ -46,9 +46,10 @@ func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, reso
 }
 
 func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
-	var filter = bson.M{"_id": string(obj.GetUID())}
+	var filter = bson.M{"_id": utils.GetMongoId(obj)}
 	var collection = m.getCollection(obj)
 
+	utils.ConvertCreationTimestamp(obj)
 	_, err := collection.ReplaceOne(context.Background(), filter, obj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
@@ -60,9 +61,10 @@ func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
 }
 
 func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
-	var filter = bson.M{"_id": string(oldObj.GetUID())}
+	var filter = bson.M{"_id": utils.GetMongoId(newObj)}
 	var collection = m.getCollection(oldObj)
 
+	utils.ConvertCreationTimestamp(newObj)
 	_, err := collection.ReplaceOne(context.Background(), filter, newObj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
@@ -74,7 +76,7 @@ func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstruc
 }
 
 func (m *MongoStore) OnDelete(obj *unstructured.Unstructured) {
-	var filter = bson.M{"_id": string(obj.GetUID())}
+	var filter = bson.M{"_id": utils.GetMongoId(obj)}
 
 	_, err := m.getCollection(obj).DeleteOne(context.Background(), filter)
 	if err != nil {

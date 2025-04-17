@@ -5,6 +5,9 @@
 package config
 
 import (
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"strings"
 	"time"
 )
 
@@ -23,6 +26,30 @@ type Configuration struct {
 		Mongo MongoConfiguration `mapstructure:"mongo"`
 	} `mapstructure:"fallback"`
 	Metrics MetricsConfiguration `mapstructure:"metrics"`
+}
+
+func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured) (*ResourceConfiguration, bool) {
+	gvk := obj.GroupVersionKind()
+	gvr := schema.GroupVersionResource{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+	}
+
+	resource := gvk.Kind
+	if strings.HasSuffix(resource, "s") {
+		resource = strings.ToLower(resource)
+	} else {
+		resource = strings.ToLower(resource) + "s"
+	}
+	gvr.Resource = resource
+
+	for _, res := range c.Resources {
+		if res.Kubernetes.Group == gvr.Group && res.Kubernetes.Version == gvr.Version && res.Kubernetes.Resource == gvr.Resource {
+			return &res, true
+		}
+	}
+
+	return nil, false
 }
 
 type RedisConfiguration struct {

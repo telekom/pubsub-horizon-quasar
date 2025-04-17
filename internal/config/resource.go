@@ -20,6 +20,7 @@ type ResourceConfiguration struct {
 		Resource  string `mapstructure:"resource"`
 		Namespace string `mapstructure:"namespace"`
 	} `mapstructure:"kubernetes"`
+	MongoId          string                   `mapstructure:"mongoId"`
 	MongoIndexes     []MongoResourceIndex     `mapstructure:"mongoIndexes"`
 	HazelcastIndexes []HazelcastResourceIndex `mapstructure:"hazelcastIndexes"`
 	Prometheus       PrometheusConfiguration  `mapstructure:"prometheus"`
