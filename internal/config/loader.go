@@ -6,6 +6,7 @@ package config
 
 import (
 	"errors"
+	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -47,6 +48,16 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.password", "")
 	viper.SetDefault("store.hazelcast.writeBehind", true)
 	viper.SetDefault("store.hazelcast.unisocket", false)
+
+	viper.SetDefault("store.hazelcast.connectionTimeout", "300s")
+	viper.SetDefault("store.hazelcast.invocationTimeout", "60s")
+	viper.SetDefault("store.hazelcast.redoOperatiom", false)
+	viper.SetDefault("store.hazelcast.HazelCastConnectionStrategy.reconnectMode", cluster.ReconnectModeOn)
+	viper.SetDefault("store.hazelcast.HazelCastConnectionStrategy.Timeout", "5m")
+	viper.SetDefault("store.hazelcast.HazelCastConnectionStrategy.HazelcastRetry.initialBackoff", "1s")
+	viper.SetDefault("store.hazelcast.HazelCastConnectionStrategy.HazelcastRetry.maxBackoff", "10s")
+	viper.SetDefault("store.hazelcast.HazelCastConnectionStrategy.HazelcastRetry.multiplier", 1.2)
+	viper.SetDefault("store.hazelcast.HazelCastConnectionStrategy.HazelcastRetry.jitter", 0.0)
 
 	viper.SetDefault("store.mongo.uri", "mongodb://localhost:27017")
 	viper.SetDefault("store.mongo.database", "horizon")

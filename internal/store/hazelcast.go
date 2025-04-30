@@ -10,6 +10,7 @@ import (
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/hazelcast/hazelcast-go-client/serialization"
+	"github.com/hazelcast/hazelcast-go-client/types"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/metrics"
@@ -19,13 +20,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type HazelcastStore struct {
-	client   *hazelcast.Client
-	wtClient *mongo.WriteThroughClient
-	ctx      context.Context
+	client          *hazelcast.Client
+	wtClient        *mongo.WriteThroughClient
+	ctx             context.Context
+	reconciliations sync.Map
+	reconOnce       atomic.Bool
 }
 
 func (s *HazelcastStore) Initialize() {
@@ -45,6 +50,19 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.Unisocket = config.Current.Store.Hazelcast.Unisocket
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
+	// Network & Invocation
+	hazelcastConfig.Cluster.Network.ConnectionTimeout = types.Duration(config.Current.Store.Hazelcast.ConnectionTimeout)
+	hazelcastConfig.Cluster.InvocationTimeout = types.Duration(config.Current.Store.Hazelcast.InvocationTimeout)
+	hazelcastConfig.Cluster.RedoOperation = config.Current.Store.Hazelcast.RedoOperation
+
+	// Reconnect-Strategy
+	hazelcastConfig.Cluster.ConnectionStrategy.ReconnectMode = config.Current.Store.Hazelcast.HazelcastConnectionStrategy.ReconnectMode
+	hazelcastConfig.Cluster.ConnectionStrategy.Timeout = types.Duration(config.Current.Store.Hazelcast.HazelcastConnectionStrategy.Timeout)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff = types.Duration(config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.InitialBackoff)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.MaxBackoff = types.Duration(config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.MaxBackoff)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier = config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.Multiplier
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.Jitter
+
 	s.ctx = context.Background()
 	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 	if err != nil {
@@ -54,6 +72,12 @@ func (s *HazelcastStore) Initialize() {
 	if config.Current.Store.Hazelcast.WriteBehind {
 		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Fallback.Mongo)
 	}
+
+	_, err = s.client.AddLifecycleListener(s.handleClientEvents)
+	if err != nil {
+		log.Error().Err(err).Msg("Could not create hazelcast client lifecycle listener!")
+	}
+
 }
 
 func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
@@ -78,10 +102,12 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 		}
 	}
 
-	var reconciliation = reconciler.NewReconciliation(kubernetesClient, resourceConfig)
+	recon := reconciler.NewReconciliation(kubernetesClient, resourceConfig)
+	s.reconciliations.Store(mapName, recon)
+
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
 		if event.State == cluster.MembershipStateRemoved {
-			reconciliation.Reconcile(s)
+			recon.Reconcile(s)
 		}
 	})
 
@@ -223,4 +249,73 @@ func (s *HazelcastStore) collectMetrics(resourceName string) {
 		metrics.GetOrCreateCustom(resourceName + "_hazelcast_count").WithLabelValues().Set(float64(size))
 		time.Sleep(15 * time.Second)
 	}
+}
+
+func (s *HazelcastStore) handleClientEvents(event hazelcast.LifecycleStateChanged) {
+	switch event.State {
+	case hazelcast.LifecycleStateConnected:
+		log.Info().Msg("Received connected event from hazelcast client")
+		s.onConnected()
+	case hazelcast.LifecycleStateDisconnected:
+		log.Info().Msg("Received disconnected event from hazelcast client")
+		s.onDisconnected()
+	case hazelcast.LifecycleStateShutDown:
+		log.Info().Msg("Received shutdown event from hazelcast client")
+	default:
+		return
+	}
+}
+
+func (s *HazelcastStore) onConnected() {
+	clusterLabel := config.Current.Store.Hazelcast.ClusterName
+
+	metrics.GetOrCreateCustomCounter(clusterLabel + "_hazelcast_reconnect_total").
+		WithLabelValues().
+		Inc()
+
+	if s.reconOnce.Load() {
+		log.Info().Msg("Re-connect reconciliation already executed, skipping")
+		return
+	}
+	if !s.reconOnce.CompareAndSwap(false, true) {
+		return
+	}
+
+	s.reconciliations.Range(func(key, value any) bool {
+		cacheName := key.(string)
+		recon, ok := value.(*reconciler.Reconciliation)
+		if !ok {
+			log.Error().
+				Str("cache", cacheName).
+				Msg("Re-connect reconciliation object has unexpected type")
+			return true // weiter zum nächsten Eintrag
+		}
+
+		defer func(cache string) {
+			if r := recover(); r != nil {
+				log.Error().
+					Str("cache", cache).
+					Interface("panic", r).
+					Msg("Panic occurred during re-connect reconciliation")
+			}
+		}(cacheName)
+
+		log.Info().
+			Str("cache", cacheName).
+			Msg("Starting one-time reconciliation after reconnect")
+
+		recon.Reconcile(s)
+		return true
+	})
+}
+
+func (s *HazelcastStore) onDisconnected() {
+	clusterLabel := config.Current.Store.Hazelcast.ClusterName
+	metrics.GetOrCreateCustomCounter(clusterLabel + "_hazelcast_disconnect_total").
+		WithLabelValues().
+		Inc()
+	if s.reconOnce.CompareAndSwap(true, false) {
+		log.Info().Msg("Hazelcast client disconnected — reconcile flag reset")
+	}
+
 }
