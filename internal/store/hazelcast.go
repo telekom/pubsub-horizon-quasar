@@ -63,8 +63,6 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier = config.Current.Store.Hazelcast.HcConnectionStrategy.HcRetry.Multiplier
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.HcConnectionStrategy.HcRetry.Jitter
 
-	log.Info().Msgf("------------------------ Hazelcast config: %s", hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff)
-
 	s.ctx = context.Background()
 	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 	if err != nil {
@@ -256,13 +254,13 @@ func (s *HazelcastStore) collectMetrics(resourceName string) {
 func (s *HazelcastStore) handleClientEvents(event hazelcast.LifecycleStateChanged) {
 	switch event.State {
 	case hazelcast.LifecycleStateConnected:
-		log.Info().Msg("Received connected event from hazelcast client")
+		log.Debug().Msg("Received connected event from hazelcast client")
 		s.onConnected()
 	case hazelcast.LifecycleStateDisconnected:
-		log.Info().Msg("Received disconnected event from hazelcast client")
+		log.Debug().Msg("Received disconnected event from hazelcast client")
 		s.onDisconnected()
 	case hazelcast.LifecycleStateShutDown:
-		log.Info().Msg("Received shutdown event from hazelcast client")
+		log.Debug().Msg("Received shutdown event from hazelcast client")
 	default:
 		return
 	}
@@ -276,7 +274,7 @@ func (s *HazelcastStore) onConnected() {
 		Inc()
 
 	if s.reconOnce.Load() {
-		log.Info().Msg("Re-connect reconciliation already executed, skipping")
+		log.Debug().Msg("Re-connect reconciliation already executed, skipping")
 		return
 	}
 	if !s.reconOnce.CompareAndSwap(false, true) {
@@ -302,7 +300,7 @@ func (s *HazelcastStore) onConnected() {
 			}
 		}(cacheName)
 
-		log.Info().
+		log.Debug().
 			Str("cache", cacheName).
 			Msg("Starting one-time reconciliation after reconnect")
 
@@ -317,7 +315,7 @@ func (s *HazelcastStore) onDisconnected() {
 		WithLabelValues().
 		Inc()
 	if s.reconOnce.CompareAndSwap(true, false) {
-		log.Info().Msg("Hazelcast client disconnected — reconcile flag reset")
+		log.Debug().Msg("Hazelcast client disconnected — reconcile flag reset")
 	}
 
 }
