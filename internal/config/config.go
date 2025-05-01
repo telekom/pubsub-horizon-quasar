@@ -62,16 +62,16 @@ type HazelcastConfiguration struct {
 	ConnectionTimeout time.Duration `mapstructure:"connectionTimeout"`
 	InvocationTimeout time.Duration `mapstructure:"invocationTimeout"`
 	RedoOperation     bool          `mapstructure:"redoOperation"`
-	HazelcastConnectionStrategy
+	HcConnectionStrategy
 }
 
-type HazelcastConnectionStrategy struct {
+type HcConnectionStrategy struct {
 	ReconnectMode cluster.ReconnectMode `mapstructure:"reconnectMode"`
 	Timeout       time.Duration         `mapstructure:"timeout"`
-	HazelcastRetry
+	HcRetry
 }
 
-type HazelcastRetry struct {
+type HcRetry struct {
 	InitialBackoff time.Duration `mapstructure:"initialBackoff"`
 	MaxBackoff     time.Duration `mapstructure:"maxBackoff"`
 	Multiplier     float64       `mapstructure:"multiplier"`

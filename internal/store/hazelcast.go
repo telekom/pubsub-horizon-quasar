@@ -56,12 +56,14 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.RedoOperation = config.Current.Store.Hazelcast.RedoOperation
 
 	// Reconnect-Strategy
-	hazelcastConfig.Cluster.ConnectionStrategy.ReconnectMode = config.Current.Store.Hazelcast.HazelcastConnectionStrategy.ReconnectMode
-	hazelcastConfig.Cluster.ConnectionStrategy.Timeout = types.Duration(config.Current.Store.Hazelcast.HazelcastConnectionStrategy.Timeout)
-	hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff = types.Duration(config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.InitialBackoff)
-	hazelcastConfig.Cluster.ConnectionStrategy.Retry.MaxBackoff = types.Duration(config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.MaxBackoff)
-	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier = config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.Multiplier
-	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.HazelcastConnectionStrategy.HazelcastRetry.Jitter
+	hazelcastConfig.Cluster.ConnectionStrategy.ReconnectMode = config.Current.Store.Hazelcast.HcConnectionStrategy.ReconnectMode
+	hazelcastConfig.Cluster.ConnectionStrategy.Timeout = types.Duration(config.Current.Store.Hazelcast.HcConnectionStrategy.Timeout)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff = types.Duration(config.Current.Store.Hazelcast.HcConnectionStrategy.HcRetry.InitialBackoff)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.MaxBackoff = types.Duration(config.Current.Store.Hazelcast.HcConnectionStrategy.HcRetry.MaxBackoff)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier = config.Current.Store.Hazelcast.HcConnectionStrategy.HcRetry.Multiplier
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.HcConnectionStrategy.HcRetry.Jitter
+
+	log.Info().Msgf("------------------------ Hazelcast config: %s", hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff)
 
 	s.ctx = context.Background()
 	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
