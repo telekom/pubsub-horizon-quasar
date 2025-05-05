@@ -53,29 +53,29 @@ type RedisConfiguration struct {
 }
 
 type HazelcastConfiguration struct {
-	ClusterName       string        `mapstructure:"clusterName"`
-	Username          string        `mapstructure:"username"`
-	Password          string        `mapstructure:"password"`
-	Addresses         []string      `mapstructure:"addresses"`
-	WriteBehind       bool          `mapstructure:"writeBehind"`
-	Unisocket         bool          `mapstructure:"unisocket"`
-	ConnectionTimeout time.Duration `mapstructure:"connectionTimeout"`
-	InvocationTimeout time.Duration `mapstructure:"invocationTimeout"`
-	RedoOperation     bool          `mapstructure:"redoOperation"`
-	HcConnectionStrategy
+	ClusterName        string                      `mapstructure:"clusterName"`
+	Username           string                      `mapstructure:"username"`
+	Password           string                      `mapstructure:"password"`
+	Addresses          []string                    `mapstructure:"addresses"`
+	WriteBehind        bool                        `mapstructure:"writeBehind"`
+	Unisocket          bool                        `mapstructure:"unisocket"`
+	ConnectionTimeout  time.Duration               `mapstructure:"connectionTimeout"`
+	InvocationTimeout  time.Duration               `mapstructure:"invocationTimeout"`
+	RedoOperation      bool                        `mapstructure:"redoOperation"`
+	ConnectionStrategy HazelcastConnectionStrategy `mapstructure:"connectionStrategy"`
 }
 
-type HcConnectionStrategy struct {
+type HazelcastConnectionStrategy struct {
 	ReconnectMode cluster.ReconnectMode `mapstructure:"reconnectMode"`
 	Timeout       time.Duration         `mapstructure:"timeout"`
-	HcRetry
+	Retry         HazelcastRetry        `mapstructure:"retry"`
 }
 
-type HcRetry struct {
+type HazelcastRetry struct {
 	InitialBackoff time.Duration `mapstructure:"initialBackoff"`
 	MaxBackoff     time.Duration `mapstructure:"maxBackoff"`
 	Multiplier     float64       `mapstructure:"multiplier"`
-	Jitter         float64       `mapstructure:"multiplier"`
+	Jitter         float64       `mapstructure:"jitter"`
 }
 
 type MongoConfiguration struct {
