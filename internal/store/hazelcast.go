@@ -62,10 +62,6 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier = config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Multiplier
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Jitter
 
-	log.Info().Msgf("Konfiguration Hazelcast Connection Timeout: %s", hazelcastConfig.Cluster.ConnectionStrategy.Timeout)
-	log.Info().Msgf("Konfiguration Hazelcast Connection Retry Multiplier: %f", hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier)
-	log.Info().Msgf("Konfiguration Hazelcast Connection Jitter: %f", hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter)
-
 	s.ctx = context.Background()
 	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 	if err != nil {
