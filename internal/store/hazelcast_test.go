@@ -6,15 +6,21 @@ package store
 
 import (
 	"fmt"
+	"github.com/telekom/quasar/internal/reconciliation"
+	"os"
+	"sync"
+	"testing"
+
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/test"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
-	"os"
-	"testing"
 )
 
 var hazelcastStore *HazelcastStore
@@ -127,4 +133,78 @@ func createFakeDynamicClient() dynamic.Interface {
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	var scheme = runtime.NewScheme()
 	return fake.NewSimpleDynamicClient(scheme, subscriptions[0], subscriptions[1])
+}
+
+func TestHazelcastStore_HandleClientEvents(t *testing.T) {
+	var assertions = assert.New(t)
+	defer test.LogRecorder.Reset()
+
+	// Reset state
+	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.reconciliations = sync.Map{}
+
+	// Simulate connected event
+	hazelcastStore.handleClientEvents(hazelcast.LifecycleStateChanged{State: hazelcast.LifecycleStateConnected})
+	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should be true after connected event")
+
+	// Simulate disconnected event
+	hazelcastStore.handleClientEvents(hazelcast.LifecycleStateChanged{State: hazelcast.LifecycleStateDisconnected})
+	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should be false after disconnected event")
+
+	// Ensure no error logs
+	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
+	assertions.Equal(0, errorCount, "unexpected errors have been logged")
+}
+
+// Test to cover reconciliation iteration in onConnected
+func TestHazelcastStore_OnConnected(t *testing.T) {
+	var assertions = assert.New(t)
+	defer test.LogRecorder.Reset()
+
+	// Reset state
+	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.reconciliations = sync.Map{}
+
+	// Store a real Reconciliation object for the resource
+	recon := reconciliation.NewReconciliation(
+		createFakeDynamicClient(),
+		&config.Current.Resources[0],
+	)
+	cacheName := config.Current.Resources[0].GetCacheName()
+	hazelcastStore.reconciliations.Store(cacheName, recon)
+
+	// Trigger onConnected should iterate and run reconciliation
+	hazelcastStore.onConnected()
+	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should be true after onConnected with entry")
+
+	// Second call should keep reconOnce true and skip reconciliation
+	hazelcastStore.onConnected()
+	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should still be true after second onConnected")
+
+	// Verify that reconciliation attempted and logged an error (due to fake client list error)
+	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
+	assertions.Greater(errorCount, 0, "expected error logs from reconciliation attempt")
+}
+
+// Test to cover the reset of reconOnce in onDisconnected
+func TestHazelcastStore_OnDisconnected(t *testing.T) {
+	var assertions = assert.New(t)
+	defer test.LogRecorder.Reset()
+
+	// Reset state
+	hazelcastStore.reconciliations = sync.Map{}
+
+	// Case: reconOnce false remains false
+	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.onDisconnected()
+	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should remain false after onDisconnected without prior connect")
+
+	// Case: reconOnce true resets to false
+	hazelcastStore.reconOnce.Store(true)
+	hazelcastStore.onDisconnected()
+	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should be false after onDisconnected resets flag")
+
+	// Ensure no error logs
+	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
+	assertions.Equal(0, errorCount, "unexpected errors have been logged")
 }

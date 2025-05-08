@@ -48,6 +48,15 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.writeBehind", true)
 	viper.SetDefault("store.hazelcast.unisocket", false)
 
+	viper.SetDefault("store.hazelcast.connectionTimeout", "30s")
+	viper.SetDefault("store.hazelcast.invocationTimeout", "60s")
+	viper.SetDefault("store.hazelcast.redoOperatiom", false)
+	viper.SetDefault("store.hazelcast.connectionStrategy.timeout", "10m")
+	viper.SetDefault("store.hazelcast.connectionStrategy.retry.initialBackoff", "1s")
+	viper.SetDefault("store.hazelcast.connectionStrategy.retry.maxBackoff", "10s")
+	viper.SetDefault("store.hazelcast.connectionStrategy.retry.multiplier", 1.2)
+	viper.SetDefault("store.hazelcast.connectionStrategy.retry.jitter", 0.0)
+
 	viper.SetDefault("store.mongo.uri", "mongodb://localhost:27017")
 	viper.SetDefault("store.mongo.database", "horizon")
 
@@ -87,7 +96,7 @@ func applyLogLevel(level string) {
 		log.Info().Msgf("Invalid log level %s. Info log level is used", logLevel)
 	}
 
-	log.Logger = zerolog.New(os.Stdout).Level(logLevel).With().Timestamp().Logger()
+	log.Logger = log.Logger.Level(logLevel).With().Timestamp().Logger()
 	if logLevel == zerolog.DebugLevel {
 		log.Logger = log.Logger.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
