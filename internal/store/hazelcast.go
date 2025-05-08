@@ -287,7 +287,7 @@ func (s *HazelcastStore) onConnected() {
 			log.Error().
 				Str("cache", cacheName).
 				Msg("Re-connect reconciliation object has unexpected type")
-			return true // weiter zum nächsten Eintrag
+			return true
 		}
 
 		defer func(cache string) {

@@ -135,8 +135,6 @@ func createFakeDynamicClient() dynamic.Interface {
 	return fake.NewSimpleDynamicClient(scheme, subscriptions[0], subscriptions[1])
 }
 
-// Tests for handleClientEvents, onConnected, and onDisconnected
-
 func TestHazelcastStore_HandleClientEvents(t *testing.T) {
 	var assertions = assert.New(t)
 	defer test.LogRecorder.Reset()
