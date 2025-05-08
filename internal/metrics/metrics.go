@@ -17,6 +17,7 @@ import (
 var (
 	registry *prometheus.Registry
 	gauges   map[string]*prometheus.GaugeVec
+	counters = make(map[string]*prometheus.CounterVec)
 )
 
 const namespace = "quasar"
@@ -24,6 +25,7 @@ const namespace = "quasar"
 func init() {
 	registry = prometheus.NewRegistry()
 	gauges = make(map[string]*prometheus.GaugeVec)
+	counters = make(map[string]*prometheus.CounterVec)
 }
 
 func GetOrCreate(resourceConfig *config.ResourceConfiguration) *prometheus.GaugeVec {
@@ -69,4 +71,23 @@ func GetOrCreateCustom(name string) *prometheus.GaugeVec {
 	}
 
 	return gauge
+}
+
+func GetOrCreateCustomCounter(name string) *prometheus.CounterVec {
+	key := strings.ReplaceAll(name, ".", "_")
+	if c, ok := counters[key]; ok {
+		return c
+	}
+	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      key,
+		Help:      fmt.Sprintf("Custom counter %s", key),
+	}, []string{})
+	if err := registry.Register(counter); err != nil {
+		log.Error().Err(err).
+			Str("metric", namespace+"_"+key).
+			Msg("Could not register custom counter")
+	}
+	counters[key] = counter
+	return counter
 }
