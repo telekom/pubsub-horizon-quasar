@@ -125,6 +125,8 @@ func TestHazelcastStore_OnDelete(t *testing.T) {
 
 func TestHazelcastStore_Shutdown(t *testing.T) {
 	var assertions = assert.New(t)
+	defer test.LogRecorder.Reset()
+
 	hazelcastStore.Shutdown()
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel, zerolog.WarnLevel), "shutdown produces errors and/or warnings")
 }
