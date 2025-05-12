@@ -6,7 +6,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"github.com/google/uuid"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
@@ -20,8 +19,6 @@ import (
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"math"
-	"math/rand"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -68,51 +65,15 @@ func (s *HazelcastStore) Initialize() {
 
 	s.ctx = context.Background()
 
-	baseDelay := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.InitialBackoff
-	maxDelay := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.MaxBackoff
-	multiplier := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Multiplier
-	jitterFactor := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Jitter
-	maxRetries := config.Current.Store.Hazelcast.MaxRetries
-	attempt := 1
-
-	for ; maxRetries == 0 || attempt <= maxRetries; attempt++ {
+	for {
 		s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
-		if err == nil {
-			log.Info().
-				Int("attempt", attempt).
-				Msg("Hazelcast-Client erfolgreich verbunden")
+		if err != nil {
+			log.Info().Msg("Hazelcast connection established")
 			break
 		}
 
-		if s.ctx.Err() != nil {
-			log.Error().
-				Err(err).
-				Int("attempt", attempt).
-				Msg("Context canceled, cancel Hazelcast-Connect")
-			panic(fmt.Errorf("connection aborted after %d attempts: %w", attempt, err))
-		}
-
-		delay := time.Duration(float64(baseDelay) * math.Pow(multiplier, float64(attempt-1)))
-		if delay > maxDelay {
-			delay = maxDelay
-		}
-		jitter := time.Duration(jitterFactor * float64(delay))
-		randOffset := time.Duration(rand.Float64()*2*float64(jitter) - float64(jitter))
-		nextDelay := delay + randOffset
-
-		log.Warn().
-			Err(err).
-			Int("attempt", attempt).
-			Dur("retryIn", nextDelay).
-			Msg("Hazelcast client connection failed, try again")
-		time.Sleep(nextDelay)
-	}
-
-	if err != nil {
-		log.Panic().
-			Err(err).
-			Int("maxRetries", maxRetries).
-			Msg("Could not initialize Hazelcast client")
+		log.Error().Err(err).Msg("Hazelcast connection could not be established. Retrying in 30 seconds...")
+		time.Sleep(30 * time.Second)
 	}
 
 	if config.Current.Store.Hazelcast.WriteBehind {
