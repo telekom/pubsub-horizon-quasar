@@ -68,17 +68,14 @@ func (s *HazelcastStore) Initialize() {
 
 	s.ctx = context.Background()
 
-	maxRetries := config.Current.Store.Hazelcast.MaxRetries
-	if maxRetries <= 0 {
-		maxRetries = 5
-	}
-
 	baseDelay := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.InitialBackoff
 	maxDelay := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.MaxBackoff
 	multiplier := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Multiplier
 	jitterFactor := config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Jitter
+	maxRetries := config.Current.Store.Hazelcast.MaxRetries
+	attempt := 1
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
+	for ; maxRetries == 0 || attempt <= maxRetries; attempt++ {
 		s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 		if err == nil {
 			log.Info().
@@ -111,7 +108,6 @@ func (s *HazelcastStore) Initialize() {
 		time.Sleep(nextDelay)
 	}
 
-	// Nach MaxRetries immer noch Fehler → Panic wie gewünscht
 	if err != nil {
 		log.Panic().
 			Err(err).
