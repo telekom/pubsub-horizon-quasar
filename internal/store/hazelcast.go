@@ -67,7 +67,7 @@ func (s *HazelcastStore) Initialize() {
 
 	for {
 		s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
-		if err != nil {
+		if err == nil {
 			log.Info().Msg("Hazelcast connection established")
 			break
 		}
