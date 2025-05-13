@@ -56,6 +56,7 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.RedoOperation = config.Current.Store.Hazelcast.RedoOperation
 
 	// Reconnect-Strategy
+	hazelcastConfig.Cluster.ConnectionStrategy.ReconnectMode = cluster.ReconnectModeOn
 	hazelcastConfig.Cluster.ConnectionStrategy.Timeout = types.Duration(config.Current.Store.Hazelcast.ConnectionStrategy.Timeout)
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff = types.Duration(config.Current.Store.Hazelcast.ConnectionStrategy.Retry.InitialBackoff)
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.MaxBackoff = types.Duration(config.Current.Store.Hazelcast.ConnectionStrategy.Retry.MaxBackoff)
@@ -63,9 +64,16 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Jitter
 
 	s.ctx = context.Background()
-	s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
-	if err != nil {
-		log.Panic().Err(err).Msg("Could not create hazelcast client!")
+
+	for {
+		s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
+		if err == nil {
+			log.Info().Msg("Hazelcast connection established")
+			break
+		}
+
+		log.Error().Err(err).Msg("Hazelcast connection could not be established. Retrying in 30 seconds...")
+		time.Sleep(30 * time.Second)
 	}
 
 	if config.Current.Store.Hazelcast.WriteBehind {

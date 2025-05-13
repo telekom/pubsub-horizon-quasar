@@ -59,6 +59,7 @@ type HazelcastConfiguration struct {
 	Addresses          []string                    `mapstructure:"addresses"`
 	WriteBehind        bool                        `mapstructure:"writeBehind"`
 	Unisocket          bool                        `mapstructure:"unisocket"`
+	MaxRetries         int                         `mapstructure:"maxRetries"`
 	ConnectionTimeout  time.Duration               `mapstructure:"connectionTimeout"`
 	InvocationTimeout  time.Duration               `mapstructure:"invocationTimeout"`
 	RedoOperation      bool                        `mapstructure:"redoOperation"`
