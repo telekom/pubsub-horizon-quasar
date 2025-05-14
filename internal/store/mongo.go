@@ -129,3 +129,4 @@ func (m *MongoStore) getCollection(obj *unstructured.Unstructured) *mongo.Collec
 func (m *MongoStore) Shutdown() {
 	_ = m.client.Disconnect(context.TODO())
 }
+func (s *MongoStore) Connected() bool { panic("implement me") }
