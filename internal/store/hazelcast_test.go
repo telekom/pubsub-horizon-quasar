@@ -142,16 +142,16 @@ func TestHazelcastStore_HandleClientEvents(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	// Reset state
-	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.connected.Store(false)
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Simulate connected event
 	hazelcastStore.handleClientEvents(hazelcast.LifecycleStateChanged{State: hazelcast.LifecycleStateConnected})
-	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should be true after connected event")
+	assertions.True(hazelcastStore.connected.Load(), "connected should be true after connected event")
 
 	// Simulate disconnected event
 	hazelcastStore.handleClientEvents(hazelcast.LifecycleStateChanged{State: hazelcast.LifecycleStateDisconnected})
-	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should be false after disconnected event")
+	assertions.False(hazelcastStore.connected.Load(), "connected should be false after disconnected event")
 
 	// Ensure no error logs
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -164,7 +164,7 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	// Reset state
-	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.connected.Store(false)
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Store a real Reconciliation object for the resource
@@ -177,11 +177,11 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 
 	// Trigger onConnected should iterate and run reconciliation
 	hazelcastStore.onConnected()
-	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should be true after onConnected with entry")
+	assertions.True(hazelcastStore.connected.Load(), "connected should be true after onConnected with entry")
 
 	// Second call should keep reconOnce true and skip reconciliation
 	hazelcastStore.onConnected()
-	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should still be true after second onConnected")
+	assertions.True(hazelcastStore.connected.Load(), "connected should still be true after second onConnected")
 
 	// Verify that reconciliation attempted and logged an error (due to fake client list error)
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -197,14 +197,14 @@ func TestHazelcastStore_OnDisconnected(t *testing.T) {
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Case: reconOnce false remains false
-	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.connected.Store(false)
 	hazelcastStore.onDisconnected()
-	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should remain false after onDisconnected without prior connect")
+	assertions.False(hazelcastStore.connected.Load(), "connected should remain false after onDisconnected without prior connect")
 
 	// Case: reconOnce true resets to false
-	hazelcastStore.reconOnce.Store(true)
+	hazelcastStore.connected.Store(true)
 	hazelcastStore.onDisconnected()
-	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should be false after onDisconnected resets flag")
+	assertions.False(hazelcastStore.connected.Load(), "connected should be false after onDisconnected resets flag")
 
 	// Ensure no error logs
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
