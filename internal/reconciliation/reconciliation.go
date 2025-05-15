@@ -69,6 +69,7 @@ func (r *Reconciliation) Reconcile(reconcilable Reconcilable) {
 		missingEntries := r.generateDiff(resources.Items, storeKeys)
 		log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingEntries))
 		for _, entry := range missingEntries {
+			utils.AddMissingEnvironment(&entry)
 			reconcilable.OnAdd(&entry)
 			log.Warn().Fields(utils.CreateFieldsForOp("restore", &entry)).Msg("Restored")
 		}
