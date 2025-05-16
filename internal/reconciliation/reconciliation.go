@@ -87,12 +87,12 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 				log.Error().Err(err).Msg("Could no retrieve store keys")
 			}
 
-			missingEntries := r.generateDiff(resources.Items, storeKeys)
-			log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingEntries))
-			for _, entry := range missingEntries {
-				utils.AddMissingEnvironment(&entry)
-				reconcilable.OnAdd(&entry)
-				log.Warn().Fields(utils.CreateFieldsForOp("restore", &entry)).Msg("Restored")
+			missingItems := r.generateDiff(resources.Items, storeKeys)
+			log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingItems))
+			for _, items := range missingItems {
+				utils.AddMissingEnvironment(&items)
+				reconcilable.OnAdd(&items)
+				log.Warn().Fields(utils.CreateFieldsForOp("restore", &items)).Msg("Restored")
 			}
 		}
 
