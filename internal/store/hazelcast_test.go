@@ -50,6 +50,7 @@ func buildTestConfig() *config.Configuration {
 		Addresses:   []string{test.EnvOrDefault("HAZELCAST_HOST", "localhost")},
 		WriteBehind: true,
 	}
+	testConfig.Store.Hazelcast.ReconcileMode = config.ReconcileModeIncremental
 
 	var testResourceConfig = config.ResourceConfiguration{}
 	testResourceConfig.Kubernetes.Group = "mygroup"

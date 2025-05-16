@@ -48,7 +48,7 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 	mode := config.Current.Store.Hazelcast.ReconcileMode
 
 	switch mode {
-	case config.Full:
+	case config.ReconcileModeFull:
 		log.Debug().
 			Str("cache", r.resource.GetCacheName()).
 			Int("count", len(resources.Items)).
@@ -61,7 +61,7 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 				Msg("Reconciled (full)")
 		}
 
-	case config.Incremental:
+	case config.ReconcileModeIncremental:
 		resourceCount := len(resources.Items)
 		storeSize, err := reconcilable.Count(r.resource.GetCacheName())
 		if err != nil {
