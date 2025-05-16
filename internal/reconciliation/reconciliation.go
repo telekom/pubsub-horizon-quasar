@@ -54,6 +54,7 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 			Int("count", len(resources.Items)).
 			Msg("Performing full reconciliation: inserting all resources")
 		for _, item := range resources.Items {
+			utils.AddMissingEnvironment(&item)
 			reconcilable.OnAdd(&item)
 			log.Info().
 				Fields(utils.CreateFieldsForOp("add", &item)).
@@ -89,6 +90,7 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 			missingEntries := r.generateDiff(resources.Items, storeKeys)
 			log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingEntries))
 			for _, entry := range missingEntries {
+				utils.AddMissingEnvironment(&entry)
 				reconcilable.OnAdd(&entry)
 				log.Warn().Fields(utils.CreateFieldsForOp("restore", &entry)).Msg("Restored")
 			}
