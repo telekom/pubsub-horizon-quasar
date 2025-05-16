@@ -49,14 +49,14 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 
 	switch mode {
 	case config.Full:
-		log.Info().
+		log.Debug().
 			Str("cache", r.resource.GetCacheName()).
 			Int("count", len(resources.Items)).
 			Msg("Performing full reconciliation: inserting all resources")
 		for _, item := range resources.Items {
 			utils.AddMissingEnvironment(&item)
 			reconcilable.OnAdd(&item)
-			log.Info().
+			log.Debug().
 				Fields(utils.CreateFieldsForOp("add", &item)).
 				Msg("Reconciled (full)")
 		}
