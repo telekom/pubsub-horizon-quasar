@@ -7,15 +7,15 @@ package config
 type ReconcileMode string
 
 const (
-	Incremental ReconcileMode = "incremental"
-	Full        ReconcileMode = "full"
+	ReconcileModeIncremental ReconcileMode = "incremental"
+	ReconcileModeFull        ReconcileMode = "full"
 )
 
 func (m ReconcileMode) String() string {
 	switch m {
-	case Incremental:
+	case ReconcileModeIncremental:
 		return "incremental"
-	case Full:
+	case ReconcileModeFull:
 		return "full"
 	default:
 		return "unknown"
