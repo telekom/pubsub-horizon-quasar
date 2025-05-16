@@ -5,8 +5,12 @@
 package store
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/hazelcast/hazelcast-go-client/serialization"
 	"github.com/telekom/quasar/internal/reconciliation"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"sync"
 	"testing"
@@ -99,6 +103,12 @@ func TestHazelcastStore_OnAdd(t *testing.T) {
 	for _, subscription := range subscriptions {
 		hazelcastStore.OnAdd(subscription)
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not write subscription %s", subscription.GetName())
+
+		hzMap := hazelcastStore.getMap(subscription)
+
+		ok, err := hzMap.ContainsKey(context.Background(), subscription.GetName())
+		assertions.NoError(err, "could not lookup subscription %s", subscription.GetName())
+		assertions.True(ok, "subscription %s not found in map", subscription.GetName())
 	}
 }
 
@@ -108,8 +118,23 @@ func TestHazelcastStore_OnUpdate(t *testing.T) {
 
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
-		hazelcastStore.OnUpdate(subscription, subscription)
+
+		updatedSubscription := subscription.DeepCopy()
+		labels := make(map[string]string)
+		labels["hazelcast_test"] = "true"
+		updatedSubscription.SetLabels(labels)
+
+		hazelcastStore.OnUpdate(subscription, updatedSubscription)
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not update subscription %s", subscription.GetName())
+
+		hzMap := hazelcastStore.getMap(subscription)
+
+		ok, err := hzMap.ContainsKey(context.Background(), subscription.GetName())
+		assertions.NoError(err, "could not lookup subscription %s", subscription.GetName())
+		assertions.True(ok, "subscription %s not found in map", subscription.GetName())
+
+		obj := getMapItem(assertions, hzMap, subscription.GetName())
+		assertions.Equal("true", obj.GetLabels()["hazelcast_test"], "subscription %s not updated in map", subscription.GetName())
 	}
 }
 
@@ -210,4 +235,20 @@ func TestHazelcastStore_OnDisconnected(t *testing.T) {
 	// Ensure no error logs
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
 	assertions.Equal(0, errorCount, "unexpected errors have been logged")
+}
+
+func getMapItem(assertions *assert.Assertions, hzMap *hazelcast.Map, key any) *unstructured.Unstructured {
+	data, err := hzMap.Get(context.Background(), key)
+	assertions.NoError(err, "could not get subscription %s", key)
+
+	jsonData := data.(serialization.JSON)
+
+	unmarshalledData := make(map[string]any)
+	err = json.Unmarshal(jsonData, &unmarshalledData)
+	assertions.NoError(err, "could not unmarshal subscription %s", key)
+
+	obj := new(unstructured.Unstructured)
+	obj.Object = unmarshalledData
+
+	return obj
 }
