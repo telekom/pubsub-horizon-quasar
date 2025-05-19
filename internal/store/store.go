@@ -23,6 +23,7 @@ type Store interface {
 	Count(mapName string) (int, error)
 	Keys(mapName string) ([]string, error)
 	Shutdown()
+	Connected() bool
 }
 
 func SetupStore() {

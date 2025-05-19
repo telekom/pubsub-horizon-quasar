@@ -5,8 +5,12 @@
 package store
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/hazelcast/hazelcast-go-client/serialization"
 	"github.com/telekom/quasar/internal/reconciliation"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"os"
 	"sync"
 	"testing"
@@ -50,6 +54,7 @@ func buildTestConfig() *config.Configuration {
 		Addresses:   []string{test.EnvOrDefault("HAZELCAST_HOST", "localhost")},
 		WriteBehind: true,
 	}
+	testConfig.Store.Hazelcast.ReconcileMode = config.ReconcileModeIncremental
 
 	var testResourceConfig = config.ResourceConfiguration{}
 	testResourceConfig.Kubernetes.Group = "mygroup"
@@ -98,6 +103,12 @@ func TestHazelcastStore_OnAdd(t *testing.T) {
 	for _, subscription := range subscriptions {
 		hazelcastStore.OnAdd(subscription)
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not write subscription %s", subscription.GetName())
+
+		hzMap := hazelcastStore.getMap(subscription)
+
+		ok, err := hzMap.ContainsKey(context.Background(), subscription.GetName())
+		assertions.NoError(err, "could not lookup subscription %s", subscription.GetName())
+		assertions.True(ok, "subscription %s not found in map", subscription.GetName())
 	}
 }
 
@@ -107,8 +118,23 @@ func TestHazelcastStore_OnUpdate(t *testing.T) {
 
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
-		hazelcastStore.OnUpdate(subscription, subscription)
+
+		updatedSubscription := subscription.DeepCopy()
+		labels := make(map[string]string)
+		labels["hazelcast_test"] = "true"
+		updatedSubscription.SetLabels(labels)
+
+		hazelcastStore.OnUpdate(subscription, updatedSubscription)
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not update subscription %s", subscription.GetName())
+
+		hzMap := hazelcastStore.getMap(subscription)
+
+		ok, err := hzMap.ContainsKey(context.Background(), subscription.GetName())
+		assertions.NoError(err, "could not lookup subscription %s", subscription.GetName())
+		assertions.True(ok, "subscription %s not found in map", subscription.GetName())
+
+		obj := getMapItem(assertions, hzMap, subscription.GetName())
+		assertions.Equal("true", obj.GetLabels()["hazelcast_test"], "subscription %s not updated in map", subscription.GetName())
 	}
 }
 
@@ -142,16 +168,16 @@ func TestHazelcastStore_HandleClientEvents(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	// Reset state
-	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.connected.Store(false)
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Simulate connected event
 	hazelcastStore.handleClientEvents(hazelcast.LifecycleStateChanged{State: hazelcast.LifecycleStateConnected})
-	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should be true after connected event")
+	assertions.True(hazelcastStore.connected.Load(), "connected should be true after connected event")
 
 	// Simulate disconnected event
 	hazelcastStore.handleClientEvents(hazelcast.LifecycleStateChanged{State: hazelcast.LifecycleStateDisconnected})
-	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should be false after disconnected event")
+	assertions.False(hazelcastStore.connected.Load(), "connected should be false after disconnected event")
 
 	// Ensure no error logs
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -164,7 +190,7 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	// Reset state
-	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.connected.Store(false)
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Store a real Reconciliation object for the resource
@@ -177,11 +203,11 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 
 	// Trigger onConnected should iterate and run reconciliation
 	hazelcastStore.onConnected()
-	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should be true after onConnected with entry")
+	assertions.True(hazelcastStore.connected.Load(), "connected should be true after onConnected with entry")
 
 	// Second call should keep reconOnce true and skip reconciliation
 	hazelcastStore.onConnected()
-	assertions.True(hazelcastStore.reconOnce.Load(), "reconOnce should still be true after second onConnected")
+	assertions.True(hazelcastStore.connected.Load(), "connected should still be true after second onConnected")
 
 	// Verify that reconciliation attempted and logged an error (due to fake client list error)
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -197,16 +223,32 @@ func TestHazelcastStore_OnDisconnected(t *testing.T) {
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Case: reconOnce false remains false
-	hazelcastStore.reconOnce.Store(false)
+	hazelcastStore.connected.Store(false)
 	hazelcastStore.onDisconnected()
-	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should remain false after onDisconnected without prior connect")
+	assertions.False(hazelcastStore.connected.Load(), "connected should remain false after onDisconnected without prior connect")
 
 	// Case: reconOnce true resets to false
-	hazelcastStore.reconOnce.Store(true)
+	hazelcastStore.connected.Store(true)
 	hazelcastStore.onDisconnected()
-	assertions.False(hazelcastStore.reconOnce.Load(), "reconOnce should be false after onDisconnected resets flag")
+	assertions.False(hazelcastStore.connected.Load(), "connected should be false after onDisconnected resets flag")
 
 	// Ensure no error logs
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
 	assertions.Equal(0, errorCount, "unexpected errors have been logged")
+}
+
+func getMapItem(assertions *assert.Assertions, hzMap *hazelcast.Map, key any) *unstructured.Unstructured {
+	data, err := hzMap.Get(context.Background(), key)
+	assertions.NoError(err, "could not get subscription %s", key)
+
+	jsonData := data.(serialization.JSON)
+
+	unmarshalledData := make(map[string]any)
+	err = json.Unmarshal(jsonData, &unmarshalledData)
+	assertions.NoError(err, "could not unmarshal subscription %s", key)
+
+	obj := new(unstructured.Unstructured)
+	obj.Object = unmarshalledData
+
+	return obj
 }

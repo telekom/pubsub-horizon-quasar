@@ -30,7 +30,7 @@ type HazelcastStore struct {
 	wtClient        *mongo.WriteThroughClient
 	ctx             context.Context
 	reconciliations sync.Map
-	reconOnce       atomic.Bool
+	connected       atomic.Bool
 }
 
 func (s *HazelcastStore) Initialize() {
@@ -51,6 +51,7 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
 	// Network & Invocation
+	hazelcastConfig.Cluster.HeartbeatTimeout = types.Duration(config.Current.Store.Hazelcast.HeartbeatTimeout)
 	hazelcastConfig.Cluster.Network.ConnectionTimeout = types.Duration(config.Current.Store.Hazelcast.ConnectionTimeout)
 	hazelcastConfig.Cluster.InvocationTimeout = types.Duration(config.Current.Store.Hazelcast.InvocationTimeout)
 	hazelcastConfig.Cluster.RedoOperation = config.Current.Store.Hazelcast.RedoOperation
@@ -68,6 +69,7 @@ func (s *HazelcastStore) Initialize() {
 	for {
 		s.client, err = hazelcast.StartNewClientWithConfig(s.ctx, hazelcastConfig)
 		if err == nil {
+			s.connected.Store(true)
 			log.Info().Msg("Hazelcast connection established")
 			break
 		}
@@ -109,12 +111,20 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 		}
 	}
 
+	interval := config.Current.Store.Hazelcast.ReconciliationInterval
+	if interval < 60*time.Second {
+		log.Warn().Msg("Reconciliation interval is set to less than 60 seconds. Setting it to 60 seconds.")
+		interval = 60 * time.Second
+	}
+
 	recon := reconciler.NewReconciliation(kubernetesClient, resourceConfig)
 	s.reconciliations.Store(mapName, recon)
 
+	go recon.StartPeriodicReconcile(s.ctx, interval, s)
+
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
 		if event.State == cluster.MembershipStateRemoved {
-			recon.Reconcile(s)
+			recon.SafeReconcile(s)
 		}
 	})
 
@@ -280,11 +290,11 @@ func (s *HazelcastStore) onConnected() {
 		WithLabelValues().
 		Inc()
 
-	if s.reconOnce.Load() {
+	if s.connected.Load() {
 		log.Debug().Msg("Re-connect reconciliation already executed, skipping")
 		return
 	}
-	if !s.reconOnce.CompareAndSwap(false, true) {
+	if !s.connected.CompareAndSwap(false, true) {
 		return
 	}
 
@@ -309,9 +319,9 @@ func (s *HazelcastStore) onConnected() {
 
 		log.Debug().
 			Str("cache", cacheName).
-			Msg("Starting one-time reconciliation after reconnect")
+			Msg("Starting reconciliation after reconnect")
 
-		recon.Reconcile(s)
+		recon.SafeReconcile(s)
 		return true
 	})
 }
@@ -321,8 +331,9 @@ func (s *HazelcastStore) onDisconnected() {
 	metrics.GetOrCreateCustomCounter(clusterLabel + "_hazelcast_disconnect_total").
 		WithLabelValues().
 		Inc()
-	if s.reconOnce.CompareAndSwap(true, false) {
-		log.Debug().Msg("Hazelcast client disconnected — reconcile flag reset")
+	if s.connected.CompareAndSwap(true, false) {
+		log.Debug().Msg("Hazelcast client disconnected — connected flag reset")
 	}
 
 }
+func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

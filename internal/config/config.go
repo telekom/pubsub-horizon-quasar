@@ -53,17 +53,19 @@ type RedisConfiguration struct {
 }
 
 type HazelcastConfiguration struct {
-	ClusterName        string                      `mapstructure:"clusterName"`
-	Username           string                      `mapstructure:"username"`
-	Password           string                      `mapstructure:"password"`
-	Addresses          []string                    `mapstructure:"addresses"`
-	WriteBehind        bool                        `mapstructure:"writeBehind"`
-	Unisocket          bool                        `mapstructure:"unisocket"`
-	MaxRetries         int                         `mapstructure:"maxRetries"`
-	ConnectionTimeout  time.Duration               `mapstructure:"connectionTimeout"`
-	InvocationTimeout  time.Duration               `mapstructure:"invocationTimeout"`
-	RedoOperation      bool                        `mapstructure:"redoOperation"`
-	ConnectionStrategy HazelcastConnectionStrategy `mapstructure:"connectionStrategy"`
+	ClusterName            string                      `mapstructure:"clusterName"`
+	Username               string                      `mapstructure:"username"`
+	Password               string                      `mapstructure:"password"`
+	Addresses              []string                    `mapstructure:"addresses"`
+	WriteBehind            bool                        `mapstructure:"writeBehind"`
+	Unisocket              bool                        `mapstructure:"unisocket"`
+	ReconcileMode          ReconcileMode               `mapstructure:"reconcileMode"`
+	ReconciliationInterval time.Duration               `mapstructure:"reconciliationInterval"`
+	HeartbeatTimeout       time.Duration               `mapstructure:"heartbeatTimeout"`
+	ConnectionTimeout      time.Duration               `mapstructure:"connectionTimeout"`
+	InvocationTimeout      time.Duration               `mapstructure:"invocationTimeout"`
+	RedoOperation          bool                        `mapstructure:"redoOperation"`
+	ConnectionStrategy     HazelcastConnectionStrategy `mapstructure:"connectionStrategy"`
 }
 
 type HazelcastConnectionStrategy struct {

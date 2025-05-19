@@ -47,8 +47,10 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.password", "")
 	viper.SetDefault("store.hazelcast.writeBehind", true)
 	viper.SetDefault("store.hazelcast.unisocket", false)
-	viper.SetDefault("store.hazelcast.maxRetries", 0)
+	viper.SetDefault("store.hazelcast.reconcileMode", ReconcileModeFull)
+	viper.SetDefault("store.hazelcast.reconciliationInterval", "60s")
 
+	viper.SetDefault("store.hazelcast.heartbeatTimeout", "30s")
 	viper.SetDefault("store.hazelcast.connectionTimeout", "30s")
 	viper.SetDefault("store.hazelcast.invocationTimeout", "60s")
 	viper.SetDefault("store.hazelcast.redoOperatiom", false)
