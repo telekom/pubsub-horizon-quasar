@@ -51,6 +51,7 @@ func (s *HazelcastStore) Initialize() {
 	hazelcastConfig.Logger.CustomLogger = new(utils.HazelcastZerologLogger)
 
 	// Network & Invocation
+	hazelcastConfig.Cluster.HeartbeatTimeout = types.Duration(config.Current.Store.Hazelcast.HeartbeatTimeout)
 	hazelcastConfig.Cluster.Network.ConnectionTimeout = types.Duration(config.Current.Store.Hazelcast.ConnectionTimeout)
 	hazelcastConfig.Cluster.InvocationTimeout = types.Duration(config.Current.Store.Hazelcast.InvocationTimeout)
 	hazelcastConfig.Cluster.RedoOperation = config.Current.Store.Hazelcast.RedoOperation

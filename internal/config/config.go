@@ -61,6 +61,7 @@ type HazelcastConfiguration struct {
 	Unisocket              bool                        `mapstructure:"unisocket"`
 	ReconcileMode          ReconcileMode               `mapstructure:"reconcileMode"`
 	ReconciliationInterval time.Duration               `mapstructure:"reconciliationInterval"`
+	HeartbeatTimeout       time.Duration               `mapstructure:"heartbeatTimeout"`
 	ConnectionTimeout      time.Duration               `mapstructure:"connectionTimeout"`
 	InvocationTimeout      time.Duration               `mapstructure:"invocationTimeout"`
 	RedoOperation          bool                        `mapstructure:"redoOperation"`

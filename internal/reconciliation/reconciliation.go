@@ -128,7 +128,7 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	log.Info().
+	log.Debug().
 		Dur("interval", interval).
 		Str("cache", r.resource.GetCacheName()).
 		Msg("Starting periodic reconciliation")
@@ -137,14 +137,14 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 		select {
 		case <-ticker.C:
 			if !reconcilable.Connected() {
-				log.Info().
+				log.Debug().
 					Str("cache", r.resource.GetCacheName()).
-					Msg("Skipping reconciliation: Hazelcast client disconnected")
+					Msg("Skipping timed reconciliation: Hazelcast client disconnected")
 				continue
 			}
 			r.SafeReconcile(reconcilable)
 		case <-ctx.Done():
-			log.Info().
+			log.Debug().
 				Str("cache", r.resource.GetCacheName()).
 				Msg("Stopped periodic reconciliation")
 			return
@@ -153,7 +153,7 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 }
 
 func (r *Reconciliation) SafeReconcile(reconcilable Reconcilable) {
-	log.Info().
+	log.Debug().
 		Str("cache", r.resource.GetCacheName()).
 		Msg("Starting safe reconciliation")
 
