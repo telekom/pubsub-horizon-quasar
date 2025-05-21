@@ -46,10 +46,19 @@ func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, reso
 }
 
 func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
-	var filter = bson.M{"_id": string(obj.GetUID())}
+	id, err := utils.GetMongoId(obj)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("action", "add").
+			Msgf("Could not determine id for kubernetes resource with uid '%s'", string(obj.GetUID()))
+		return
+	}
+
+	var filter = bson.M{"_id": id}
 	var collection = m.getCollection(obj)
 
-	_, err := collection.ReplaceOne(context.Background(), filter, obj.Object, options.Replace().SetUpsert(true))
+	_, err = collection.ReplaceOne(context.Background(), filter, obj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
@@ -60,10 +69,19 @@ func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) {
 }
 
 func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
-	var filter = bson.M{"_id": string(oldObj.GetUID())}
+	id, err := utils.GetMongoId(newObj)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("action", "update").
+			Msgf("Could not determine id for kubernetes resource with uid '%s'", string(oldObj.GetUID()))
+		return
+	}
+
+	var filter = bson.M{"_id": id}
 	var collection = m.getCollection(oldObj)
 
-	_, err := collection.ReplaceOne(context.Background(), filter, newObj.Object, options.Replace().SetUpsert(true))
+	_, err = collection.ReplaceOne(context.Background(), filter, newObj.Object, options.Replace().SetUpsert(true))
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": newObj.GetUID(),
@@ -74,9 +92,18 @@ func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstruc
 }
 
 func (m *MongoStore) OnDelete(obj *unstructured.Unstructured) {
-	var filter = bson.M{"_id": string(obj.GetUID())}
+	id, err := utils.GetMongoId(obj)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("action", "delete").
+			Msgf("Could not determine id for kubernetes resource with uid '%s'", string(obj.GetUID()))
+		return
+	}
 
-	_, err := m.getCollection(obj).DeleteOne(context.Background(), filter)
+	var filter = bson.M{"_id": id}
+
+	_, err = m.getCollection(obj).DeleteOne(context.Background(), filter)
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
@@ -102,3 +129,4 @@ func (m *MongoStore) getCollection(obj *unstructured.Unstructured) *mongo.Collec
 func (m *MongoStore) Shutdown() {
 	_ = m.client.Disconnect(context.TODO())
 }
+func (s *MongoStore) Connected() bool { panic("implement me") }

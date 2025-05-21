@@ -56,3 +56,5 @@ func (s *DummyStore) Keys(mapName string) ([]string, error) {
 func (s *DummyStore) Shutdown() {
 	s.IsShutdown = true
 }
+
+func (s *DummyStore) Connected() bool { panic("implement me") }

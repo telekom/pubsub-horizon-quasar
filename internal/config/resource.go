@@ -18,8 +18,10 @@ type ResourceConfiguration struct {
 		Group     string `mapstructure:"group"`
 		Version   string `mapstructure:"version"`
 		Resource  string `mapstructure:"resource"`
+		Kind      string `mapstructure:"kind"`
 		Namespace string `mapstructure:"namespace"`
 	} `mapstructure:"kubernetes"`
+	MongoId          string                   `mapstructure:"mongoId"`
 	MongoIndexes     []MongoResourceIndex     `mapstructure:"mongoIndexes"`
 	HazelcastIndexes []HazelcastResourceIndex `mapstructure:"hazelcastIndexes"`
 	Prometheus       PrometheusConfiguration  `mapstructure:"prometheus"`
@@ -30,6 +32,14 @@ func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionRes
 		Group:    c.Kubernetes.Group,
 		Version:  c.Kubernetes.Version,
 		Resource: c.Kubernetes.Resource,
+	}
+}
+
+func (c *ResourceConfiguration) GetGroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   c.Kubernetes.Group,
+		Version: c.Kubernetes.Version,
+		Kind:    c.Kubernetes.Kind,
 	}
 }
 

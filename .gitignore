@@ -13,3 +13,5 @@
 
 *.cmd
 *.bat
+
+coverage

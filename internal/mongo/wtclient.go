@@ -45,8 +45,16 @@ func (c *WriteThroughClient) Add(obj *unstructured.Unstructured) {
 	defer c.mutex.Unlock()
 
 	var opts = options.Replace().SetUpsert(true)
-	var filter = c.createFilter(obj)
-	_, err := c.getCollection(obj).ReplaceOne(c.ctx, filter, obj.Object, opts)
+	filter, err := c.createFilter(obj)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("action", "wt-add").
+			Msgf("Could not determine id for kubernetes resource with uid '%s'", string(obj.GetUID()))
+		return
+	}
+
+	_, err = c.getCollection(obj).ReplaceOne(c.ctx, filter, obj.Object, opts)
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
@@ -62,8 +70,16 @@ func (c *WriteThroughClient) Update(obj *unstructured.Unstructured) {
 	defer c.mutex.Unlock()
 
 	var opts = options.Replace().SetUpsert(false)
-	var filter = c.createFilter(obj)
-	_, err := c.getCollection(obj).ReplaceOne(c.ctx, filter, obj.Object, opts)
+	filter, err := c.createFilter(obj)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("action", "wt-update").
+			Msgf("Could not determine id for kubernetes resource with uid '%s'", string(obj.GetUID()))
+		return
+	}
+
+	_, err = c.getCollection(obj).ReplaceOne(c.ctx, filter, obj.Object, opts)
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
@@ -78,9 +94,16 @@ func (c *WriteThroughClient) Delete(obj *unstructured.Unstructured) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	filter, _ := c.createFilterAndUpdate(obj)
+	filter, _, err := c.createFilterAndUpdate(obj)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("action", "wt-delete").
+			Msgf("Could not determine id for kubernetes resource with uid '%s'", string(obj.GetUID()))
+		return
+	}
 
-	_, err := c.getCollection(obj).DeleteOne(c.ctx, filter)
+	_, err = c.getCollection(obj).DeleteOne(c.ctx, filter)
 	if err != nil {
 		log.Warn().Fields(map[string]any{
 			"_id": obj.GetUID(),
@@ -103,14 +126,24 @@ func (c *WriteThroughClient) EnsureIndexesOfResource(resourceConfig *config.Reso
 	}
 }
 
-func (*WriteThroughClient) createFilterAndUpdate(obj *unstructured.Unstructured) (bson.M, bson.D) {
+func (*WriteThroughClient) createFilterAndUpdate(obj *unstructured.Unstructured) (bson.M, bson.D, error) {
 	var objCopy = obj.DeepCopy().Object
-	objCopy["_id"] = obj.GetUID()
-	return bson.M{"_id": obj.GetUID()}, bson.D{{"$set", objCopy}}
+	id, err := utils.GetMongoId(obj)
+	if err != nil {
+		return bson.M{}, bson.D{}, err
+	}
+
+	objCopy["_id"] = id
+	return bson.M{"_id": id}, bson.D{{"$set", objCopy}}, nil
 }
 
-func (*WriteThroughClient) createFilter(obj *unstructured.Unstructured) bson.M {
-	return bson.M{"_id": obj.GetUID()}
+func (*WriteThroughClient) createFilter(obj *unstructured.Unstructured) (bson.M, error) {
+	id, err := utils.GetMongoId(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	return bson.M{"_id": id}, nil
 }
 
 func (c *WriteThroughClient) getCollection(obj *unstructured.Unstructured) *mongo.Collection {

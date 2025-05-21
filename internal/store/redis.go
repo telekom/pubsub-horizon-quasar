@@ -76,3 +76,5 @@ func (s *RedisStore) Keys(mapName string) ([]string, error) {
 	//TODO implement me
 	panic("implement me")
 }
+
+func (s *RedisStore) Connected() bool { panic("implement me") }
