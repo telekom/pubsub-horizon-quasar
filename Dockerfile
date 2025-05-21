@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.24-alpine AS build
 
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
