@@ -8,3 +8,6 @@ updates:
       opentelemetry:
         patterns:
           - go.opentelemetry.io/*
+      kubernetes:
+        patterns:
+          - k8s.io/*
