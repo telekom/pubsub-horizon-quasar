@@ -11,9 +11,10 @@ import (
 )
 
 type Configuration struct {
-	LogLevel     string                  `mapstructure:"logLevel"`
-	ReSyncPeriod time.Duration           `mapstructure:"reSyncPeriod"`
-	Resources    []ResourceConfiguration `mapstructure:"resources"`
+	LogLevel     string                    `mapstructure:"logLevel"`
+	Provisioning ProvisioningConfiguration `mapstructure:"provisioning"`
+	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
+	Resources    []ResourceConfiguration   `mapstructure:"resources"`
 	Store        struct {
 		Type      string                 `mapstructure:"type"`
 		Redis     RedisConfiguration     `mapstructure:"redis"`

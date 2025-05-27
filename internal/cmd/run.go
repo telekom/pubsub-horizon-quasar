@@ -11,6 +11,7 @@ import (
 	"github.com/telekom/quasar/internal/fallback"
 	"github.com/telekom/quasar/internal/k8s"
 	"github.com/telekom/quasar/internal/metrics"
+	"github.com/telekom/quasar/internal/provisioning"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/client-go/dynamic"
@@ -35,6 +36,10 @@ var runCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal().Err(err).Msg("Could not create kubernetes client!")
 			}
+		}
+
+		if config.Current.Provisioning.Enabled {
+			go provisioning.Listen(config.Current.Provisioning.Port)
 		}
 
 		if config.Current.Metrics.Enabled {
