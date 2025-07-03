@@ -12,13 +12,15 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
+	"k8s.io/client-go/dynamic"
 	"os"
 	"time"
 )
 
 var (
-	service *fiber.App
-	logger  *zerolog.Logger
+	service          *fiber.App
+	logger           *zerolog.Logger
+	KubernetesClient *dynamic.DynamicClient
 )
 
 func setupService(logger *zerolog.Logger) {
@@ -30,10 +32,10 @@ func setupService(logger *zerolog.Logger) {
 		Logger: logger,
 	}))
 
-	v1 := service.Group("/api/v1")
-	v1.Post("/provision", postProvision)
-	v1.Put("/provision", putProvision)
-	v1.Delete("/provision", deleteProvision)
+	v1 := service.Group("/api/v1/:group/:version/:resource")
+	v1.Post("/", withGvr, withKubernetesResource, putProvision)
+	v1.Put("/", withGvr, withKubernetesResource, putProvision)
+	v1.Delete("/:namespace/:name", deleteProvision)
 }
 
 func createLogger() *zerolog.Logger {

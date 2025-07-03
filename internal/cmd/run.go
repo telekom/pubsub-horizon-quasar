@@ -39,6 +39,7 @@ var runCmd = &cobra.Command{
 		}
 
 		if config.Current.Provisioning.Enabled {
+			provisioning.KubernetesClient = kubernetesClient
 			go provisioning.Listen(config.Current.Provisioning.Port)
 		}
 

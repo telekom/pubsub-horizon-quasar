@@ -4,16 +4,66 @@
 
 package provisioning
 
-import "github.com/gofiber/fiber/v2"
-
-func postProvision(ctx *fiber.Ctx) error {
-	return ctx.SendStatus(fiber.StatusNotImplemented)
-}
+import (
+	"context"
+	"github.com/gofiber/fiber/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
 
 func putProvision(ctx *fiber.Ctx) error {
-	return ctx.SendStatus(fiber.StatusNotImplemented)
+	gvr := ctx.Locals("gvr").(schema.GroupVersionResource)
+	resource, ok := ctx.Locals("resource").(unstructured.Unstructured)
+	if !ok {
+		return ctx.Status(fiber.StatusInternalServerError).JSON(map[string]any{
+			"error": "Failed to retrieve resource from context",
+		})
+	}
+	logger.Debug().
+		Str("name", resource.GetName()).
+		Str("namespace", resource.GetNamespace()).
+		Str("group", gvr.Group).
+		Str("version", gvr.Version).
+		Str("resource", gvr.Resource).
+		Msg("Provisioning resource")
+
+	if _, err := KubernetesClient.Resource(gvr).Namespace(resource.GetNamespace()).Apply(ctx.UserContext(), resource.GetName(), &resource, metav1.ApplyOptions{
+		FieldManager: "kubectl-client-side-apply",
+	}); err != nil {
+		logger.Error().
+			Err(err).
+			Str("name", resource.GetName()).
+			Str("namespace", resource.GetNamespace()).
+			Msg("Failed to provision resource")
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(map[string]any{
+			"error": "Failed to provision resource",
+		})
+	}
+
+	return ctx.SendStatus(fiber.StatusOK)
 }
 
 func deleteProvision(ctx *fiber.Ctx) error {
+	gvr := ctx.Locals("gvr").(schema.GroupVersionResource)
+	name, namespace := ctx.Query("name"), ctx.Query("namespace")
+	logger.Debug().
+		Str("name", name).
+		Str("namespace", namespace).
+		Msg("De-provisioning resource")
+
+	if err := KubernetesClient.Resource(gvr).Namespace(name).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+		logger.Error().
+			Err(err).
+			Str("name", name).
+			Str("namespace", namespace).
+			Msg("Failed to de-provision resource")
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(map[string]any{
+			"error": "Failed to de-provision resource",
+		})
+	}
+
 	return ctx.SendStatus(fiber.StatusNotImplemented)
 }
