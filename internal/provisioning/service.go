@@ -7,6 +7,7 @@ package provisioning
 import (
 	"fmt"
 	"github.com/gofiber/contrib/fiberzerolog"
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -31,6 +32,14 @@ func setupService(logger *zerolog.Logger) {
 	service.Use(fiberzerolog.New(fiberzerolog.Config{
 		Logger: logger,
 	}))
+
+	if config.Current.Provisioning.Security.Enabled {
+		service.Use(jwtware.New(jwtware.Config{
+			JWKSetURLs: config.Current.Provisioning.Security.TrustedIssuers,
+		}), withTrustedClients(config.Current.Provisioning.Security.TrustedClients))
+	} else {
+		log.Warn().Msg("Provisioning service is running without security, this is not recommended for production environments")
+	}
 
 	v1 := service.Group("/api/v1/:group/:version/:resource")
 	v1.Post("/", withGvr, withKubernetesResource, putProvision)
