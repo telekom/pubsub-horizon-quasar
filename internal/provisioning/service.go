@@ -41,7 +41,7 @@ func setupService(logger *zerolog.Logger) {
 		log.Warn().Msg("Provisioning service is running without security, this is not recommended for production environments")
 	}
 
-	v1 := service.Group("/api/v1/:group/:version/:resource")
+	v1 := service.Group("/api/v1/resources/:group/:version/:resource")
 	v1.Post("/", withGvr, withKubernetesResource, putProvision)
 	v1.Put("/", withGvr, withKubernetesResource, putProvision)
 	v1.Delete("/:namespace/:name", deleteProvision)
