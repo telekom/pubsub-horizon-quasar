@@ -47,7 +47,7 @@ func putProvision(ctx *fiber.Ctx) error {
 
 func deleteProvision(ctx *fiber.Ctx) error {
 	gvr := ctx.Locals("gvr").(schema.GroupVersionResource)
-	name, namespace := ctx.Query("name"), ctx.Query("namespace")
+	name, namespace := ctx.Params("name"), ctx.Params("namespace")
 	logger.Debug().
 		Str("name", name).
 		Str("namespace", namespace).
