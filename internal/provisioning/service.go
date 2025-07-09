@@ -44,7 +44,7 @@ func setupService(logger *zerolog.Logger) {
 	v1 := service.Group("/api/v1/resources/:group/:version/:resource")
 	v1.Post("/", withGvr, withKubernetesResource, putProvision)
 	v1.Put("/", withGvr, withKubernetesResource, putProvision)
-	v1.Delete("/:namespace/:name", deleteProvision)
+	v1.Delete("/:namespace/:name", withGvr, deleteProvision)
 }
 
 func createLogger() *zerolog.Logger {
