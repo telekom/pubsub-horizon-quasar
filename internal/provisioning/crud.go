@@ -53,7 +53,7 @@ func deleteProvision(ctx *fiber.Ctx) error {
 		Str("namespace", namespace).
 		Msg("De-provisioning resource")
 
-	if err := KubernetesClient.Resource(gvr).Namespace(name).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+	if err := KubernetesClient.Resource(gvr).Namespace(namespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
 		logger.Error().
 			Err(err).
 			Str("name", name).
