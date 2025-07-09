@@ -39,7 +39,7 @@ func setDefaults() {
 
 	viper.SetDefault("provisioning.security.enabled", true)
 	viper.SetDefault("provisioning.security.trustedIssuers", []string{"https://auth.example.com/certs"})
-	viper.SetDefault("provisioning.security.trustedClient", []string{"example-client"})
+	viper.SetDefault("provisioning.security.trustedClients", []string{"example-client"})
 
 	viper.SetDefault("store.type", "hazelcast")
 
