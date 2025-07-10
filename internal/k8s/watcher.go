@@ -58,6 +58,8 @@ func NewResourceWatcher(
 			log.Info().Fields(map[string]any{
 				"replayedDocuments": replayedDocuments,
 			}).Msg("Replay from MongoDB successful!")
+		} else {
+			log.Fatal().Err(err).Msg("Watcher failed. Terminating...")
 		}
 	})
 	if err != nil {
