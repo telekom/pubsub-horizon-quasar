@@ -7,10 +7,10 @@ package provisioning
 import (
 	"context"
 	"github.com/gofiber/fiber/v2"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"os"
 )
 
 func putProvision(ctx *fiber.Ctx) error {
@@ -61,7 +61,7 @@ func deleteProvision(ctx *fiber.Ctx) error {
 			Str("namespace", namespace).
 			Msg("Failed to de-provision resource")
 
-		if os.IsNotExist(err) {
+		if errors.IsNotFound(err) {
 			return ctx.Status(fiber.StatusNotFound).JSON(map[string]any{
 				"message": "Resource not found",
 			})
