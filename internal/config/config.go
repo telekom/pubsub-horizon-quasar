@@ -92,3 +92,8 @@ type MetricsConfiguration struct {
 	Port    int           `mapstructure:"port"`
 	Timeout time.Duration `mapstructure:"timeout"`
 }
+
+type StoreConfiguration struct {
+	Primary   string `mapstructure:"primary"`
+	Secondary string `mapstructure:"secondary"`
+}

@@ -69,7 +69,7 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.connectionStrategy.retry.jitter", 0.0)
 
 	viper.SetDefault("store.mongo.uri", "mongodb://localhost:27017")
-	viper.SetDefault("store.mongo.database", "horizon")
+	viper.SetDefault("store.mongo.database", "horizon-config")
 
 	viper.SetDefault("resources", []ResourceConfiguration{})
 

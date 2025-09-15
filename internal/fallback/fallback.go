@@ -14,7 +14,7 @@ import (
 
 var CurrentFallback Fallback
 
-type ReplayFunc func(obj *unstructured.Unstructured)
+type ReplayFunc func(obj *unstructured.Unstructured) error
 
 type Fallback interface {
 	Initialize()

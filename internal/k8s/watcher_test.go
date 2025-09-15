@@ -10,7 +10,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
-	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/test"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,7 +34,7 @@ func TestMain(m *testing.M) {
 	subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 
 	config.Current = buildTestConfig()
-	store.CurrentStore = new(test.DummyStore)
+	WatcherStore = new(test.DummyStore)
 
 	fakeClient = createFakeClient()
 
@@ -97,7 +96,7 @@ func TestNewResourceWatcher(t *testing.T) {
 
 func TestResourceWatcher_Start(t *testing.T) {
 	var assertions = assert.New(t)
-	var dummyStore = store.CurrentStore.(*test.DummyStore)
+	var dummyStore = WatcherStore.(*test.DummyStore)
 	defer test.LogRecorder.Reset()
 
 	go watcher.Start()

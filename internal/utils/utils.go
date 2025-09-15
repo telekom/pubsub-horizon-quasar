@@ -26,6 +26,18 @@ func CreateFieldsForOp(operation string, obj *unstructured.Unstructured) map[str
 	return objFields
 }
 
+func CreateFieldsForCacheMap(cacheMap string, operation string, obj *unstructured.Unstructured) map[string]any {
+	var objFields = CreateFieldsForOp(operation, obj)
+	objFields["map"] = cacheMap
+	return objFields
+}
+
+func CreateFieldsForCollection(collection string, operation string, obj *unstructured.Unstructured) map[string]any {
+	var objFields = CreateFieldsForOp(operation, obj)
+	objFields["collection"] = collection
+	return objFields
+}
+
 func CreateFieldForResource(resource *schema.GroupVersionResource) map[string]any {
 	return map[string]any{
 		"group":    resource.Group,

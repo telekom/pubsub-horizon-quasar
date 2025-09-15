@@ -137,50 +137,64 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 	go s.collectMetrics(resourceConfig.GetCacheName())
 }
 
-func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) {
+func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	json, err := obj.MarshalJSON()
 	if err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not marshal resource to json string!")
+		return err
 	}
 
 	if err := cacheMap.Set(s.ctx, obj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not write resource to store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Err(err).Msg("Could not write resource to store!")
+		return err
 	}
 
 	if s.wtClient != nil {
 		go s.wtClient.Add(obj)
 	}
+
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Msg("Entry added to Hazelcast")
+	return nil
 }
 
-func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
+func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(oldObj)
 
 	json, err := newObj.MarshalJSON()
 	if err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not marshal resource to json string!")
+		return err
 	}
 
 	if err := cacheMap.Set(s.ctx, newObj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not update resource in store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "add", newObj)).Err(err).Msg("Could not update resource in store!")
+		return err
 	}
 
 	if s.wtClient != nil {
 		go s.wtClient.Update(newObj)
 	}
+
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "updated", newObj)).Msg("Entry updated in Hazelcast")
+	return nil
 }
 
-func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) {
+func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	if err := cacheMap.Delete(s.ctx, obj.GetName()); err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Err(err).Msg("Could not delete resource from store!")
+		return err
 	}
 
 	if s.wtClient != nil {
 		go s.wtClient.Delete(obj)
 	}
+
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Msg("Entry deleted in Hazelcast")
+	return nil
 }
 
 func (s *HazelcastStore) Shutdown() {

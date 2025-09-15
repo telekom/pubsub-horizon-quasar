@@ -23,7 +23,7 @@ type Reconciliation struct {
 }
 
 type Reconcilable interface {
-	OnAdd(obj *unstructured.Unstructured)
+	OnAdd(obj *unstructured.Unstructured) error
 	Count(mapName string) (int, error)
 	Keys(mapName string) ([]string, error)
 	Connected() bool

@@ -12,21 +12,22 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
-	"k8s.io/client-go/dynamic"
 	"os"
 	"time"
 )
 
 var (
-	service          *fiber.App
-	logger           *zerolog.Logger
-	KubernetesClient *dynamic.DynamicClient
+	service      *fiber.App
+	logger       *zerolog.Logger
+	storeManager store.DualStore
 )
 
 func setupService(logger *zerolog.Logger) {
 	service = fiber.New(fiber.Config{
 		DisableStartupMessage: log.Logger.GetLevel() != zerolog.DebugLevel,
+		UnescapePath:          true,
 	})
 
 	service.Use(fiberzerolog.New(fiberzerolog.Config{
@@ -44,7 +45,7 @@ func setupService(logger *zerolog.Logger) {
 	v1 := service.Group("/api/v1/resources/:group/:version/:resource")
 	v1.Post("/", withGvr, withKubernetesResource, putProvision)
 	v1.Put("/", withGvr, withKubernetesResource, putProvision)
-	v1.Delete("/:namespace/:name", withGvr, deleteProvision)
+	v1.Delete("/", withGvr, withKubernetesResource, deleteProvision)
 }
 
 func createLogger() *zerolog.Logger {
@@ -65,6 +66,28 @@ func createLogger() *zerolog.Logger {
 	return &logger
 }
 
+func setupApiProvisioningStore() {
+	var provisioningConfig = config.Current.Provisioning.Store
+	var primaryType = provisioningConfig.Primary
+	var secondaryType = provisioningConfig.Secondary
+
+	if primaryType == "" {
+		primaryType = "mongo"
+	}
+	if secondaryType == "" {
+		secondaryType = "hazelcast"
+	}
+
+	var err error
+	storeManager, err = store.SetupStoreManager(primaryType, secondaryType)
+	if err != nil {
+		log.Fatal().Fields(map[string]any{
+			"primaryType":   primaryType,
+			"secondaryType": secondaryType,
+		}).Err(err).Msg("Could not create provisioning store manager!")
+	}
+}
+
 func Listen(port int) {
 	if logger == nil {
 		logger = createLogger()
@@ -74,9 +97,17 @@ func Listen(port int) {
 		setupService(logger)
 	}
 
+	if storeManager == nil {
+		setupApiProvisioningStore()
+		utils.RegisterShutdownHook(storeManager.Shutdown, 1)
+	}
+
 	utils.RegisterShutdownHook(func() {
 		timeout := 30 * time.Second
 		logger.Info().Dur("timeout", timeout).Msg("Shutting down provisioning service...")
+		if storeManager != nil {
+			storeManager.Shutdown()
+		}
 		if err := service.ShutdownWithTimeout(timeout); err != nil {
 			logger.Error().Err(err).Msg("Failed to shutdown provisioning service gracefully")
 		}

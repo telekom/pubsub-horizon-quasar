@@ -14,7 +14,7 @@ type DualStore interface {
 	GetSecondary() Store
 }
 
-// DualStoreManager manages multiple stores (primary and secondary)
+// DualStoreManager handles primary and secondary store
 type DualStoreManager struct {
 	primary      Store
 	secondary    Store
@@ -22,7 +22,7 @@ type DualStoreManager struct {
 	errorHandler ErrorHandler
 }
 
-// ErrorHandler handles store operation errors
+// ErrorHandler handles dual store operation errors
 type ErrorHandler interface {
 	HandlePrimaryError(operation string, err error) error
 	HandleSecondaryError(operation string, err error)
@@ -40,7 +40,7 @@ func (h *DefaultErrorHandler) HandleSecondaryError(operation string, err error) 
 	log.Warn().Err(err).Str("operation", operation).Msg("Secondary store operation failed")
 }
 
-func SetupDualStoreManager(primaryType, secondaryType string) (DualStore, error) {
+func SetupStoreManager(primaryType, secondaryType string) (DualStore, error) {
 	if primaryType == "" {
 		return nil, ErrUnknownStoreType
 	}

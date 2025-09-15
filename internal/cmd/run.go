@@ -12,7 +12,6 @@ import (
 	"github.com/telekom/quasar/internal/k8s"
 	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/provisioning"
-	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/client-go/dynamic"
 	"strings"
@@ -39,7 +38,6 @@ var runCmd = &cobra.Command{
 		}
 
 		if config.Current.Provisioning.Enabled {
-			provisioning.KubernetesClient = kubernetesClient
 			go provisioning.Listen(config.Current.Provisioning.Port)
 		}
 
@@ -53,8 +51,8 @@ var runCmd = &cobra.Command{
 			log.Warn().Msg("No fallback is configured. Quasar won't be able to restore data if the kubernetes api fails")
 		}
 
-		store.SetupStore()
-		utils.RegisterShutdownHook(store.CurrentStore.Shutdown, 1)
+		k8s.SetupWatcherStore()
+		utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
 
 		for _, resourceConfig := range config.Current.Resources {
 			watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)

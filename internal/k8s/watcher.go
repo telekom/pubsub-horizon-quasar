@@ -20,6 +20,10 @@ import (
 	"time"
 )
 
+var (
+	WatcherStore store.Store
+)
+
 type ResourceWatcher struct {
 	client         dynamic.Interface
 	resourceConfig *config.ResourceConfiguration
@@ -51,7 +55,7 @@ func NewResourceWatcher(
 
 			var resource = resourceConfig.GetGroupVersionResource()
 
-			replayedDocuments, err := fallback.CurrentFallback.ReplayResource(&resource, store.CurrentStore.OnAdd)
+			replayedDocuments, err := fallback.CurrentFallback.ReplayResource(&resource, WatcherStore.OnAdd)
 			if err != nil {
 				log.Fatal().Err(err).Msg("Replay from MongoDB failed!")
 			}
@@ -81,7 +85,7 @@ func (w *ResourceWatcher) add(obj any) {
 	uObj, ok := obj.(*unstructured.Unstructured)
 	if ok {
 		utils.AddMissingEnvironment(uObj)
-		store.CurrentStore.OnAdd(uObj)
+		WatcherStore.OnAdd(uObj)
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
 			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
@@ -106,7 +110,7 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 		}
 
 		utils.AddMissingEnvironment(uNewObj)
-		store.CurrentStore.OnUpdate(uOldObj, uNewObj)
+		WatcherStore.OnUpdate(uOldObj, uNewObj)
 		log.Debug().Fields(utils.CreateFieldsForOp("update", uOldObj)).Msg("Updated dataset")
 	} else {
 		log.Warn().Fields(map[string]any{
@@ -120,7 +124,7 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 func (w *ResourceWatcher) delete(obj any) {
 	uObj, ok := obj.(*unstructured.Unstructured)
 	if ok {
-		store.CurrentStore.OnDelete(uObj)
+		WatcherStore.OnDelete(uObj)
 		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Fields("Deleted dataset")
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
@@ -136,7 +140,7 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	store.CurrentStore.InitializeResource(w.client, w.resourceConfig)
+	WatcherStore.InitializeResource(w.client, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -178,5 +182,27 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 		var gaugeName = resourceConfig.GetCacheName() + "_kubernetes_count"
 		metrics.GetOrCreateCustom(gaugeName).WithLabelValues().Set(float64(len(list.Items)))
 		time.Sleep(15 * time.Second)
+	}
+}
+
+func SetupWatcherStore() {
+	//Todo Modify configuration to allow primary and secondary store types
+	var primaryType = config.Current.Store.Type
+	var secondaryType = config.Current.Fallback.Type
+
+	if primaryType == "" {
+		primaryType = "hazelcast"
+	}
+	if secondaryType == "" {
+		secondaryType = "mongo"
+	}
+
+	var err error
+	WatcherStore, err = store.SetupStoreManager(primaryType, secondaryType)
+	if err != nil {
+		log.Fatal().Fields(map[string]any{
+			"primaryType":   primaryType,
+			"secondaryType": secondaryType,
+		}).Err(err).Msg("Could not create k8s watcher store manager!")
 	}
 }
