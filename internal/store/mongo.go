@@ -38,8 +38,7 @@ func (m *MongoStore) Initialize() {
 func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
-		// Todo: Change database configuration
-		var collection = m.client.Database(config.Current.Fallback.Mongo.Database).Collection(resourceConfig.GetCacheName())
+		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetCacheName())
 		_, err := collection.Indexes().CreateOne(m.ctx, model)
 		if err != nil {
 			var resource = resourceConfig.GetGroupVersionResource()

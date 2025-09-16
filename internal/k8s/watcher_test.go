@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 
 func buildTestConfig() *config.Configuration {
 	var testConfig = new(config.Configuration)
-	testConfig.Store.Type = "dummy"
+	testConfig.Watcher.Store.Primary.Type = "dummy"
 
 	var testResourceConfig = config.ResourceConfiguration{}
 	testResourceConfig.Kubernetes.Group = "subscriber.horizon.telekom.de"

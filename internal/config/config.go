@@ -17,7 +17,6 @@ type Configuration struct {
 	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
 	Resources    []ResourceConfiguration   `mapstructure:"resources"`
 	Store        struct {
-		Type      string                 `mapstructure:"type"`
 		Redis     RedisConfiguration     `mapstructure:"redis"`
 		Hazelcast HazelcastConfiguration `mapstructure:"hazelcast"`
 		Mongo     MongoConfiguration     `mapstructure:"mongo"`

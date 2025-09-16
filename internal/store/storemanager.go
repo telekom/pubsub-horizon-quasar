@@ -1,3 +1,7 @@
+// Copyright 2024 Deutsche Telekom AG
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package store
 
 import (
@@ -150,9 +154,8 @@ func (m *DualStoreManager) OnDelete(obj *unstructured.Unstructured) error {
 
 	var primaryErr error
 
-	if m.primary != nil {
+	if primaryErr = m.primary.OnDelete(obj); primaryErr != nil {
 		primaryErr = m.errorHandler.HandlePrimaryError("OnDelete", primaryErr)
-		primaryErr = primaryErr
 	}
 
 	if m.secondary != nil {
