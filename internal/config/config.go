@@ -13,6 +13,7 @@ import (
 type Configuration struct {
 	LogLevel     string                    `mapstructure:"logLevel"`
 	Provisioning ProvisioningConfiguration `mapstructure:"provisioning"`
+	Watcher      Watcher                   `mapstructure:"watcher"`
 	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
 	Resources    []ResourceConfiguration   `mapstructure:"resources"`
 	Store        struct {
@@ -93,7 +94,16 @@ type MetricsConfiguration struct {
 	Timeout time.Duration `mapstructure:"timeout"`
 }
 
+type DualStoreConfiguration struct {
+	Primary   StoreConfiguration `mapstructure:"primary"`
+	Secondary StoreConfiguration `mapstructure:"secondary"`
+}
+
 type StoreConfiguration struct {
-	Primary   string `mapstructure:"primary"`
-	Secondary string `mapstructure:"secondary"`
+	Type string `mapstructure:"type"`
+}
+
+type Watcher struct {
+	Enabled bool                   `mapstructure:"enabled"`
+	Store   DualStoreConfiguration `mapstructure:"store"`
 }

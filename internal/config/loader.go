@@ -33,15 +33,20 @@ func setDefaults() {
 	viper.SetDefault("logLevel", "info")
 	viper.SetDefault("reSyncPeriod", "30s")
 
-	viper.SetDefault("provisioning.enabled", false)
+	viper.SetDefault("provisioning.enabled", true)
 	viper.SetDefault("provisioning.port", 8081)
 	viper.SetDefault("provisioning.logLevel", "info")
+
+	viper.SetDefault("provisioning.store.primary.type", "mongo")
+	viper.SetDefault("provisioning.store.secondary.type", "hazelcast")
 
 	viper.SetDefault("provisioning.security.enabled", true)
 	viper.SetDefault("provisioning.security.trustedIssuers", []string{"https://auth.example.com/certs"})
 	viper.SetDefault("provisioning.security.trustedClients", []string{"example-client"})
 
-	viper.SetDefault("store.type", "hazelcast")
+	viper.SetDefault("watcher.enabled", true)
+	viper.SetDefault("watcher.store.primary.type", "hazelcast")
+	viper.SetDefault("watcher.store.secondary.type", "mongo")
 
 	viper.SetDefault("store.redis.host", "localhost")
 	viper.SetDefault("store.redis.port", 6379)

@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build testing
+
 package store
 
 import (
@@ -23,6 +25,7 @@ import (
 	"github.com/telekom/quasar/internal/test"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
 )
@@ -160,7 +163,22 @@ func TestHazelcastStore_Shutdown(t *testing.T) {
 func createFakeDynamicClient() dynamic.Interface {
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	var scheme = runtime.NewScheme()
-	return fake.NewSimpleDynamicClient(scheme, subscriptions[0], subscriptions[1])
+
+	// Create a mapping for list kinds to support reconciliation List() operations
+	listKinds := map[schema.GroupVersionResource]string{
+		{
+			Group:    "mygroup",
+			Version:  "v1",
+			Resource: "myresource",
+		}: "MyResourceList",
+		{
+			Group:    "subscriber.horizon.telekom.de",
+			Version:  "v1",
+			Resource: "subscriptions",
+		}: "SubscriptionList",
+	}
+
+	return fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, subscriptions[0], subscriptions[1])
 }
 
 func TestHazelcastStore_HandleClientEvents(t *testing.T) {

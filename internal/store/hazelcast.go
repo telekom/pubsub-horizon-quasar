@@ -14,7 +14,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/metrics"
-	"github.com/telekom/quasar/internal/mongo"
 	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,7 +26,6 @@ import (
 
 type HazelcastStore struct {
 	client          *hazelcast.Client
-	wtClient        *mongo.WriteThroughClient
 	ctx             context.Context
 	reconciliations sync.Map
 	connected       atomic.Bool
@@ -78,10 +76,6 @@ func (s *HazelcastStore) Initialize() {
 		time.Sleep(30 * time.Second)
 	}
 
-	if config.Current.Store.Hazelcast.WriteBehind {
-		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Fallback.Mongo)
-	}
-
 	_, err = s.client.AddLifecycleListener(s.handleClientEvents)
 	if err != nil {
 		log.Error().Err(err).Msg("Could not create hazelcast client lifecycle listener!")
@@ -90,9 +84,6 @@ func (s *HazelcastStore) Initialize() {
 }
 
 func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
-	if s.wtClient != nil {
-		s.wtClient.EnsureIndexesOfResource(resourceConfig)
-	}
 
 	var mapName = resourceConfig.GetCacheName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
@@ -151,11 +142,7 @@ func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) error {
 		return err
 	}
 
-	if s.wtClient != nil {
-		go s.wtClient.Add(obj)
-	}
-
-	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Msg("Entry added to Hazelcast")
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Msg("Resource added to Hazelcast")
 	return nil
 }
 
@@ -173,11 +160,7 @@ func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *uns
 		return err
 	}
 
-	if s.wtClient != nil {
-		go s.wtClient.Update(newObj)
-	}
-
-	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "updated", newObj)).Msg("Entry updated in Hazelcast")
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "updated", newObj)).Msg("Resource updated in Hazelcast")
 	return nil
 }
 
@@ -189,21 +172,13 @@ func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) error {
 		return err
 	}
 
-	if s.wtClient != nil {
-		go s.wtClient.Delete(obj)
-	}
-
-	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Msg("Entry deleted in Hazelcast")
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Msg("Resource deleted in Hazelcast")
 	return nil
 }
 
 func (s *HazelcastStore) Shutdown() {
 	if err := s.client.Shutdown(s.ctx); err != nil {
 		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
-	}
-
-	if s.wtClient != nil {
-		s.wtClient.Disconnect()
 	}
 }
 

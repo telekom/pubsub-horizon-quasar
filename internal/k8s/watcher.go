@@ -186,17 +186,9 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 }
 
 func SetupWatcherStore() {
-	//Todo Modify configuration to allow primary and secondary store types
-	var primaryType = config.Current.Store.Type
-	var secondaryType = config.Current.Fallback.Type
-
-	if primaryType == "" {
-		primaryType = "hazelcast"
-	}
-	if secondaryType == "" {
-		secondaryType = "mongo"
-	}
-
+	var primaryType = config.Current.Watcher.Store.Primary.Type
+	var secondaryType = config.Current.Watcher.Store.Secondary.Type
+	
 	var err error
 	WatcherStore, err = store.SetupStoreManager(primaryType, secondaryType)
 	if err != nil {

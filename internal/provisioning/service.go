@@ -68,22 +68,15 @@ func createLogger() *zerolog.Logger {
 
 func setupApiProvisioningStore() {
 	var provisioningConfig = config.Current.Provisioning.Store
-	var primaryType = provisioningConfig.Primary
-	var secondaryType = provisioningConfig.Secondary
-
-	if primaryType == "" {
-		primaryType = "mongo"
-	}
-	if secondaryType == "" {
-		secondaryType = "hazelcast"
-	}
+	var primaryStoreType = provisioningConfig.Primary.Type
+	var secondaryStoreType = provisioningConfig.Secondary.Type
 
 	var err error
-	storeManager, err = store.SetupStoreManager(primaryType, secondaryType)
+	storeManager, err = store.SetupStoreManager(primaryStoreType, secondaryStoreType)
 	if err != nil {
 		log.Fatal().Fields(map[string]any{
-			"primaryType":   primaryType,
-			"secondaryType": secondaryType,
+			"primaryStoreType":   primaryStoreType,
+			"secondaryStoreType": secondaryStoreType,
 		}).Err(err).Msg("Could not create provisioning store manager!")
 	}
 }

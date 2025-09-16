@@ -30,19 +30,22 @@ func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, reso
 	s.HasInitializedResource = true
 }
 
-func (s *DummyStore) OnAdd(obj *unstructured.Unstructured) {
+func (s *DummyStore) OnAdd(obj *unstructured.Unstructured) error {
 	fmt.Printf("Add: %+v\n", obj.GetName())
 	s.AddCalls++
+	return nil
 }
 
-func (s *DummyStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
+func (s *DummyStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	fmt.Printf("Updated: %+v\n", oldObj.GetName())
 	s.UpdateCalls++
+	return nil
 }
 
-func (s *DummyStore) OnDelete(obj *unstructured.Unstructured) {
+func (s *DummyStore) OnDelete(obj *unstructured.Unstructured) error {
 	fmt.Printf("Deleted: %+v\n", obj.GetName())
 	s.DeleteCalls++
+	return nil
 }
 
 func (s *DummyStore) Count(mapName string) (int, error) {

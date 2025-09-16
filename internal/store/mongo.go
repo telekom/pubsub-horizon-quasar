@@ -67,7 +67,7 @@ func (m *MongoStore) OnAdd(obj *unstructured.Unstructured) error {
 		return err
 	}
 
-	log.Debug().Fields(utils.CreateFieldsForCollection(m.getCollection(obj).Name(), "add", obj)).Msg("Object added to MongoDB")
+	log.Debug().Fields(utils.CreateFieldsForCollection(m.getCollection(obj).Name(), "add", obj)).Msg("Resource added to MongoDB")
 	return nil
 }
 
@@ -90,7 +90,7 @@ func (m *MongoStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstruc
 		return err
 	}
 
-	log.Debug().Fields(utils.CreateFieldsForCollection(m.getCollection(oldObj).Name(), "update", newObj)).Msg("Object updated in MongoDB")
+	log.Debug().Fields(utils.CreateFieldsForCollection(m.getCollection(oldObj).Name(), "update", newObj)).Msg("Resource updated in MongoDB")
 	return nil
 }
 
@@ -112,7 +112,7 @@ func (m *MongoStore) OnDelete(obj *unstructured.Unstructured) error {
 		return err
 	}
 
-	log.Debug().Fields(utils.CreateFieldsForCollection(m.getCollection(obj).Name(), "delete", obj)).Msg("Object deleted from MongoDB")
+	log.Debug().Fields(utils.CreateFieldsForCollection(m.getCollection(obj).Name(), "delete", obj)).Msg("Resource deleted in MongoDB")
 	return nil
 }
 

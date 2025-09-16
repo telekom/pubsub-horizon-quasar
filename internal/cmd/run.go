@@ -51,16 +51,18 @@ var runCmd = &cobra.Command{
 			log.Warn().Msg("No fallback is configured. Quasar won't be able to restore data if the kubernetes api fails")
 		}
 
-		k8s.SetupWatcherStore()
-		utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
+		if config.Current.Watcher.Enabled {
+			k8s.SetupWatcherStore()
+			utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
 
-		for _, resourceConfig := range config.Current.Resources {
-			watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
-			if err != nil {
-				log.Fatal().Err(err).Msg("Could not create resource watcher!")
+			for _, resourceConfig := range config.Current.Resources {
+				watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
+				if err != nil {
+					log.Fatal().Err(err).Msg("Could not create resource watcher!")
+				}
+				go watcher.Start()
+				utils.RegisterShutdownHook(watcher.Stop, 0)
 			}
-			go watcher.Start()
-			utils.RegisterShutdownHook(watcher.Stop, 0)
 		}
 
 		utils.GracefulShutdown()
