@@ -86,15 +86,15 @@ func Listen(port int) {
 		logger = createLogger()
 	}
 
-	if service == nil {
-		setupService(logger)
-	}
-
 	if storeManager == nil {
 		setupApiProvisioningStore()
 		utils.RegisterShutdownHook(storeManager.Shutdown, 1)
 	}
 
+	if service == nil {
+		setupService(logger)
+	}
+	
 	utils.RegisterShutdownHook(func() {
 		timeout := 30 * time.Second
 		logger.Info().Dur("timeout", timeout).Msg("Shutting down provisioning service...")

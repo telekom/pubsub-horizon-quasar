@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
@@ -14,11 +15,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
+	"sync/atomic"
 )
 
 type MongoStore struct {
-	client *mongo.Client
-	ctx    context.Context
+	client    *mongo.Client
+	ctx       context.Context
+	connected atomic.Bool
 }
 
 func (m *MongoStore) Initialize() {
@@ -27,12 +30,18 @@ func (m *MongoStore) Initialize() {
 	m.client, err = mongo.Connect(m.ctx, options.Client().ApplyURI(config.Current.Store.Mongo.Uri))
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create mongo-store")
+		m.connected.Store(false)
+		return
 	}
 
 	if err := m.client.Ping(m.ctx, nil); err != nil {
 		log.Fatal().Err(err).Msg("Could not reach mongodb")
+		m.connected.Store(false)
+		return
 	}
 
+	m.connected.Store(true)
+	log.Info().Msg("MongoDB connection established")
 }
 
 func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
@@ -127,8 +136,24 @@ func (m *MongoStore) Count(mapName string) (int, error) {
 }
 
 func (m *MongoStore) Keys(mapName string) ([]string, error) {
-	//TODO implement me
-	panic("implement me")
+	collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(mapName)
+
+	keys, err := collection.Distinct(m.ctx, "_id", bson.M{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert interface{} slice to string slice
+	var stringKeys = make([]string, 0, len(keys))
+	for _, key := range keys {
+		if strKey, ok := key.(string); ok {
+			stringKeys = append(stringKeys, strKey)
+		} else {
+			stringKeys = append(stringKeys, fmt.Sprintf("%v", key))
+		}
+	}
+
+	return stringKeys, nil
 }
 
 func (m *MongoStore) getCollection(obj *unstructured.Unstructured) *mongo.Collection {
@@ -147,7 +172,9 @@ func (m *MongoStore) Shutdown() {
 	if err := m.client.Disconnect(m.ctx); err != nil {
 		log.Error().Err(err).Msg("Could not disconnect from MongoDB")
 	}
+	m.connected.Store(false)
 }
 
-// ToDo implement me
-func (s *MongoStore) Connected() bool { panic("implement me") }
+func (m *MongoStore) Connected() bool {
+	return m.connected.Load()
+}
