@@ -56,6 +56,14 @@ func (s *DummyStore) Keys(mapName string) ([]string, error) {
 	panic("not implemented")
 }
 
+func (s *DummyStore) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+	panic("not implemented")
+}
+
+func (s *DummyStore) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	panic("not implemented")
+}
+
 func (s *DummyStore) Shutdown() {
 	s.IsShutdown = true
 }

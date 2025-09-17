@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
+	"strings"
 	"sync/atomic"
 )
 
@@ -156,6 +157,106 @@ func (m *MongoStore) Keys(mapName string) ([]string, error) {
 	return stringKeys, nil
 }
 
+func (m *MongoStore) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+	collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(gvr)
+
+	filter := bson.M{"_id": name}
+	var result unstructured.Unstructured
+
+	err := collection.FindOne(m.ctx, filter).Decode(&result.Object)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		log.Error().Err(err).
+			Str("gvr", gvr).
+			Str("name", name).
+			Msg("Failed to get resource from MongoDB")
+		return nil, err
+	}
+
+	log.Debug().
+		Str("gvr", gvr).
+		Str("name", name).
+		Msg("Resource retrieved from MongoDB")
+
+	return &result, nil
+}
+
+func (m *MongoStore) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+
+	collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(gvr)
+
+	filter := bson.M{}
+	// Apply field selector filtering if provided
+	if fieldSelector != "" {
+		fieldFilter, err := m.parseFieldSelector(fieldSelector)
+		if err != nil {
+			log.Warn().Err(err).
+				Str("fieldSelector", fieldSelector).
+				Msg("Failed to parse field selector, ignoring")
+		} else {
+			for k, v := range fieldFilter {
+				filter[k] = v
+			}
+		}
+	}
+
+	// Apply label selector filtering if provided
+	if labelSelector != "" {
+		labelFilter, err := m.parseLabelSelector(labelSelector)
+		if err != nil {
+			log.Warn().Err(err).
+				Str("labelSelector", labelSelector).
+				Msg("Failed to parse label selector, ignoring")
+		} else {
+			for k, v := range labelFilter {
+				filter[k] = v
+			}
+		}
+	}
+
+	// Set find options
+	findOptions := options.Find()
+	if limit > 0 {
+		findOptions.SetLimit(limit)
+	}
+
+	cursor, err := collection.Find(m.ctx, filter, findOptions)
+	if err != nil {
+		log.Error().Err(err).
+			Str("gvr", gvr).
+			Msg("Failed to list resources from MongoDB")
+		return nil, err
+	}
+	defer cursor.Close(m.ctx)
+
+	var results []unstructured.Unstructured
+	for cursor.Next(m.ctx) {
+		var resource unstructured.Unstructured
+		if err := cursor.Decode(&resource.Object); err != nil {
+			log.Error().Err(err).Msg("Failed to decode resource from MongoDB")
+			continue
+		}
+		results = append(results, resource)
+	}
+
+	if err := cursor.Err(); err != nil {
+		log.Error().Err(err).Msg("Cursor error while listing resources from MongoDB")
+		return nil, err
+	}
+
+	log.Debug().
+		Str("gvr", gvr).
+		Int("count", len(results)).
+		Str("labelSelector", labelSelector).
+		Str("fieldSelector", fieldSelector).
+		Int64("limit", limit).
+		Msg("Resources listed from MongoDB")
+
+	return results, nil
+}
+
 func (m *MongoStore) getCollection(obj *unstructured.Unstructured) *mongo.Collection {
 	return m.client.Database(config.Current.Store.Mongo.Database).Collection(utils.GetGroupVersionId(obj))
 }
@@ -177,4 +278,67 @@ func (m *MongoStore) Shutdown() {
 
 func (m *MongoStore) Connected() bool {
 	return m.connected.Load()
+}
+
+func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
+	filter := bson.M{}
+
+	// Simple field selector parsing - supports key=value format
+	// For more complex parsing, we'd need a proper Kubernetes field selector parser
+	if fieldSelector == "" {
+		return filter, nil
+	}
+
+	// Split by comma for multiple selectors
+	selectors := strings.Split(fieldSelector, ",")
+	for _, selector := range selectors {
+		selector = strings.TrimSpace(selector)
+		if strings.Contains(selector, "=") {
+			parts := strings.SplitN(selector, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+
+				// Map Kubernetes field names to MongoDB document structure
+				switch key {
+				case "metadata.name":
+					filter["metadata.name"] = value
+				case "metadata.namespace":
+					filter["metadata.namespace"] = value
+				default:
+					filter[key] = value
+				}
+			}
+		}
+	}
+
+	return filter, nil
+}
+
+func (m *MongoStore) parseLabelSelector(labelSelector string) (bson.M, error) {
+	filter := bson.M{}
+
+	// Simple label selector parsing - supports key=value format
+	// For more complex parsing, we'd need a proper Kubernetes label selector parser
+	if labelSelector == "" {
+		return filter, nil
+	}
+
+	// Split by comma for multiple selectors
+	selectors := strings.Split(labelSelector, ",")
+	for _, selector := range selectors {
+		selector = strings.TrimSpace(selector)
+		if strings.Contains(selector, "=") {
+			parts := strings.SplitN(selector, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+
+				// Map to MongoDB document structure for labels
+				filter[fmt.Sprintf("metadata.labels.%s", key)] = value
+			}
+		}
+	}
+
+	return filter, nil
 }

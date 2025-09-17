@@ -191,6 +191,28 @@ func (m *DualStoreManager) Keys(mapName string) ([]string, error) {
 	return nil, ErrNoConnectedStore
 }
 
+func (m *DualStoreManager) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.primary != nil && m.primary.Connected() {
+		return m.primary.Get(gvr, name)
+	}
+
+	return nil, ErrNoConnectedStore
+}
+
+func (m *DualStoreManager) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.primary != nil && m.primary.Connected() {
+		return m.primary.List(gvr, labelSelector, fieldSelector, limit)
+	}
+
+	return nil, ErrNoConnectedStore
+}
+
 func (m *DualStoreManager) Shutdown() {
 	if m.primary != nil {
 		m.primary.Shutdown()

@@ -43,9 +43,10 @@ func setupService(logger *zerolog.Logger) {
 	}
 
 	v1 := service.Group("/api/v1/resources/:group/:version/:resource")
-	v1.Post("/", withGvr, withKubernetesResource, putProvision)
-	v1.Put("/", withGvr, withKubernetesResource, putProvision)
-	v1.Delete("/", withGvr, withKubernetesResource, deleteProvision)
+	v1.Get("/", withGvr, listResources)
+	v1.Get("/:name", withGvr, getResource)
+	v1.Put("/:name", withGvr, withKubernetesResource, putResource)
+	v1.Delete("/:name", withGvr, withKubernetesResource, deleteResource)
 }
 
 func createLogger() *zerolog.Logger {
@@ -94,7 +95,7 @@ func Listen(port int) {
 	if service == nil {
 		setupService(logger)
 	}
-	
+
 	utils.RegisterShutdownHook(func() {
 		timeout := 30 * time.Second
 		logger.Info().Dur("timeout", timeout).Msg("Shutting down provisioning service...")

@@ -43,10 +43,13 @@ func withKubernetesResource(ctx *fiber.Ctx) error {
 
 func withGvr(ctx *fiber.Ctx) error {
 	group, version, resource := ctx.Params("group"), ctx.Params("version"), ctx.Params("resource")
+	name := ctx.Params("name")
+
 	ctx.Locals("gvr", schema.GroupVersionResource{
 		Group:    group,
 		Version:  version,
 		Resource: resource,
 	})
+	ctx.Locals("name", name)
 	return ctx.Next()
 }

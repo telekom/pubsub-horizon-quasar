@@ -325,4 +325,14 @@ func (s *HazelcastStore) onDisconnected() {
 	}
 
 }
+func (s *HazelcastStore) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *HazelcastStore) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

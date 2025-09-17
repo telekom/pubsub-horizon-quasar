@@ -19,6 +19,8 @@ type Store interface {
 	OnDelete(obj *unstructured.Unstructured) error
 	Count(mapName string) (int, error)
 	Keys(mapName string) ([]string, error)
+	Get(gvr string, name string) (*unstructured.Unstructured, error)
+	List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
 	Shutdown()
 	Connected() bool
 }

@@ -83,4 +83,14 @@ func (s *RedisStore) Keys(mapName string) ([]string, error) {
 	panic("implement me")
 }
 
+func (s *RedisStore) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *RedisStore) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (s *RedisStore) Connected() bool { panic("implement me") }
