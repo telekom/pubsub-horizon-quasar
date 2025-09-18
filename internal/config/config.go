@@ -58,7 +58,6 @@ type HazelcastConfiguration struct {
 	Username               string                      `mapstructure:"username"`
 	Password               string                      `mapstructure:"password"`
 	Addresses              []string                    `mapstructure:"addresses"`
-	WriteBehind            bool                        `mapstructure:"writeBehind"`
 	Unisocket              bool                        `mapstructure:"unisocket"`
 	ReconcileMode          ReconcileMode               `mapstructure:"reconcileMode"`
 	ReconciliationInterval time.Duration               `mapstructure:"reconciliationInterval"`

@@ -58,7 +58,6 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.clusterName", "horizon")
 	viper.SetDefault("store.hazelcast.username", "")
 	viper.SetDefault("store.hazelcast.password", "")
-	viper.SetDefault("store.hazelcast.writeBehind", true)
 	viper.SetDefault("store.hazelcast.unisocket", false)
 	viper.SetDefault("store.hazelcast.reconcileMode", ReconcileModeFull)
 	viper.SetDefault("store.hazelcast.reconciliationInterval", "60s")

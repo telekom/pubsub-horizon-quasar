@@ -55,7 +55,6 @@ func buildTestConfig() *config.Configuration {
 	testConfig.Store.Hazelcast = config.HazelcastConfiguration{
 		ClusterName: "horizon",
 		Addresses:   []string{test.EnvOrDefault("HAZELCAST_HOST", "localhost")},
-		WriteBehind: true,
 	}
 	testConfig.Store.Hazelcast.ReconcileMode = config.ReconcileModeIncremental
 

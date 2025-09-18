@@ -30,7 +30,7 @@ func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, reso
 	s.HasInitializedResource = true
 }
 
-func (s *DummyStore) Read(obj *unstructured.Unstructured) error {
+func (s *DummyStore) Create(obj *unstructured.Unstructured) error {
 	fmt.Printf("Add: %+v\n", obj.GetName())
 	s.AddCalls++
 	return nil
@@ -42,7 +42,7 @@ func (s *DummyStore) Update(oldObj *unstructured.Unstructured, newObj *unstructu
 	return nil
 }
 
-func (s *DummyStore) OnDelete(obj *unstructured.Unstructured) error {
+func (s *DummyStore) Delete(obj *unstructured.Unstructured) error {
 	fmt.Printf("Deleted: %+v\n", obj.GetName())
 	s.DeleteCalls++
 	return nil
@@ -56,11 +56,11 @@ func (s *DummyStore) Keys(dataset string) ([]string, error) {
 	panic("not implemented")
 }
 
-func (s *DummyStore) Get(dataset string, key string) (*unstructured.Unstructured, error) {
+func (s *DummyStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
 	panic("not implemented")
 }
 
-func (s *DummyStore) List(name string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (s *DummyStore) List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("not implemented")
 }
 
