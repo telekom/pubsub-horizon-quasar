@@ -77,7 +77,7 @@ func SetupStoreManager(primaryType, secondaryType string) (DualStore, error) {
 		primary:      primary,
 		secondary:    secondary,
 		mu:           sync.RWMutex{},
-		errorHandler: &DefaultErrorHandler{},
+		errorHandler: new(DefaultErrorHandler),
 	}
 
 	manager.Initialize()
