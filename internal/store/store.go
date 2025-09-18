@@ -14,13 +14,13 @@ import (
 type Store interface {
 	Initialize()
 	InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration)
-	OnAdd(obj *unstructured.Unstructured) error
-	OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error
-	OnDelete(obj *unstructured.Unstructured) error
-	Count(mapName string) (int, error)
-	Keys(mapName string) ([]string, error)
-	Get(gvr string, name string) (*unstructured.Unstructured, error)
-	List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
+	Create(obj *unstructured.Unstructured) error
+	Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error
+	Delete(obj *unstructured.Unstructured) error
+	Count(dataset string) (int, error)
+	Keys(dataset string) ([]string, error)
+	Read(dataset string, key string) (*unstructured.Unstructured, error)
+	List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
 	Shutdown()
 	Connected() bool
 }

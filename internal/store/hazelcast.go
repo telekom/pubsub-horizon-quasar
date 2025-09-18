@@ -128,7 +128,7 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 	go s.collectMetrics(resourceConfig.GetCacheName())
 }
 
-func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) error {
+func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	json, err := obj.MarshalJSON()
@@ -146,7 +146,7 @@ func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) error {
 	return nil
 }
 
-func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
+func (s *HazelcastStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(oldObj)
 
 	json, err := newObj.MarshalJSON()
@@ -164,7 +164,7 @@ func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *uns
 	return nil
 }
 
-func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) error {
+func (s *HazelcastStore) Delete(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	if err := cacheMap.Delete(s.ctx, obj.GetName()); err != nil {
@@ -325,13 +325,11 @@ func (s *HazelcastStore) onDisconnected() {
 	}
 
 }
-func (s *HazelcastStore) Get(gvr string, name string) (*unstructured.Unstructured, error) {
-	//TODO implement me
+func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
 	panic("implement me")
 }
 
-func (s *HazelcastStore) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
-	//TODO implement me
+func (s *HazelcastStore) List(name string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("implement me")
 }
 

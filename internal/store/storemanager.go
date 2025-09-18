@@ -104,21 +104,21 @@ func (m *DualStoreManager) InitializeResource(kubernetesClient dynamic.Interface
 	}
 }
 
-func (m *DualStoreManager) OnAdd(obj *unstructured.Unstructured) error {
+func (m *DualStoreManager) Create(obj *unstructured.Unstructured) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var primaryErr error
 
 	if m.primary != nil {
-		if primaryErr = m.primary.OnAdd(obj); primaryErr != nil {
-			primaryErr = m.errorHandler.HandlePrimaryError("OnAdd", primaryErr)
+		if primaryErr = m.primary.Create(obj); primaryErr != nil {
+			primaryErr = m.errorHandler.HandlePrimaryError("Create", primaryErr)
 		}
 	}
 	if m.secondary != nil {
 		go func() {
-			if secondaryErr := m.secondary.OnAdd(obj); secondaryErr != nil {
-				m.errorHandler.HandleSecondaryError("OnAdd", secondaryErr)
+			if secondaryErr := m.secondary.Create(obj); secondaryErr != nil {
+				m.errorHandler.HandleSecondaryError("Create", secondaryErr)
 			}
 		}()
 	}
@@ -126,41 +126,41 @@ func (m *DualStoreManager) OnAdd(obj *unstructured.Unstructured) error {
 	return primaryErr
 }
 
-func (m *DualStoreManager) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
+func (m *DualStoreManager) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var primaryErr error
 
 	if m.primary != nil {
-		if primaryErr = m.primary.OnUpdate(oldObj, newObj); primaryErr != nil {
-			primaryErr = m.errorHandler.HandlePrimaryError("OnUpdate", primaryErr)
+		if primaryErr = m.primary.Update(oldObj, newObj); primaryErr != nil {
+			primaryErr = m.errorHandler.HandlePrimaryError("Update", primaryErr)
 		}
 	}
 
 	if m.secondary != nil {
 		go func() {
-			if secondaryErr := m.secondary.OnUpdate(oldObj, newObj); secondaryErr != nil {
-				m.errorHandler.HandleSecondaryError("OnUpdate", secondaryErr)
+			if secondaryErr := m.secondary.Update(oldObj, newObj); secondaryErr != nil {
+				m.errorHandler.HandleSecondaryError("Update", secondaryErr)
 			}
 		}()
 	}
 	return primaryErr
 }
 
-func (m *DualStoreManager) OnDelete(obj *unstructured.Unstructured) error {
+func (m *DualStoreManager) Delete(obj *unstructured.Unstructured) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var primaryErr error
 
-	if primaryErr = m.primary.OnDelete(obj); primaryErr != nil {
+	if primaryErr = m.primary.Delete(obj); primaryErr != nil {
 		primaryErr = m.errorHandler.HandlePrimaryError("OnDelete", primaryErr)
 	}
 
 	if m.secondary != nil {
 		go func() {
-			if secondaryErr := m.secondary.OnDelete(obj); secondaryErr != nil {
+			if secondaryErr := m.secondary.Delete(obj); secondaryErr != nil {
 				m.errorHandler.HandleSecondaryError("OnDelete", secondaryErr)
 			}
 		}()
@@ -169,45 +169,45 @@ func (m *DualStoreManager) OnDelete(obj *unstructured.Unstructured) error {
 	return primaryErr
 }
 
-func (m *DualStoreManager) Count(mapName string) (int, error) {
+func (m *DualStoreManager) Count(dataset string) (int, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.primary != nil && m.primary.Connected() {
-		return m.primary.Count(mapName)
+		return m.primary.Count(dataset)
 	}
 
 	return 0, ErrNoConnectedStore
 }
 
-func (m *DualStoreManager) Keys(mapName string) ([]string, error) {
+func (m *DualStoreManager) Keys(dataset string) ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.primary != nil && m.primary.Connected() {
-		return m.primary.Keys(mapName)
+		return m.primary.Keys(dataset)
 	}
 
 	return nil, ErrNoConnectedStore
 }
 
-func (m *DualStoreManager) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+func (m *DualStoreManager) Read(dataset string, name string) (*unstructured.Unstructured, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.primary != nil && m.primary.Connected() {
-		return m.primary.Get(gvr, name)
+		return m.primary.Read(dataset, name)
 	}
 
 	return nil, ErrNoConnectedStore
 }
 
-func (m *DualStoreManager) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (m *DualStoreManager) List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.primary != nil && m.primary.Connected() {
-		return m.primary.List(gvr, labelSelector, fieldSelector, limit)
+		return m.primary.List(dataset, labelSelector, fieldSelector, limit)
 	}
 
 	return nil, ErrNoConnectedStore

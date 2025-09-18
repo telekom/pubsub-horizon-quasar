@@ -55,7 +55,7 @@ func NewResourceWatcher(
 
 			var resource = resourceConfig.GetGroupVersionResource()
 
-			replayedDocuments, err := fallback.CurrentFallback.ReplayResource(&resource, WatcherStore.OnAdd)
+			replayedDocuments, err := fallback.CurrentFallback.ReplayResource(&resource, WatcherStore.Create)
 			if err != nil {
 				log.Fatal().Err(err).Msg("Replay from MongoDB failed!")
 			}
@@ -85,7 +85,7 @@ func (w *ResourceWatcher) add(obj any) {
 	uObj, ok := obj.(*unstructured.Unstructured)
 	if ok {
 		utils.AddMissingEnvironment(uObj)
-		WatcherStore.OnAdd(uObj)
+		WatcherStore.Create(uObj)
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
 			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
@@ -110,7 +110,7 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 		}
 
 		utils.AddMissingEnvironment(uNewObj)
-		WatcherStore.OnUpdate(uOldObj, uNewObj)
+		WatcherStore.Update(uOldObj, uNewObj)
 		log.Debug().Fields(utils.CreateFieldsForOp("update", uOldObj)).Msg("Updated dataset")
 	} else {
 		log.Warn().Fields(map[string]any{
@@ -124,7 +124,7 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 func (w *ResourceWatcher) delete(obj any) {
 	uObj, ok := obj.(*unstructured.Unstructured)
 	if ok {
-		WatcherStore.OnDelete(uObj)
+		WatcherStore.Delete(uObj)
 		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Fields("Deleted dataset")
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
@@ -188,7 +188,7 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 func SetupWatcherStore() {
 	var primaryType = config.Current.Watcher.Store.Primary.Type
 	var secondaryType = config.Current.Watcher.Store.Secondary.Type
-	
+
 	var err error
 	WatcherStore, err = store.SetupStoreManager(primaryType, secondaryType)
 	if err != nil {

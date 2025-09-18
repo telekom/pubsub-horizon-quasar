@@ -5,11 +5,13 @@
 package provisioning
 
 import (
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"strconv"
+	"strings"
 )
 
 // putResource handles PUT requests to create or replace a Kubernetes resource                                                                │ │
@@ -32,6 +34,8 @@ func putResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
+	logRequest("Put", name, gvr, "Request received for resource")
+
 	// Verify if url param name is present in resource
 	if name != resource.GetName() {
 		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
@@ -47,17 +51,19 @@ func putResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logger.Debug().
-		Str("name", name).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Msg("Put-Request for resource")
+	// Verify if url param resource name maps with current rule to build the store object
+	expectedResource := strings.ToLower(fmt.Sprintf("%ss", resource.GetKind()))
+	if gvr.Resource != expectedResource {
+		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Resource in URL does not correlate to kind in body",
+			Code:  fiber.StatusBadRequest,
+		})
+	}
 
 	// Store resource
 	if storeManager != nil {
 		utils.AddMissingEnvironment(&resource)
-		if err := storeManager.OnAdd(&resource); err != nil {
+		if err := storeManager.Create(&resource); err != nil {
 			logger.Error().
 				Err(err).
 				Str("name", name).
@@ -73,15 +79,19 @@ func putResource(ctx *fiber.Ctx) error {
 			})
 		}
 	}
+	logRequest("Put", name, gvr, "Request successfully")
+	return ctx.Status(fiber.StatusOK).Send(nil)
 
+}
+
+func logRequest(operation string, resourceName string, gvr schema.GroupVersionResource, msg string) {
 	logger.Debug().
-		Str("name", resource.GetName()).
+		Str("name", resourceName).
 		Str("group", gvr.Group).
 		Str("version", gvr.Version).
 		Str("resource", gvr.Resource).
-		Msg("Resource put successfully")
-
-	return ctx.Status(fiber.StatusOK).Send(nil)
+		Str("operation", operation).
+		Msg(msg)
 }
 
 // getResource handles GET requests to retrieve a specific Kubernetes resource
@@ -98,12 +108,7 @@ func getResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logger.Debug().
-		Str("name", name).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Msg("Get-Request for resource")
+	logRequest("Get", name, gvr, "Request received for resource")
 
 	if storeManager == nil {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
@@ -113,7 +118,7 @@ func getResource(ctx *fiber.Ctx) error {
 	}
 
 	storeObject := gvr.Resource + "." + gvr.Group + "." + gvr.Version
-	resource, err := storeManager.Get(storeObject, name)
+	resource, err := storeManager.Read(storeObject, name)
 	if err != nil {
 		logger.Error().
 			Err(err).
@@ -134,13 +139,7 @@ func getResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logger.Debug().
-		Str("name", name).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Msg("Resource retrieved successfully")
-
+	logRequest("Get", name, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Resource: resource,
 	})
@@ -156,6 +155,7 @@ func listResources(ctx *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	logRequest("Get-List", "", gvr, "Request received for resource")
 
 	// Parse query parameters
 	labelSelector := ctx.Query("labelSelector", "")
@@ -166,15 +166,6 @@ func listResources(ctx *fiber.Ctx) error {
 	if err != nil {
 		limit = 10000
 	}
-
-	logger.Debug().
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Str("labelSelector", labelSelector).
-		Str("fieldSelector", fieldSelector).
-		Int64("limit", limit).
-		Msg("List-Request for resources")
 
 	if storeManager == nil {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
@@ -200,13 +191,7 @@ func listResources(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logger.Debug().
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Int("count", len(resources)).
-		Msg("Resources listed successfully")
-
+	logRequest("Get-List", "", gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Items: resources,
 		Count: len(resources),
@@ -241,6 +226,8 @@ func deleteResource(ctx *fiber.Ctx) error {
 		})
 	}
 
+	logRequest("Delete", name, gvr, "Request received for resource")
+
 	// Verify if url param name is present in resource
 	if name != resource.GetName() {
 		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
@@ -249,12 +236,14 @@ func deleteResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logger.Debug().
-		Str("name", name).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Msg("Delete-Request for resource")
+	// Verify if url param resource name maps with current rule to build the store object
+	expectedResource := strings.ToLower(fmt.Sprintf("%ss", resource.GetKind()))
+	if gvr.Resource != expectedResource {
+		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: "Resource in URL does not correlate to kind in body",
+			Code:  fiber.StatusBadRequest,
+		})
+	}
 
 	if storeManager == nil {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
@@ -263,7 +252,7 @@ func deleteResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	if err := storeManager.OnDelete(&resource); err != nil {
+	if err := storeManager.Delete(&resource); err != nil {
 		logger.Error().
 			Err(err).
 			Str("name", name).
@@ -276,13 +265,7 @@ func deleteResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logger.Debug().
-		Str("name", name).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Msg("Resource deleted successfully")
-
+	logRequest("Delete", name, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusNoContent).Send(nil)
 }
 

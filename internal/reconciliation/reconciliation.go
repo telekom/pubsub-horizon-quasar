@@ -23,7 +23,7 @@ type Reconciliation struct {
 }
 
 type Reconcilable interface {
-	OnAdd(obj *unstructured.Unstructured) error
+	Create(obj *unstructured.Unstructured) error
 	Count(mapName string) (int, error)
 	Keys(mapName string) ([]string, error)
 	Connected() bool
@@ -55,7 +55,7 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 			Msg("Performing full reconciliation: inserting all resources")
 		for _, item := range resources.Items {
 			utils.AddMissingEnvironment(&item)
-			reconcilable.OnAdd(&item)
+			reconcilable.Create(&item)
 			log.Debug().
 				Fields(utils.CreateFieldsForOp("add", &item)).
 				Msg("Reconciled (full)")
@@ -91,7 +91,7 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 			log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingItems))
 			for _, items := range missingItems {
 				utils.AddMissingEnvironment(&items)
-				reconcilable.OnAdd(&items)
+				reconcilable.Create(&items)
 				log.Warn().Fields(utils.CreateFieldsForOp("restore", &items)).Msg("Restored")
 			}
 		}

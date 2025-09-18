@@ -42,7 +42,7 @@ func (s *RedisStore) InitializeResource(kubernetesClient dynamic.Interface, reso
 	// Nothing to do here
 }
 
-func (s *RedisStore) OnAdd(obj *unstructured.Unstructured) error {
+func (s *RedisStore) Create(obj *unstructured.Unstructured) error {
 	var status = s.client.JSONSet(s.ctx, obj.GetName(), ".", obj.Object)
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not write resource to store!")
@@ -51,7 +51,7 @@ func (s *RedisStore) OnAdd(obj *unstructured.Unstructured) error {
 	return nil
 }
 
-func (s *RedisStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
+func (s *RedisStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	var status = s.client.JSONSet(s.ctx, oldObj.GetName(), ".", newObj)
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not update resource in store!")
@@ -60,7 +60,7 @@ func (s *RedisStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstruc
 	return nil
 }
 
-func (s *RedisStore) OnDelete(obj *unstructured.Unstructured) error {
+func (s *RedisStore) Delete(obj *unstructured.Unstructured) error {
 	var status = s.client.JSONDel(s.ctx, obj.GetName(), ".")
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
@@ -73,23 +73,22 @@ func (s *RedisStore) Shutdown() {
 
 }
 
-func (s *RedisStore) Count(mapName string) (int, error) {
+func (s *RedisStore) Count(dataset string) (int, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *RedisStore) Keys(mapName string) ([]string, error) {
+func (s *RedisStore) Keys(dataset string) ([]string, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *RedisStore) Get(gvr string, name string) (*unstructured.Unstructured, error) {
+func (s *RedisStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *RedisStore) List(gvr string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
-	//TODO implement me
+func (s *RedisStore) List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("implement me")
 }
 
