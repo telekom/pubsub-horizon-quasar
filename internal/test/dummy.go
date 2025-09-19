@@ -60,7 +60,7 @@ func (s *DummyStore) Read(dataset string, key string) (*unstructured.Unstructure
 	panic("not implemented")
 }
 
-func (s *DummyStore) List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (s *DummyStore) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("not implemented")
 }
 

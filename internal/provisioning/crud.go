@@ -147,7 +147,7 @@ func getResource(ctx *fiber.Ctx) error {
 
 // listResources handles GET requests to list Kubernetes resources of a specific type
 // URL params: group, version, resource
-// Query params: labelSelector, fieldSelector, limit (default: 10000)
+// Query params: fieldSelector, limit (default: 10000)
 // Response: HTTP 200 with array of resources
 func listResources(ctx *fiber.Ctx) error {
 
@@ -158,13 +158,15 @@ func listResources(ctx *fiber.Ctx) error {
 	logRequest("Get-List", "", gvr, "Request received for resource")
 
 	// Parse query parameters
-	labelSelector := ctx.Query("labelSelector", "")
 	fieldSelector := ctx.Query("fieldSelector", "")
 	limitStr := ctx.Query("limit", "")
 
-	limit, err := strconv.ParseInt(limitStr, 10, 64)
-	if err != nil {
-		limit = 10000
+	var limit int64 = 0
+	if limitStr != "" {
+		limit, err = strconv.ParseInt(limitStr, 10, 64)
+		if err != nil {
+			limit = 0
+		}
 	}
 
 	if storeManager == nil {
@@ -175,7 +177,7 @@ func listResources(ctx *fiber.Ctx) error {
 	}
 
 	storeObject := gvr.Resource + "." + gvr.Group + "." + gvr.Version
-	resources, err := storeManager.List(storeObject, labelSelector, fieldSelector, limit)
+	resources, err := storeManager.List(storeObject, fieldSelector, limit)
 	if err != nil {
 		logger.Error().
 			Err(err).

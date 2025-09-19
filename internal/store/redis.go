@@ -88,7 +88,7 @@ func (s *RedisStore) Read(dataset string, key string) (*unstructured.Unstructure
 	panic("implement me")
 }
 
-func (s *RedisStore) List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (s *RedisStore) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("implement me")
 }
 

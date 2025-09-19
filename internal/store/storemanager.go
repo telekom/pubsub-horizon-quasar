@@ -155,13 +155,13 @@ func (m *DualStoreManager) Delete(obj *unstructured.Unstructured) error {
 	var primaryErr error
 
 	if primaryErr = m.primary.Delete(obj); primaryErr != nil {
-		primaryErr = m.errorHandler.HandlePrimaryError("OnDelete", primaryErr)
+		primaryErr = m.errorHandler.HandlePrimaryError("Delete", primaryErr)
 	}
 
 	if m.secondary != nil {
 		go func() {
 			if secondaryErr := m.secondary.Delete(obj); secondaryErr != nil {
-				m.errorHandler.HandleSecondaryError("OnDelete", secondaryErr)
+				m.errorHandler.HandleSecondaryError("Delete", secondaryErr)
 			}
 		}()
 	}
@@ -202,12 +202,12 @@ func (m *DualStoreManager) Read(dataset string, name string) (*unstructured.Unst
 	return nil, ErrNoConnectedStore
 }
 
-func (m *DualStoreManager) List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (m *DualStoreManager) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.primary != nil && m.primary.Connected() {
-		return m.primary.List(dataset, labelSelector, fieldSelector, limit)
+		return m.primary.List(dataset, fieldSelector, limit)
 	}
 
 	return nil, ErrNoConnectedStore

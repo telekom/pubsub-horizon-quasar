@@ -329,7 +329,7 @@ func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructur
 	panic("implement me")
 }
 
-func (s *HazelcastStore) List(name string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("implement me")
 }
 

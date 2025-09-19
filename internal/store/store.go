@@ -20,7 +20,7 @@ type Store interface {
 	Count(dataset string) (int, error)
 	Keys(dataset string) ([]string, error)
 	Read(dataset string, key string) (*unstructured.Unstructured, error)
-	List(dataset string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
+	List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
 	Shutdown()
 	Connected() bool
 }

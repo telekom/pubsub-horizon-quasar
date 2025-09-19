@@ -1,3 +1,7 @@
+// Copyright 2024 Deutsche Telekom AG
+//
+// SPDX-License-Identifier: Apache-2.0
+
 //go:build testing
 
 package store
@@ -43,45 +47,6 @@ func TestMongoStore_ParseFieldSelector(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := store.parseFieldSelector(tt.fieldSelector)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expectedFilter, result)
-		})
-	}
-}
-
-func TestMongoStore_ParseLabelSelector(t *testing.T) {
-	store := &MongoStore{}
-
-	tests := []struct {
-		name           string
-		labelSelector  string
-		expectedFilter bson.M
-	}{
-		{
-			name:           "empty selector",
-			labelSelector:  "",
-			expectedFilter: bson.M{},
-		},
-		{
-			name:          "single label selector",
-			labelSelector: "app=test",
-			expectedFilter: bson.M{
-				"metadata.labels.app": "test",
-			},
-		},
-		{
-			name:          "multiple label selectors",
-			labelSelector: "app=test,version=v1",
-			expectedFilter: bson.M{
-				"metadata.labels.app":     "test",
-				"metadata.labels.version": "v1",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := store.parseLabelSelector(tt.labelSelector)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedFilter, result)
 		})

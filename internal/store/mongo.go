@@ -214,7 +214,7 @@ func (m *MongoStore) Read(collectionName string, key string) (*unstructured.Unst
 	return &result, nil
 }
 
-func (m *MongoStore) List(collectionName string, labelSelector string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+func (m *MongoStore) List(collectionName string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 
 	collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(collectionName)
 
@@ -226,28 +226,10 @@ func (m *MongoStore) List(collectionName string, labelSelector string, fieldSele
 			log.Warn().Err(err).
 				Str("collection", collectionName).
 				Str("fieldSelector", fieldSelector).
-				Str("labelSelector", labelSelector).
 				Int64("limit", limit).
 				Msg("Failed to parse field selector, ignoring")
 		} else {
 			for k, v := range fieldFilter {
-				filter[k] = v
-			}
-		}
-	}
-
-	// Apply label selector filtering if provided
-	if labelSelector != "" {
-		labelFilter, err := m.parseLabelSelector(labelSelector)
-		if err != nil {
-			log.Warn().Err(err).
-				Str("collection", collectionName).
-				Str("fieldSelector", fieldSelector).
-				Str("labelSelector", labelSelector).
-				Int64("limit", limit).
-				Msg("Failed to parse label selector, ignoring")
-		} else {
-			for k, v := range labelFilter {
 				filter[k] = v
 			}
 		}
@@ -264,7 +246,6 @@ func (m *MongoStore) List(collectionName string, labelSelector string, fieldSele
 		log.Error().Err(err).
 			Str("collection", collectionName).
 			Str("fieldSelector", fieldSelector).
-			Str("labelSelector", labelSelector).
 			Int64("limit", limit).
 			Msg("Failed to list resources from MongoDB")
 		return nil, err
@@ -288,7 +269,6 @@ func (m *MongoStore) List(collectionName string, labelSelector string, fieldSele
 
 	log.Debug().
 		Str("collection", collectionName).
-		Str("labelSelector", labelSelector).
 		Str("fieldSelector", fieldSelector).
 		Int64("limit", limit).
 		Int("count", len(results)).
@@ -320,11 +300,10 @@ func (m *MongoStore) Connected() bool {
 	return m.connected.Load()
 }
 
+// Simple field selector parsing - supports key=value format
 func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
 	filter := bson.M{}
 
-	// Simple field selector parsing - supports key=value format
-	// For more complex parsing, we'd need a proper Kubernetes field selector parser
 	if fieldSelector == "" {
 		return filter, nil
 	}
@@ -338,47 +317,10 @@ func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
 			if len(parts) == 2 {
 				key := strings.TrimSpace(parts[0])
 				value := strings.TrimSpace(parts[1])
-
-				// Map Kubernetes field names to MongoDB document structure
-				switch key {
-				case "metadata.name":
-					filter["metadata.name"] = value
-				case "metadata.namespace":
-					filter["metadata.namespace"] = value
-				default:
-					filter[key] = value
-				}
+				filter[key] = value
 			}
 		}
+
 	}
-
-	return filter, nil
-}
-
-func (m *MongoStore) parseLabelSelector(labelSelector string) (bson.M, error) {
-	filter := bson.M{}
-
-	// Simple label selector parsing - supports key=value format
-	// For more complex parsing, we'd need a proper Kubernetes label selector parser
-	if labelSelector == "" {
-		return filter, nil
-	}
-
-	// Split by comma for multiple selectors
-	selectors := strings.Split(labelSelector, ",")
-	for _, selector := range selectors {
-		selector = strings.TrimSpace(selector)
-		if strings.Contains(selector, "=") {
-			parts := strings.SplitN(selector, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-
-				// Map to MongoDB document structure for labels
-				filter[fmt.Sprintf("metadata.labels.%s", key)] = value
-			}
-		}
-	}
-
 	return filter, nil
 }
