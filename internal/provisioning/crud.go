@@ -15,7 +15,7 @@ import (
 )
 
 // putResource handles PUT requests to create or replace a Kubernetes resource                                                                │ │
-// URL params: group, version, resource, name                                                                                                 │ │
+// URL params: group, version, resource, id                                                                                                 │ │
 // Request body: JSON Kubernetes resource (name/GVR must match URL)                                                                           │ │
 // Response: HTTP 200 with empty body on success
 func putResource(ctx *fiber.Ctx) error {
@@ -24,7 +24,7 @@ func putResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	name, err := getResourceNameFromContext(ctx)
+	id, err := getResourceNameFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -34,10 +34,10 @@ func putResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequest("Put", name, gvr, "Request received for resource")
+	logRequest("Put", id, gvr, "Request received for resource")
 
-	// Verify if url param name is present in resource
-	if name != resource.GetName() {
+	// Verify if url param id is present in resource
+	if id != resource.GetName() {
 		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Resource name in URL does not match resource name in body",
 			Code:  fiber.StatusBadRequest,
@@ -51,7 +51,7 @@ func putResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	// Verify if url param resource name maps with current rule to build the store object
+	// Verify if url param resource name maps with current rule to build the dataset
 	expectedResource := strings.ToLower(fmt.Sprintf("%ss", resource.GetKind()))
 	if gvr.Resource != expectedResource {
 		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
@@ -66,7 +66,7 @@ func putResource(ctx *fiber.Ctx) error {
 		if err := storeManager.Create(&resource); err != nil {
 			logger.Error().
 				Err(err).
-				Str("name", name).
+				Str("id", id).
 				Str("group", gvr.Group).
 				Str("version", gvr.Version).
 				Str("resource", gvr.Resource).
@@ -79,19 +79,9 @@ func putResource(ctx *fiber.Ctx) error {
 			})
 		}
 	}
-	logRequest("Put", name, gvr, "Request successfully")
+	logRequest("Put", id, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).Send(nil)
 
-}
-
-func logRequest(operation string, resourceName string, gvr schema.GroupVersionResource, msg string) {
-	logger.Debug().
-		Str("name", resourceName).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Str("operation", operation).
-		Msg(msg)
 }
 
 // getResource handles GET requests to retrieve a specific Kubernetes resource
@@ -103,12 +93,12 @@ func getResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	name, err := getResourceNameFromContext(ctx)
+	id, err := getResourceNameFromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	logRequest("Get", name, gvr, "Request received for resource")
+	logRequest("Get", id, gvr, "Request received for resource")
 
 	if storeManager == nil {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
@@ -117,12 +107,12 @@ func getResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	storeObject := gvr.Resource + "." + gvr.Group + "." + gvr.Version
-	resource, err := storeManager.Read(storeObject, name)
+	dataset := getDatasetForGvr(gvr)
+	resource, err := storeManager.Read(dataset, id)
 	if err != nil {
 		logger.Error().
 			Err(err).
-			Str("name", name).
+			Str("id", id).
 			Msg("Failed to get resource")
 
 		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
@@ -139,7 +129,7 @@ func getResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logRequest("Get", name, gvr, "Request successfully")
+	logRequest("Get", id, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Resource: resource,
 	})
@@ -147,7 +137,7 @@ func getResource(ctx *fiber.Ctx) error {
 
 // listResources handles GET requests to list Kubernetes resources of a specific type
 // URL params: group, version, resource
-// Query params: fieldSelector, limit (default: 10000)
+// Query params: fieldSelector, limit
 // Response: HTTP 200 with array of resources
 func listResources(ctx *fiber.Ctx) error {
 
@@ -155,7 +145,7 @@ func listResources(ctx *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	logRequest("Get-List", "", gvr, "Request received for resource")
+	logRequest("List-Resources", "", gvr, "Request received for resource")
 
 	// Parse query parameters
 	fieldSelector := ctx.Query("fieldSelector", "")
@@ -176,8 +166,8 @@ func listResources(ctx *fiber.Ctx) error {
 		})
 	}
 
-	storeObject := gvr.Resource + "." + gvr.Group + "." + gvr.Version
-	resources, err := storeManager.List(storeObject, fieldSelector, limit)
+	dataset := getDatasetForGvr(gvr)
+	resources, err := storeManager.List(dataset, fieldSelector, limit)
 	if err != nil {
 		logger.Error().
 			Err(err).
@@ -193,10 +183,92 @@ func listResources(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logRequest("Get-List", "", gvr, "Request successfully")
+	logRequest("List-Resources", "", gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Items: resources,
 		Count: len(resources),
+	})
+}
+
+// listKeys handles GET requests to list only the keys of a Kubernetes resources of a specific type
+// URL params: group, version, resource
+// Response: HTTP 200 with array of keys
+func listKeys(ctx *fiber.Ctx) error {
+
+	gvr, err := getGvrFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	logRequest("List-Keys", "", gvr, "Request received for resource")
+
+	if storeManager == nil {
+		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
+			Error: "Store manager not available",
+			Code:  fiber.StatusServiceUnavailable,
+		})
+	}
+
+	dataset := getDatasetForGvr(gvr)
+	keys, err := storeManager.Keys(dataset)
+	if err != nil {
+		logger.Error().
+			Err(err).
+			Str("group", gvr.Group).
+			Str("version", gvr.Version).
+			Str("resource", gvr.Resource).
+			Msg("Failed to list keys")
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error:   "Failed to list keys",
+			Code:    fiber.StatusInternalServerError,
+			Details: err.Error(),
+		})
+	}
+
+	logRequest("List-Keys", "", gvr, "Request successfully")
+	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
+		Keys: keys,
+	})
+}
+
+// Count Resources handles GET requests to count the resources of a specific type
+// URL params: group, version, resource
+// Response: HTTP 200 with count as result
+func countResources(ctx *fiber.Ctx) error {
+
+	gvr, err := getGvrFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	logRequest("Count-Resources", "", gvr, "Request received for resource")
+
+	if storeManager == nil {
+		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
+			Error: "Store manager not available",
+			Code:  fiber.StatusServiceUnavailable,
+		})
+	}
+
+	dataset := getDatasetForGvr(gvr)
+	count, err := storeManager.Count(dataset)
+	if err != nil {
+		logger.Error().
+			Err(err).
+			Str("group", gvr.Group).
+			Str("version", gvr.Version).
+			Str("resource", gvr.Resource).
+			Msg("Failed to count Resources")
+
+		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Error:   "Failed to count resources",
+			Code:    fiber.StatusInternalServerError,
+			Details: err.Error(),
+		})
+	}
+
+	logRequest("Count-Resources", "", gvr, "Request successfully")
+	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
+		Count: count,
 	})
 }
 
@@ -210,7 +282,7 @@ func deleteResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	name, err := getResourceNameFromContext(ctx)
+	id, err := getResourceNameFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -228,10 +300,10 @@ func deleteResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logRequest("Delete", name, gvr, "Request received for resource")
+	logRequest("Delete", id, gvr, "Request received for resource")
 
 	// Verify if url param name is present in resource
-	if name != resource.GetName() {
+	if id != resource.GetName() {
 		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Resource name in URL does not match resource name in body",
 			Code:  fiber.StatusBadRequest,
@@ -257,7 +329,7 @@ func deleteResource(ctx *fiber.Ctx) error {
 	if err := storeManager.Delete(&resource); err != nil {
 		logger.Error().
 			Err(err).
-			Str("name", name).
+			Str("name", id).
 			Msg("Failed to delete resource")
 
 		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
@@ -267,8 +339,18 @@ func deleteResource(ctx *fiber.Ctx) error {
 		})
 	}
 
-	logRequest("Delete", name, gvr, "Request successfully")
+	logRequest("Delete", id, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusNoContent).Send(nil)
+}
+
+func logRequest(operation string, id string, gvr schema.GroupVersionResource, msg string) {
+	logger.Debug().
+		Str("id", id).
+		Str("group", gvr.Group).
+		Str("version", gvr.Version).
+		Str("resource", gvr.Resource).
+		Str("operation", operation).
+		Msg(msg)
 }
 
 func getGvrFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, error) {
@@ -316,4 +398,8 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 		})
 	}
 	return resource, nil
+}
+
+func getDatasetForGvr(gvr schema.GroupVersionResource) string {
+	return fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 }
