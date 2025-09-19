@@ -5,6 +5,7 @@
 package provisioning
 
 import (
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog/log"
@@ -31,9 +32,7 @@ func withKubernetesResource(ctx *fiber.Ctx) error {
 	resource := new(unstructured.Unstructured)
 	if err := resource.UnmarshalJSON(ctx.Body()); err != nil {
 		log.Error().Err(err).Msg("Failed to unmarshal JSON body into Kubernetes resource")
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid JSON body",
-		})
+		return handleBadRequestError(ctx, "Invalid JSON body")
 	}
 
 	ctx.Locals("resource", *resource)
@@ -44,10 +43,8 @@ func withGvr(ctx *fiber.Ctx) error {
 	group, version, resource := ctx.Params("group"), ctx.Params("version"), ctx.Params("resource")
 
 	if version == "" || resource == "" || group == "" {
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: "Failed to retrieve group, version and resource from request",
-			Code:  fiber.StatusInternalServerError,
-		})
+		return handleInternalServerError(ctx, "Failed to retrieve group, version and resource from request",
+			fmt.Errorf("missing required URL parameters: group=%s, version=%s, resource=%s", group, version, resource))
 	}
 
 	ctx.Locals("gvr", schema.GroupVersionResource{
@@ -58,15 +55,13 @@ func withGvr(ctx *fiber.Ctx) error {
 	return ctx.Next()
 }
 
-func withName(ctx *fiber.Ctx) error {
-	name := ctx.Params("name")
+func withResourceId(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
 
-	if name == "" {
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: "Failed to retrieve resource name from request",
-			Code:  fiber.StatusInternalServerError,
-		})
+	if id == "" {
+		return handleInternalServerError(ctx, "Failed to retrieve resource id from request",
+			fmt.Errorf("missing required URL parameter: id"))
 	}
-	ctx.Locals("name", name)
+	ctx.Locals("resourceId", id)
 	return ctx.Next()
 }

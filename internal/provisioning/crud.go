@@ -5,81 +5,30 @@
 package provisioning
 
 import (
-	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/telekom/quasar/internal/utils"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"strconv"
-	"strings"
 )
 
-// putResource handles PUT requests to create or replace a Kubernetes resource                                                                │ │
-// URL params: group, version, resource, id                                                                                                 │ │
-// Request body: JSON Kubernetes resource (name/GVR must match URL)                                                                           │ │
+// putResource handles PUT requests to create or replace a Kubernetes resource
+// URL params: group, version, resource, id
+// Request body: JSON Kubernetes resource (name/GVR must match URL)
 // Response: HTTP 200 with empty body on success
 func putResource(ctx *fiber.Ctx) error {
-	gvr, err := getGvrFromContext(ctx)
+	gvr, id, resource, err := validateContextWithGvrAndIdAndResource(ctx)
 	if err != nil {
 		return err
 	}
 
-	id, err := getResourceNameFromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	resource, err := getResourceFromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	logRequest("Put", id, gvr, "Request received for resource")
-
-	// Verify if url param id is present in resource
-	if id != resource.GetName() {
-		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Resource name in URL does not match resource name in body",
-			Code:  fiber.StatusBadRequest,
-		})
-	}
-	// Verify if url param gvr is present in resource
-	if resource.GetAPIVersion() != gvr.GroupVersion().String() {
-		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Resource GroupVersion in URL does not match GVR in body",
-			Code:  fiber.StatusBadRequest,
-		})
-	}
-
-	// Verify if url param resource name maps with current rule to build the dataset
-	expectedResource := strings.ToLower(fmt.Sprintf("%ss", resource.GetKind()))
-	if gvr.Resource != expectedResource {
-		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Resource in URL does not correlate to kind in body",
-			Code:  fiber.StatusBadRequest,
-		})
-	}
+	logRequestDebug("Put", id, gvr, "Request received for resource")
 
 	// Store resource
-	if storeManager != nil {
-		utils.AddMissingEnvironment(&resource)
-		if err := storeManager.Create(&resource); err != nil {
-			logger.Error().
-				Err(err).
-				Str("id", id).
-				Str("group", gvr.Group).
-				Str("version", gvr.Version).
-				Str("resource", gvr.Resource).
-				Msg("Failed to put resource")
-
-			return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-				Error:   "Failed to put resource",
-				Code:    fiber.StatusInternalServerError,
-				Details: err.Error(),
-			})
-		}
+	utils.AddMissingEnvironment(&resource)
+	if err := storeManager.Create(&resource); err != nil {
+		logRequestError(err, "Put", id, gvr, "Failed to put resource")
+		return handleInternalServerError(ctx, "Failed to put resource", err)
 	}
-	logRequest("Put", id, gvr, "Request successfully")
+	logRequestDebug("Put", id, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).Send(nil)
 
 }
@@ -88,48 +37,25 @@ func putResource(ctx *fiber.Ctx) error {
 // URL params: group, version, resource, name
 // Response: HTTP 200 with resource JSON or HTTP 404 if not found
 func getResource(ctx *fiber.Ctx) error {
-	gvr, err := getGvrFromContext(ctx)
+	gvr, id, err := validateContextWithGvrAndId(ctx)
 	if err != nil {
 		return err
 	}
 
-	id, err := getResourceNameFromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	logRequest("Get", id, gvr, "Request received for resource")
-
-	if storeManager == nil {
-		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
-			Error: "Store manager not available",
-			Code:  fiber.StatusServiceUnavailable,
-		})
-	}
+	logRequestDebug("Get", id, gvr, "Request received for resource")
 
 	dataset := getDatasetForGvr(gvr)
 	resource, err := storeManager.Read(dataset, id)
 	if err != nil {
-		logger.Error().
-			Err(err).
-			Str("id", id).
-			Msg("Failed to get resource")
-
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:   "Failed to get resource",
-			Code:    fiber.StatusInternalServerError,
-			Details: err.Error(),
-		})
+		logRequestError(err, "Get", id, gvr, "Failed to get resource")
+		return handleInternalServerError(ctx, "Failed to get resource", err)
 	}
 
 	if resource == nil {
-		return ctx.Status(fiber.StatusNotFound).JSON(ErrorResponse{
-			Error: "Resource not found",
-			Code:  fiber.StatusNotFound,
-		})
+		return handleNotFoundError(ctx, "Resource not found")
 	}
 
-	logRequest("Get", id, gvr, "Request successfully")
+	logRequestDebug("Get", id, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Resource: resource,
 	})
@@ -140,12 +66,12 @@ func getResource(ctx *fiber.Ctx) error {
 // Query params: fieldSelector, limit
 // Response: HTTP 200 with array of resources
 func listResources(ctx *fiber.Ctx) error {
-
-	gvr, err := getGvrFromContext(ctx)
+	gvr, err := validateContextWithGvr(ctx)
 	if err != nil {
 		return err
 	}
-	logRequest("List-Resources", "", gvr, "Request received for resource")
+
+	logRequestDebug("List-Resources", "", gvr, "Request received for resource")
 
 	// Parse query parameters
 	fieldSelector := ctx.Query("fieldSelector", "")
@@ -159,31 +85,14 @@ func listResources(ctx *fiber.Ctx) error {
 		}
 	}
 
-	if storeManager == nil {
-		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
-			Error: "Store manager not available",
-			Code:  fiber.StatusServiceUnavailable,
-		})
-	}
-
 	dataset := getDatasetForGvr(gvr)
 	resources, err := storeManager.List(dataset, fieldSelector, limit)
 	if err != nil {
-		logger.Error().
-			Err(err).
-			Str("group", gvr.Group).
-			Str("version", gvr.Version).
-			Str("resource", gvr.Resource).
-			Msg("Failed to list resources")
-
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:   "Failed to list resources",
-			Code:    fiber.StatusInternalServerError,
-			Details: err.Error(),
-		})
+		logRequestError(err, "List-Resources", "", gvr, "Failed to list resources")
+		return handleInternalServerError(ctx, "Failed to list resources", err)
 	}
 
-	logRequest("List-Resources", "", gvr, "Request successfully")
+	logRequestDebug("List-Resources", "", gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Items: resources,
 		Count: len(resources),
@@ -194,38 +103,21 @@ func listResources(ctx *fiber.Ctx) error {
 // URL params: group, version, resource
 // Response: HTTP 200 with array of keys
 func listKeys(ctx *fiber.Ctx) error {
-
-	gvr, err := getGvrFromContext(ctx)
+	gvr, err := validateContextWithGvr(ctx)
 	if err != nil {
 		return err
 	}
-	logRequest("List-Keys", "", gvr, "Request received for resource")
 
-	if storeManager == nil {
-		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
-			Error: "Store manager not available",
-			Code:  fiber.StatusServiceUnavailable,
-		})
-	}
+	logRequestDebug("List-Keys", "", gvr, "Request received for resource")
 
 	dataset := getDatasetForGvr(gvr)
 	keys, err := storeManager.Keys(dataset)
 	if err != nil {
-		logger.Error().
-			Err(err).
-			Str("group", gvr.Group).
-			Str("version", gvr.Version).
-			Str("resource", gvr.Resource).
-			Msg("Failed to list keys")
-
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:   "Failed to list keys",
-			Code:    fiber.StatusInternalServerError,
-			Details: err.Error(),
-		})
+		logRequestError(err, "List-Keys", "", gvr, "Failed to list keys")
+		return handleInternalServerError(ctx, "Failed to list keys", err)
 	}
 
-	logRequest("List-Keys", "", gvr, "Request successfully")
+	logRequestDebug("List-Keys", "", gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Keys: keys,
 	})
@@ -235,38 +127,21 @@ func listKeys(ctx *fiber.Ctx) error {
 // URL params: group, version, resource
 // Response: HTTP 200 with count as result
 func countResources(ctx *fiber.Ctx) error {
-
-	gvr, err := getGvrFromContext(ctx)
+	gvr, err := validateContextWithGvr(ctx)
 	if err != nil {
 		return err
 	}
-	logRequest("Count-Resources", "", gvr, "Request received for resource")
 
-	if storeManager == nil {
-		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
-			Error: "Store manager not available",
-			Code:  fiber.StatusServiceUnavailable,
-		})
-	}
+	logRequestDebug("Count-Resources", "", gvr, "Request received for resource")
 
 	dataset := getDatasetForGvr(gvr)
 	count, err := storeManager.Count(dataset)
 	if err != nil {
-		logger.Error().
-			Err(err).
-			Str("group", gvr.Group).
-			Str("version", gvr.Version).
-			Str("resource", gvr.Resource).
-			Msg("Failed to count Resources")
-
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:   "Failed to count resources",
-			Code:    fiber.StatusInternalServerError,
-			Details: err.Error(),
-		})
+		logRequestError(err, "Count-Resources", "", gvr, "Failed to count resources")
+		return handleInternalServerError(ctx, "Failed to count resources", err)
 	}
 
-	logRequest("Count-Resources", "", gvr, "Request successfully")
+	logRequestDebug("Count-Resources", "", gvr, "Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Count: count,
 	})
@@ -277,129 +152,18 @@ func countResources(ctx *fiber.Ctx) error {
 // Request body: JSON Kubernetes resource (name/GVR must match URL)
 // Response: HTTP 204 with empty body on success
 func deleteResource(ctx *fiber.Ctx) error {
-	gvr, err := getGvrFromContext(ctx)
+	gvr, id, resource, err := validateContextWithGvrAndIdAndResource(ctx)
 	if err != nil {
 		return err
 	}
 
-	id, err := getResourceNameFromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	resource, err := getResourceFromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Verify if url param gvr is present in resource
-	if resource.GetAPIVersion() != gvr.GroupVersion().String() {
-		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Resource GroupVersion in URL does not match GVR in body",
-			Code:  fiber.StatusBadRequest,
-		})
-	}
-
-	logRequest("Delete", id, gvr, "Request received for resource")
-
-	// Verify if url param name is present in resource
-	if id != resource.GetName() {
-		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Resource name in URL does not match resource name in body",
-			Code:  fiber.StatusBadRequest,
-		})
-	}
-
-	// Verify if url param resource name maps with current rule to build the store object
-	expectedResource := strings.ToLower(fmt.Sprintf("%ss", resource.GetKind()))
-	if gvr.Resource != expectedResource {
-		return ctx.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Resource in URL does not correlate to kind in body",
-			Code:  fiber.StatusBadRequest,
-		})
-	}
-
-	if storeManager == nil {
-		return ctx.Status(fiber.StatusServiceUnavailable).JSON(ErrorResponse{
-			Error: "Store manager not available",
-			Code:  fiber.StatusServiceUnavailable,
-		})
-	}
+	logRequestDebug("Delete", id, gvr, "Request received for resource")
 
 	if err := storeManager.Delete(&resource); err != nil {
-		logger.Error().
-			Err(err).
-			Str("name", id).
-			Msg("Failed to delete resource")
-
-		return ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:   "Failed to delete resource",
-			Code:    fiber.StatusInternalServerError,
-			Details: err.Error(),
-		})
+		logRequestError(err, "Delete", id, gvr, "Failed to delete resource")
+		return handleInternalServerError(ctx, "Failed to delete resource", err)
 	}
 
-	logRequest("Delete", id, gvr, "Request successfully")
+	logRequestDebug("Delete", id, gvr, "Request successfully")
 	return ctx.Status(fiber.StatusNoContent).Send(nil)
-}
-
-func logRequest(operation string, id string, gvr schema.GroupVersionResource, msg string) {
-	logger.Debug().
-		Str("id", id).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Str("operation", operation).
-		Msg(msg)
-}
-
-func getGvrFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, error) {
-	gvr, ok := ctx.Locals("gvr").(schema.GroupVersionResource)
-	if !ok || gvr.Version == "" || gvr.Resource == "" || gvr.Group == "" {
-		logger.Warn().
-			Str("group", ctx.Request().URI().String()).
-			Msg("Failed to retrieve group, version and resource from context")
-
-		return schema.GroupVersionResource{},
-			ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-				Error: "Failed to retrieve group, version and resource from context",
-				Code:  fiber.StatusInternalServerError,
-			})
-	}
-	return gvr, nil
-}
-
-func getResourceNameFromContext(ctx *fiber.Ctx) (string, error) {
-	name, ok := ctx.Locals("name").(string)
-	if !ok || name == "" {
-		logger.Warn().
-			Str("group", ctx.Request().URI().String()).
-			Msg("Failed to retrieve name from context")
-
-		return "",
-			ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-				Error: "Failed to retrieve resource name from context",
-				Code:  fiber.StatusInternalServerError,
-			})
-	}
-	return name, nil
-}
-
-func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
-	resource, ok := ctx.Locals("resource").(unstructured.Unstructured)
-	if !ok {
-		logger.Warn().
-			Str("group", ctx.Request().URI().String()).
-			Msg("Failed to retrieve resource from context")
-
-		return unstructured.Unstructured{}, ctx.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: "Failed to retrieve resource from context",
-			Code:  fiber.StatusInternalServerError,
-		})
-	}
-	return resource, nil
-}
-
-func getDatasetForGvr(gvr schema.GroupVersionResource) string {
-	return fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 }

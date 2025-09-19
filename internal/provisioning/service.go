@@ -46,9 +46,9 @@ func setupService(logger *zerolog.Logger) {
 	v1.Get("/", withGvr, listResources)
 	v1.Get("/keys", withGvr, listKeys)
 	v1.Get("/count", withGvr, countResources)
-	v1.Get("/:name", withGvr, withName, getResource)
-	v1.Put("/:name", withGvr, withName, withKubernetesResource, putResource)
-	v1.Delete("/:name", withGvr, withName, withKubernetesResource, deleteResource)
+	v1.Get("/:id", withGvr, withResourceId, getResource)
+	v1.Put("/:id", withGvr, withResourceId, withKubernetesResource, putResource)
+	v1.Delete("/:id", withGvr, withResourceId, withKubernetesResource, deleteResource)
 }
 
 func createLogger() *zerolog.Logger {
