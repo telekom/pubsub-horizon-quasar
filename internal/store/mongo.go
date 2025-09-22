@@ -63,9 +63,8 @@ func (m *MongoStore) Create(obj *unstructured.Unstructured) error {
 	filter, err := m.createFilter(obj)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("_id", string(obj.GetUID())).
-			Msg("Failed to create document in MongoDB")
+			Fields(utils.CreateFieldsForCollection(collectionName, "create", obj)).
+			Msg("Failed to create or update document in MongoDB")
 		return err
 	}
 
@@ -73,16 +72,14 @@ func (m *MongoStore) Create(obj *unstructured.Unstructured) error {
 	_, err = m.getCollection(obj).ReplaceOne(m.ctx, filter, obj.Object, opts)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("_id", string(obj.GetUID())).
-			Msg("Failed to create document in MongoDB")
+			Fields(utils.CreateFieldsForCollection(collectionName, "create", obj)).
+			Msg("Failed to create or update document in MongoDB")
 		return err
 	}
 
 	log.Debug().
-		Str("collection", collectionName).
-		Str("_id", string(obj.GetUID())).
-		Msg("Resource created in MongoDB")
+		Fields(utils.CreateFieldsForCollection(collectionName, "create", obj)).
+		Msg("Resource created or updated in MongoDB")
 	return nil
 }
 
@@ -92,8 +89,7 @@ func (m *MongoStore) Update(oldObj *unstructured.Unstructured, newObj *unstructu
 	filter, err := m.createFilter(oldObj)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("_id", string(oldObj.GetUID())).
+			Fields(utils.CreateFieldsForCollection(collectionName, "update", oldObj)).
 			Msg("Failed to update document in MongoDB")
 		return err
 	}
@@ -102,15 +98,13 @@ func (m *MongoStore) Update(oldObj *unstructured.Unstructured, newObj *unstructu
 	_, err = m.getCollection(oldObj).ReplaceOne(m.ctx, filter, newObj.Object, opts)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("_id", string(oldObj.GetUID())).
+			Fields(utils.CreateFieldsForCollection(collectionName, "update", oldObj)).
 			Msg("Failed to update document in MongoDB")
 		return err
 	}
 
 	log.Debug().
-		Str("collection", collectionName).
-		Str("_id", string(oldObj.GetUID())).
+		Fields(utils.CreateFieldsForCollection(collectionName, "update", oldObj)).
 		Msg("Resource updated in MongoDB")
 	return nil
 }
@@ -121,25 +115,22 @@ func (m *MongoStore) Delete(obj *unstructured.Unstructured) error {
 	filter, err := m.createFilter(obj)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("_id", string(obj.GetUID())).
-			Msg("Failed to delete document from MongoDB")
+			Fields(utils.CreateFieldsForCollection(collectionName, "delete", obj)).
+			Msg("Failed to delete document in MongoDB")
 		return err
 	}
 
 	_, err = m.getCollection(obj).DeleteOne(m.ctx, filter)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("_id", string(obj.GetUID())).
-			Msg("Failed to delete document from MongoDB")
+			Fields(utils.CreateFieldsForCollection(collectionName, "delete", obj)).
+			Msg("Failed to delete document in MongoDB")
 		return err
 	}
 
 	log.Debug().
-		Str("collection", collectionName).
-		Str("_id", string(obj.GetUID())).
-		Msg("Resource deleted from MongoDB")
+		Fields(utils.CreateFieldsForCollection(collectionName, "delete", obj)).
+		Msg("Resource deleted in MongoDB")
 	return nil
 }
 
@@ -149,14 +140,14 @@ func (m *MongoStore) Count(collectionName string) (int, error) {
 	count, err := collection.CountDocuments(m.ctx, bson.M{})
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Msg("Failed to count documents from MongoDB")
+			Fields(utils.CreateFieldsForCollection(collectionName, "count", nil)).
+			Msg("Failed to count documents in MongoDB")
 		return 0, err
 	}
 
 	log.Debug().
-		Str("collection", collectionName).
-		Msg("Count documents from MongoDB")
+		Fields(utils.CreateFieldsForCollection(collectionName, "count", nil)).
+		Msg("Count documents in MongoDB")
 
 	return int(count), nil
 }
@@ -167,7 +158,7 @@ func (m *MongoStore) Keys(collectionName string) ([]string, error) {
 	keys, err := collection.Distinct(m.ctx, "_id", bson.M{})
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
+			Fields(utils.CreateFieldsForCollection(collectionName, "keys", nil)).
 			Msg("Failed to get distinct keys from MongoDB")
 		return nil, err
 	}
@@ -182,7 +173,7 @@ func (m *MongoStore) Keys(collectionName string) ([]string, error) {
 		}
 	}
 	log.Debug().
-		Str("collection", collectionName).
+		Fields(utils.CreateFieldsForCollection(collectionName, "keys", nil)).
 		Msg("Keys retrieved from MongoDB")
 
 	return stringKeys, nil
@@ -200,14 +191,14 @@ func (m *MongoStore) Read(collectionName string, key string) (*unstructured.Unst
 			return nil, nil
 		}
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("name", key).
-			Msg("Failed to get resource from MongoDB")
+			Fields(utils.CreateFieldsForCollection(collectionName, "read", nil)).
+			Str("key", key).
+			Msg("Failed to read resource from MongoDB")
 		return nil, err
 	}
 
 	log.Debug().
-		Str("collection", collectionName).
+		Fields(utils.CreateFieldsForCollection(collectionName, "read", nil)).
 		Str("key", key).
 		Msg("Resource retrieved from MongoDB")
 
@@ -215,18 +206,15 @@ func (m *MongoStore) Read(collectionName string, key string) (*unstructured.Unst
 }
 
 func (m *MongoStore) List(collectionName string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
-
 	collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(collectionName)
-
 	filter := bson.M{}
+
 	// Apply field selector filtering if provided
 	if fieldSelector != "" {
 		fieldFilter, err := m.parseFieldSelector(fieldSelector)
 		if err != nil {
 			log.Warn().Err(err).
-				Str("collection", collectionName).
-				Str("fieldSelector", fieldSelector).
-				Int64("limit", limit).
+				Fields(utils.CreateFieldsForCollectionWithListOptions(collectionName, "list", nil, limit, fieldSelector)).
 				Msg("Failed to parse field selector, ignoring")
 		} else {
 			for k, v := range fieldFilter {
@@ -244,9 +232,7 @@ func (m *MongoStore) List(collectionName string, fieldSelector string, limit int
 	cursor, err := collection.Find(m.ctx, filter, findOptions)
 	if err != nil {
 		log.Error().Err(err).
-			Str("collection", collectionName).
-			Str("fieldSelector", fieldSelector).
-			Int64("limit", limit).
+			Fields(utils.CreateFieldsForCollectionWithListOptions(collectionName, "list", nil, limit, fieldSelector)).
 			Msg("Failed to list resources from MongoDB")
 		return nil, err
 	}
@@ -256,25 +242,40 @@ func (m *MongoStore) List(collectionName string, fieldSelector string, limit int
 	for cursor.Next(m.ctx) {
 		var resource unstructured.Unstructured
 		if err := cursor.Decode(&resource.Object); err != nil {
-			log.Error().Err(err).Msg("Failed to decode resource from MongoDB")
+			log.Error().Err(err).
+				Fields(utils.CreateFieldsForCollectionWithListOptions(collectionName, "list", nil, limit, fieldSelector)).
+				Msg("Failed to decode resource from MongoDB")
 			continue
 		}
 		results = append(results, resource)
 	}
 
 	if err := cursor.Err(); err != nil {
-		log.Error().Err(err).Msg("Cursor error while listing resources from MongoDB")
+		log.Error().Err(err).
+			Fields(utils.CreateFieldsForCollectionWithListOptions(collectionName, "list", nil, limit, fieldSelector)).
+			Msg("Cursor error while listing resources from MongoDB")
 		return nil, err
 	}
 
 	log.Debug().
-		Str("collection", collectionName).
-		Str("fieldSelector", fieldSelector).
-		Int64("limit", limit).
+		Fields(utils.CreateFieldsForCollectionWithListOptions(collectionName, "list", nil, limit, fieldSelector)).
 		Int("count", len(results)).
 		Msg("Resources listed from MongoDB")
 
 	return results, nil
+}
+
+func (m *MongoStore) Shutdown() {
+	if m.Connected() {
+		if err := m.client.Disconnect(m.ctx); err != nil {
+			log.Error().Err(err).Msg("Could not disconnect from MongoDB")
+		}
+	}
+	m.connected.Store(false)
+}
+
+func (m *MongoStore) Connected() bool {
+	return m.connected.Load()
 }
 
 func (m *MongoStore) getCollection(obj *unstructured.Unstructured) *mongo.Collection {
@@ -287,17 +288,6 @@ func (m *MongoStore) createFilter(obj *unstructured.Unstructured) (bson.M, error
 		return nil, err
 	}
 	return bson.M{"_id": id}, nil
-}
-
-func (m *MongoStore) Shutdown() {
-	if err := m.client.Disconnect(m.ctx); err != nil {
-		log.Error().Err(err).Msg("Could not disconnect from MongoDB")
-	}
-	m.connected.Store(false)
-}
-
-func (m *MongoStore) Connected() bool {
-	return m.connected.Load()
 }
 
 // Simple field selector parsing - supports key=value format

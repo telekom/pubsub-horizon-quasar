@@ -5,6 +5,7 @@
 package store
 
 import (
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,42 +21,33 @@ type DualStore interface {
 
 // DualStoreManager handles primary and secondary store
 type DualStoreManager struct {
-	primary      Store
-	secondary    Store
-	mu           sync.RWMutex
-	errorHandler ErrorHandler
+	managerId     string
+	primary       Store
+	secondary     Store
+	primaryType   string
+	secondaryType string
+	mu            sync.RWMutex
+	logger        zerolog.Logger
 }
 
-// ErrorHandler handles dual store operation errors
-type ErrorHandler interface {
-	HandlePrimaryError(operation string, err error) error
-	HandleSecondaryError(operation string, err error)
-}
-
-// DefaultErrorHandler provides default error handling
-type DefaultErrorHandler struct{}
-
-func (h *DefaultErrorHandler) HandlePrimaryError(operation string, err error) error {
-	return err
-}
-
-func (h *DefaultErrorHandler) HandleSecondaryError(operation string, err error) {
-	// Log secondary errors but don't fail the operation
-	log.Warn().Err(err).Str("operation", operation).Msg("Secondary store operation failed")
-}
-
-func SetupDualStoreManager(primaryType, secondaryType string) (DualStore, error) {
+func SetupDualStoreManager(id string, primaryType, secondaryType string) (DualStore, error) {
 	if primaryType == "" {
 		return nil, ErrUnknownStoreType
 	}
 
+	// Create structured logger with context
+	logger := log.With().
+		Str("component", "DualStoreManager").
+		Str("id", id).
+		Str("primaryType", primaryType).
+		Str("secondaryType", secondaryType).
+		Logger()
+
 	// Create primary store
 	primary, err := createStore(primaryType)
 	if err != nil {
-		log.Fatal().Err(err).
-			Str("primaryType", primaryType).
-			Str("secondaryType", secondaryType).
-			Msg("Could not create primary store for store manager!")
+		logger.Fatal().Err(err).
+			Msg("Could not create primary store!")
 		return nil, err
 	}
 
@@ -64,23 +56,25 @@ func SetupDualStoreManager(primaryType, secondaryType string) (DualStore, error)
 	if secondaryType != "" && secondaryType != primaryType {
 		secondary, err = createStore(secondaryType)
 		if err != nil {
-			log.Fatal().Err(err).
-				Str("primaryType", primaryType).
-				Str("secondaryType", secondaryType).
-				Msg("Could not create secondary store for store manager!")
+			logger.Fatal().Err(err).
+				Msg("Could not create secondary store!")
 			return nil, err
 		}
 	}
 
 	// Create and return the DualStoreManager
 	manager := &DualStoreManager{
-		primary:      primary,
-		secondary:    secondary,
-		mu:           sync.RWMutex{},
-		errorHandler: new(DefaultErrorHandler),
+		managerId:     id,
+		primary:       primary,
+		secondary:     secondary,
+		primaryType:   primaryType,
+		secondaryType: secondaryType,
+		mu:            sync.RWMutex{},
+		logger:        logger,
 	}
 
 	manager.Initialize()
+	logger.Debug().Msg("Successfully created dual store manager")
 	return manager, nil
 }
 
@@ -105,15 +99,14 @@ func (m *DualStoreManager) Create(obj *unstructured.Unstructured) error {
 	defer m.mu.RUnlock()
 
 	var primaryErr error
-
-	if primaryErr = m.primary.Create(obj); primaryErr != nil {
-		primaryErr = m.errorHandler.HandlePrimaryError("Create", primaryErr)
+	if primaryErr := m.primary.Create(obj); primaryErr != nil {
+		m.logPrimaryError("Create", primaryErr)
 	}
 
 	if m.secondary != nil {
 		go func() {
 			if secondaryErr := m.secondary.Create(obj); secondaryErr != nil {
-				m.errorHandler.HandleSecondaryError("Create", secondaryErr)
+				m.logSecondaryError("Create", secondaryErr)
 			}
 		}()
 	}
@@ -127,13 +120,13 @@ func (m *DualStoreManager) Update(oldObj *unstructured.Unstructured, newObj *uns
 	var primaryErr error
 
 	if primaryErr = m.primary.Update(oldObj, newObj); primaryErr != nil {
-		primaryErr = m.errorHandler.HandlePrimaryError("Update", primaryErr)
+		m.logPrimaryError("Update", primaryErr)
 	}
 
 	if m.secondary != nil {
 		go func() {
 			if secondaryErr := m.secondary.Update(oldObj, newObj); secondaryErr != nil {
-				m.errorHandler.HandleSecondaryError("Update", secondaryErr)
+				m.logSecondaryError("Update", secondaryErr)
 			}
 		}()
 	}
@@ -147,13 +140,13 @@ func (m *DualStoreManager) Delete(obj *unstructured.Unstructured) error {
 	var primaryErr error
 
 	if primaryErr = m.primary.Delete(obj); primaryErr != nil {
-		primaryErr = m.errorHandler.HandlePrimaryError("Delete", primaryErr)
+		m.logPrimaryError("Update", primaryErr)
 	}
 
 	if m.secondary != nil {
 		go func() {
 			if secondaryErr := m.secondary.Delete(obj); secondaryErr != nil {
-				m.errorHandler.HandleSecondaryError("Delete", secondaryErr)
+				m.logSecondaryError("Update", secondaryErr)
 			}
 		}()
 	}
@@ -210,4 +203,12 @@ func (m *DualStoreManager) GetPrimary() Store {
 
 func (m *DualStoreManager) GetSecondary() Store {
 	return m.secondary
+}
+
+func (m *DualStoreManager) logPrimaryError(operation string, err error) {
+	m.logger.Warn().Err(err).Str("operation", operation).Msg("Primary store operation failed")
+}
+
+func (m *DualStoreManager) logSecondaryError(operation string, err error) {
+	m.logger.Warn().Err(err).Str("operation", operation).Msg("Secondary store operation failed")
 }

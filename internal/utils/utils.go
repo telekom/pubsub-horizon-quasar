@@ -33,8 +33,20 @@ func CreateFieldsForCacheMap(cacheMap string, operation string, obj *unstructure
 }
 
 func CreateFieldsForCollection(collection string, operation string, obj *unstructured.Unstructured) map[string]any {
-	var objFields = CreateFieldsForOp(operation, obj)
-	objFields["collection"] = collection
+	var objFields = make(map[string]any)
+	if obj != nil {
+		objFields = CreateFieldsForOp(operation, obj)
+		objFields["uid"] = obj.GetUID()
+	} else {
+		objFields["collection"] = collection
+	}
+	return objFields
+}
+
+func CreateFieldsForCollectionWithListOptions(collection string, operation string, obj *unstructured.Unstructured, limit int64, fieldSelector string) map[string]any {
+	var objFields = CreateFieldsForCollection(collection, operation, obj)
+	objFields["limit"] = fmt.Sprintf("%d", limit)
+	objFields["fieldSelector"] = fieldSelector
 	return objFields
 }
 

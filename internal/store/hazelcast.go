@@ -138,11 +138,11 @@ func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {
 	}
 
 	if err := cacheMap.Set(s.ctx, obj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Err(err).Msg("Could not write resource to store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).Err(err).Msg("Could not write resource to store!")
 		return err
 	}
 
-	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Msg("Resource added to Hazelcast")
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).Msg("Resource created or updated in Hazelcast")
 	return nil
 }
 
@@ -156,11 +156,11 @@ func (s *HazelcastStore) Update(oldObj *unstructured.Unstructured, newObj *unstr
 	}
 
 	if err := cacheMap.Set(s.ctx, newObj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "add", newObj)).Err(err).Msg("Could not update resource in store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "update", newObj)).Err(err).Msg("Could not update resource in store!")
 		return err
 	}
 
-	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "updated", newObj)).Msg("Resource updated in Hazelcast")
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "update", newObj)).Msg("Resource updated in Hazelcast")
 	return nil
 }
 
@@ -168,7 +168,7 @@ func (s *HazelcastStore) Delete(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	if err := cacheMap.Delete(s.ctx, obj.GetName()); err != nil {
-		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "add", obj)).Err(err).Msg("Could not delete resource from store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Err(err).Msg("Could not delete resource from store!")
 		return err
 	}
 

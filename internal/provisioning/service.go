@@ -75,7 +75,7 @@ func setupApiProvisioningStore() {
 	var secondaryStoreType = provisioningConfig.Secondary.Type
 
 	var err error
-	provisioningApiStore, err = store.SetupDualStoreManager(primaryStoreType, secondaryStoreType)
+	provisioningApiStore, err = store.SetupDualStoreManager("ProvisioningAPIStore", primaryStoreType, secondaryStoreType)
 	if err != nil {
 		log.Fatal().Fields(map[string]any{
 			"primaryStoreType":   primaryStoreType,
