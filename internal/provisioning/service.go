@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	service      *fiber.App
-	logger       *zerolog.Logger
-	storeManager store.DualStore
+	service              *fiber.App
+	logger               *zerolog.Logger
+	provisioningApiStore store.DualStore
 )
 
 func setupService(logger *zerolog.Logger) {
@@ -75,7 +75,7 @@ func setupApiProvisioningStore() {
 	var secondaryStoreType = provisioningConfig.Secondary.Type
 
 	var err error
-	storeManager, err = store.SetupStoreManager(primaryStoreType, secondaryStoreType)
+	provisioningApiStore, err = store.SetupDualStoreManager(primaryStoreType, secondaryStoreType)
 	if err != nil {
 		log.Fatal().Fields(map[string]any{
 			"primaryStoreType":   primaryStoreType,
@@ -89,9 +89,9 @@ func Listen(port int) {
 		logger = createLogger()
 	}
 
-	if storeManager == nil {
+	if provisioningApiStore == nil {
 		setupApiProvisioningStore()
-		utils.RegisterShutdownHook(storeManager.Shutdown, 1)
+		utils.RegisterShutdownHook(provisioningApiStore.Shutdown, 1)
 	}
 
 	if service == nil {
@@ -101,8 +101,8 @@ func Listen(port int) {
 	utils.RegisterShutdownHook(func() {
 		timeout := 30 * time.Second
 		logger.Info().Dur("timeout", timeout).Msg("Shutting down provisioning service...")
-		if storeManager != nil {
-			storeManager.Shutdown()
+		if provisioningApiStore != nil {
+			provisioningApiStore.Shutdown()
 		}
 		if err := service.ShutdownWithTimeout(timeout); err != nil {
 			logger.Error().Err(err).Msg("Failed to shutdown provisioning service gracefully")

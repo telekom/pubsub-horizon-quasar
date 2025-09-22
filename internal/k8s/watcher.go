@@ -190,7 +190,7 @@ func SetupWatcherStore() {
 	var secondaryType = config.Current.Watcher.Store.Secondary.Type
 
 	var err error
-	WatcherStore, err = store.SetupStoreManager(primaryType, secondaryType)
+	WatcherStore, err = store.SetupDualStoreManager(primaryType, secondaryType)
 	if err != nil {
 		log.Fatal().Fields(map[string]any{
 			"primaryType":   primaryType,

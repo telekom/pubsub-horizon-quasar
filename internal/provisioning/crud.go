@@ -24,7 +24,7 @@ func putResource(ctx *fiber.Ctx) error {
 
 	// Store resource
 	utils.AddMissingEnvironment(&resource)
-	if err := storeManager.Create(&resource); err != nil {
+	if err := provisioningApiStore.Create(&resource); err != nil {
 		logRequestError(err, "Put", id, gvr, "Failed to put resource")
 		return handleInternalServerError(ctx, "Failed to put resource", err)
 	}
@@ -45,7 +45,7 @@ func getResource(ctx *fiber.Ctx) error {
 	logRequestDebug("Get", id, gvr, "Request received for resource")
 
 	dataset := getDatasetForGvr(gvr)
-	resource, err := storeManager.Read(dataset, id)
+	resource, err := provisioningApiStore.Read(dataset, id)
 	if err != nil {
 		logRequestError(err, "Get", id, gvr, "Failed to get resource")
 		return handleInternalServerError(ctx, "Failed to get resource", err)
@@ -86,7 +86,7 @@ func listResources(ctx *fiber.Ctx) error {
 	}
 
 	dataset := getDatasetForGvr(gvr)
-	resources, err := storeManager.List(dataset, fieldSelector, limit)
+	resources, err := provisioningApiStore.List(dataset, fieldSelector, limit)
 	if err != nil {
 		logRequestError(err, "List-Resources", "", gvr, "Failed to list resources")
 		return handleInternalServerError(ctx, "Failed to list resources", err)
@@ -111,7 +111,7 @@ func listKeys(ctx *fiber.Ctx) error {
 	logRequestDebug("List-Keys", "", gvr, "Request received for resource")
 
 	dataset := getDatasetForGvr(gvr)
-	keys, err := storeManager.Keys(dataset)
+	keys, err := provisioningApiStore.Keys(dataset)
 	if err != nil {
 		logRequestError(err, "List-Keys", "", gvr, "Failed to list keys")
 		return handleInternalServerError(ctx, "Failed to list keys", err)
@@ -123,7 +123,7 @@ func listKeys(ctx *fiber.Ctx) error {
 	})
 }
 
-// Count Resources handles GET requests to count the resources of a specific type
+// countResources handles GET requests to count the resources of a specific type
 // URL params: group, version, resource
 // Response: HTTP 200 with count as result
 func countResources(ctx *fiber.Ctx) error {
@@ -135,7 +135,7 @@ func countResources(ctx *fiber.Ctx) error {
 	logRequestDebug("Count-Resources", "", gvr, "Request received for resource")
 
 	dataset := getDatasetForGvr(gvr)
-	count, err := storeManager.Count(dataset)
+	count, err := provisioningApiStore.Count(dataset)
 	if err != nil {
 		logRequestError(err, "Count-Resources", "", gvr, "Failed to count resources")
 		return handleInternalServerError(ctx, "Failed to count resources", err)
@@ -159,7 +159,7 @@ func deleteResource(ctx *fiber.Ctx) error {
 
 	logRequestDebug("Delete", id, gvr, "Request received for resource")
 
-	if err := storeManager.Delete(&resource); err != nil {
+	if err := provisioningApiStore.Delete(&resource); err != nil {
 		logRequestError(err, "Delete", id, gvr, "Failed to delete resource")
 		return handleInternalServerError(ctx, "Failed to delete resource", err)
 	}

@@ -44,7 +44,7 @@ func (h *DefaultErrorHandler) HandleSecondaryError(operation string, err error) 
 	log.Warn().Err(err).Str("operation", operation).Msg("Secondary store operation failed")
 }
 
-func SetupStoreManager(primaryType, secondaryType string) (DualStore, error) {
+func SetupDualStoreManager(primaryType, secondaryType string) (DualStore, error) {
 	if primaryType == "" {
 		return nil, ErrUnknownStoreType
 	}
@@ -52,10 +52,10 @@ func SetupStoreManager(primaryType, secondaryType string) (DualStore, error) {
 	// Create primary store
 	primary, err := createStore(primaryType)
 	if err != nil {
-		log.Fatal().Fields(map[string]any{
-			"primaryType":   primaryType,
-			"secondaryType": secondaryType,
-		}).Err(err).Msg("Could not create store manager!")
+		log.Fatal().Err(err).
+			Str("primaryType", primaryType).
+			Str("secondaryType", secondaryType).
+			Msg("Could not create primary store for store manager!")
 		return nil, err
 	}
 
@@ -64,10 +64,10 @@ func SetupStoreManager(primaryType, secondaryType string) (DualStore, error) {
 	if secondaryType != "" && secondaryType != primaryType {
 		secondary, err = createStore(secondaryType)
 		if err != nil {
-			log.Fatal().Fields(map[string]any{
-				"primaryType":   primaryType,
-				"secondaryType": secondaryType,
-			}).Err(err).Msg("Could not create store manager!")
+			log.Fatal().Err(err).
+				Str("primaryType", primaryType).
+				Str("secondaryType", secondaryType).
+				Msg("Could not create secondary store for store manager!")
 			return nil, err
 		}
 	}
@@ -85,20 +85,16 @@ func SetupStoreManager(primaryType, secondaryType string) (DualStore, error) {
 }
 
 func (m *DualStoreManager) Initialize() {
+	m.primary.Initialize()
 
-	if m.primary != nil {
-		m.primary.Initialize()
-	}
 	if m.secondary != nil {
 		m.secondary.Initialize()
 	}
 }
 
 func (m *DualStoreManager) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+	m.primary.InitializeResource(kubernetesClient, resourceConfig)
 
-	if m.primary != nil {
-		m.primary.InitializeResource(kubernetesClient, resourceConfig)
-	}
 	if m.secondary != nil {
 		m.secondary.InitializeResource(kubernetesClient, resourceConfig)
 	}
@@ -110,11 +106,10 @@ func (m *DualStoreManager) Create(obj *unstructured.Unstructured) error {
 
 	var primaryErr error
 
-	if m.primary != nil {
-		if primaryErr = m.primary.Create(obj); primaryErr != nil {
-			primaryErr = m.errorHandler.HandlePrimaryError("Create", primaryErr)
-		}
+	if primaryErr = m.primary.Create(obj); primaryErr != nil {
+		primaryErr = m.errorHandler.HandlePrimaryError("Create", primaryErr)
 	}
+
 	if m.secondary != nil {
 		go func() {
 			if secondaryErr := m.secondary.Create(obj); secondaryErr != nil {
@@ -122,7 +117,6 @@ func (m *DualStoreManager) Create(obj *unstructured.Unstructured) error {
 			}
 		}()
 	}
-
 	return primaryErr
 }
 
@@ -132,10 +126,8 @@ func (m *DualStoreManager) Update(oldObj *unstructured.Unstructured, newObj *uns
 
 	var primaryErr error
 
-	if m.primary != nil {
-		if primaryErr = m.primary.Update(oldObj, newObj); primaryErr != nil {
-			primaryErr = m.errorHandler.HandlePrimaryError("Update", primaryErr)
-		}
+	if primaryErr = m.primary.Update(oldObj, newObj); primaryErr != nil {
+		primaryErr = m.errorHandler.HandlePrimaryError("Update", primaryErr)
 	}
 
 	if m.secondary != nil {
@@ -173,57 +165,40 @@ func (m *DualStoreManager) Count(dataset string) (int, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.primary != nil && m.primary.Connected() {
-		return m.primary.Count(dataset)
-	}
-
-	return 0, ErrNoConnectedStore
+	return m.primary.Count(dataset)
 }
 
 func (m *DualStoreManager) Keys(dataset string) ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.primary != nil && m.primary.Connected() {
-		return m.primary.Keys(dataset)
-	}
-
-	return nil, ErrNoConnectedStore
+	return m.primary.Keys(dataset)
 }
 
 func (m *DualStoreManager) Read(dataset string, name string) (*unstructured.Unstructured, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.primary != nil && m.primary.Connected() {
-		return m.primary.Read(dataset, name)
-	}
-
-	return nil, ErrNoConnectedStore
+	return m.primary.Read(dataset, name)
 }
 
 func (m *DualStoreManager) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.primary != nil && m.primary.Connected() {
-		return m.primary.List(dataset, fieldSelector, limit)
-	}
-
-	return nil, ErrNoConnectedStore
+	return m.primary.List(dataset, fieldSelector, limit)
 }
 
 func (m *DualStoreManager) Shutdown() {
-	if m.primary != nil {
-		m.primary.Shutdown()
-	}
+	m.primary.Shutdown()
+
 	if m.secondary != nil {
 		m.secondary.Shutdown()
 	}
 }
 
 func (m *DualStoreManager) Connected() bool {
-	if m.primary != nil && m.primary.Connected() {
+	if m.primary.Connected() {
 		return true
 	}
 	return false
