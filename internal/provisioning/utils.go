@@ -7,6 +7,7 @@ package provisioning
 import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/telekom/quasar/internal/store"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -75,4 +76,40 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 
 func getDatasetForGvr(gvr schema.GroupVersionResource) string {
 	return fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
+}
+
+func getMongoAndHazelcastStores(dualStore store.DualStore) (mongoStore store.Store, hazelcastStore store.Store) {
+	switch primary := dualStore.GetPrimary().(type) {
+	case *store.MongoStore:
+		mongoStore = primary
+	case *store.HazelcastStore:
+		hazelcastStore = primary
+	case *store.RedisStore:
+		logger.Warn().Msg("Primary store is Redis, not used for MongoDB/Hazelcast sync")
+	}
+
+	switch secondary := dualStore.GetSecondary().(type) {
+	case *store.MongoStore:
+		mongoStore = secondary
+	case *store.HazelcastStore:
+		hazelcastStore = secondary
+	case *store.RedisStore:
+		logger.Warn().Msg("Secondary store is Redis, not used for MongoDB/Hazelcast sync")
+	}
+
+	return mongoStore, hazelcastStore
+}
+
+func logStoreIdentification(mongoStore, hazelcastStore store.Store) {
+	if mongoStore != nil {
+		logger.Debug().Str("store", "MongoDB").Msg("Store identified")
+	} else {
+		logger.Warn().Msg("No MongoDB store found in DualStore configuration")
+	}
+
+	if hazelcastStore != nil {
+		logger.Debug().Str("store", "Hazelcast").Msg("Store identified")
+	} else {
+		logger.Warn().Msg("No Hazelcast store found in DualStore configuration")
+	}
 }

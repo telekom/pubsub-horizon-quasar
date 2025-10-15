@@ -5,6 +5,7 @@
 package provisioning
 
 import (
+	"context"
 	"fmt"
 	"github.com/gofiber/contrib/fiberzerolog"
 	jwtware "github.com/gofiber/contrib/jwt"
@@ -15,6 +16,7 @@ import (
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -92,6 +94,29 @@ func Listen(port int) {
 	if provisioningApiStore == nil {
 		setupApiProvisioningStore()
 		utils.RegisterShutdownHook(provisioningApiStore.Shutdown, 1)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		var wg sync.WaitGroup
+
+		logger.Info().Msg("Starting asynchronous MongoDB to Hazelcast synchronization")
+		RunAsyncMongoToHazelcastSync(ctx, provisioningApiStore, &wg, *logger)
+
+		utils.RegisterShutdownHook(func() {
+			logger.Info().Msg("Waiting for background synchronization to complete before shutdown")
+			cancel()
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
+
+			select {
+			case <-done:
+				logger.Info().Msg("Background synchronization completed")
+			case <-time.After(30 * time.Second):
+				logger.Warn().Msg("Background synchronization did not complete within timeout")
+			}
+		}, 2) // priority 2, to be executed after store shutdown but before service shutdown
 	}
 
 	if service == nil {
