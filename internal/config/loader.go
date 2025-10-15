@@ -31,9 +31,9 @@ func setDefaults() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	viper.SetDefault("logLevel", "info")
+	viper.SetDefault("mode", ModeProvisioning)
 	viper.SetDefault("reSyncPeriod", "30s")
 
-	viper.SetDefault("provisioning.enabled", true)
 	viper.SetDefault("provisioning.port", 8081)
 	viper.SetDefault("provisioning.logLevel", "info")
 
@@ -44,7 +44,6 @@ func setDefaults() {
 	viper.SetDefault("provisioning.security.trustedIssuers", []string{"https://auth.example.com/certs"})
 	viper.SetDefault("provisioning.security.trustedClients", []string{"example-client"})
 
-	viper.SetDefault("watcher.enabled", true)
 	viper.SetDefault("watcher.store.primary.type", "hazelcast")
 	viper.SetDefault("watcher.store.secondary.type", "mongo")
 

@@ -12,6 +12,7 @@ import (
 
 type Configuration struct {
 	LogLevel     string                    `mapstructure:"logLevel"`
+	Mode         Mode                      `mapstructure:"mode"`
 	Provisioning ProvisioningConfiguration `mapstructure:"provisioning"`
 	Watcher      Watcher                   `mapstructure:"watcher"`
 	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
@@ -102,6 +103,5 @@ type StoreConfiguration struct {
 }
 
 type Watcher struct {
-	Enabled bool                   `mapstructure:"enabled"`
-	Store   DualStoreConfiguration `mapstructure:"store"`
+	Store DualStoreConfiguration `mapstructure:"store"`
 }

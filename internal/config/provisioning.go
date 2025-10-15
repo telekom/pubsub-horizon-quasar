@@ -5,7 +5,6 @@
 package config
 
 type ProvisioningConfiguration struct {
-	Enabled  bool                              `mapstructure:"enabled"`
 	Port     int                               `mapstructure:"port"`
 	Security ProvisioningSecurityConfiguration `mapstructure:"security"`
 	LogLevel string                            `mapstructure:"logLevel"`

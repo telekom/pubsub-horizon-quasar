@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/telekom/quasar/internal/config"
@@ -25,6 +26,10 @@ var runCmd = &cobra.Command{
 		var kubeConfigPath, _ = cmd.Flags().GetString("kubeconfig")
 		var err error
 
+		if err := validateMode(); err != nil {
+			log.Fatal().Err(err).Msg("Invalid mode configuration")
+		}
+
 		if useServiceAccount := len(kubeConfigPath) == 0; useServiceAccount {
 			kubernetesClient, err = k8s.CreateInClusterClient()
 			if err != nil {
@@ -37,21 +42,10 @@ var runCmd = &cobra.Command{
 			}
 		}
 
-		if config.Current.Provisioning.Enabled {
+		switch config.Current.Mode {
+		case config.ModeProvisioning:
 			go provisioning.Listen(config.Current.Provisioning.Port)
-		}
-
-		if config.Current.Metrics.Enabled {
-			go metrics.ExposeMetrics()
-		}
-
-		if strings.ToLower(config.Current.Fallback.Type) != "none" {
-			fallback.SetupFallback()
-		} else {
-			log.Warn().Msg("No fallback is configured. Quasar won't be able to restore data if the kubernetes api fails")
-		}
-
-		if config.Current.Watcher.Enabled {
+		case config.ModeWatcher:
 			k8s.SetupWatcherStore()
 			utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
 
@@ -65,10 +59,26 @@ var runCmd = &cobra.Command{
 			}
 		}
 
+		if config.Current.Metrics.Enabled {
+			go metrics.ExposeMetrics()
+		}
+
+		if strings.ToLower(config.Current.Fallback.Type) != "none" {
+			fallback.SetupFallback()
+		} else {
+			log.Warn().Msg("No fallback is configured. Quasar won't be able to restore data if the kubernetes api fails")
+		}
 		utils.GracefulShutdown()
 	},
 }
 
 func init() {
 	runCmd.Flags().StringP("kubeconfig", "k", "", "sets the kubeconfig that should be used (service account will be used if unset)")
+}
+
+func validateMode() error {
+	if config.Current.Mode != config.ModeProvisioning && config.Current.Mode != config.ModeWatcher {
+		return fmt.Errorf("invalid mode %q: must be 'provisioning' or 'watcher'", config.Current.Mode)
+	}
+	return nil
 }
