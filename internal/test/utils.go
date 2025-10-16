@@ -9,8 +9,36 @@ package test
 import (
 	"encoding/json"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes/scheme"
 	"os"
 )
+
+// CreateTestResource is a test helper function that creates a test resource
+func CreateTestResource(name, namespace string, labels map[string]string) *unstructured.Unstructured {
+	resource := &unstructured.Unstructured{}
+	resource.SetAPIVersion("v1")
+	resource.SetKind("TestResource")
+	resource.SetName(name)
+	if namespace != "" {
+		resource.SetNamespace(namespace)
+		// Set UID to namespace/name to match expected ID format
+		resource.SetUID(types.UID(namespace + "/" + name))
+	} else {
+		// Set UID to just name if no namespace
+		resource.SetUID(types.UID(name))
+	}
+	if labels != nil {
+		resource.SetLabels(labels)
+	}
+	return resource
+}
+
+// CreateTestKubernetesClient creates a mock client for testing
+func CreateTestKubernetesClient() *fake.FakeDynamicClient {
+	return fake.NewSimpleDynamicClient(scheme.Scheme)
+}
 
 func ReadTestSubscriptions(file string) []*unstructured.Unstructured {
 	bytes, err := os.ReadFile(file)
