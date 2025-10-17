@@ -16,7 +16,6 @@ import (
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -95,28 +94,18 @@ func Listen(port int) {
 		setupApiProvisioningStore()
 		utils.RegisterShutdownHook(provisioningApiStore.Shutdown, 1)
 
+		// ✅ SYNC: Initial cache population - blocks until complete or timeout
+		logger.Info().Msg("Starting MongoDB to Hazelcast synchronization")
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		var wg sync.WaitGroup
+		defer cancel()
 
-		logger.Info().Msg("Starting asynchronous MongoDB to Hazelcast synchronization")
-		RunAsyncMongoToHazelcastSync(ctx, provisioningApiStore, &wg, *logger)
+		if err := syncMongoToHazelcastWithContext(ctx, provisioningApiStore); err != nil {
+			logger.Error().Err(err).Msg("Initial synchronization failed")
+			log.Fatal().Err(err).Msg("Could not populate Hazelcast cache during startup")
+		}
 
-		utils.RegisterShutdownHook(func() {
-			logger.Info().Msg("Waiting for background synchronization to complete before shutdown")
-			cancel()
-			done := make(chan struct{})
-			go func() {
-				wg.Wait()
-				close(done)
-			}()
-
-			select {
-			case <-done:
-				logger.Info().Msg("Background synchronization completed")
-			case <-time.After(30 * time.Second):
-				logger.Warn().Msg("Background synchronization did not complete within timeout")
-			}
-		}, 2) // priority 2, to be executed after store shutdown but before service shutdown
+		logger.Info().Msg("Cache successfully populated")
 	}
 
 	if service == nil {

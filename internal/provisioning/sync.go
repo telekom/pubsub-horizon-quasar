@@ -6,13 +6,10 @@ package provisioning
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/store"
-	"sync"
 	"time"
 )
 
@@ -128,43 +125,16 @@ func syncMongoToHazelcastWithContext(ctx context.Context, dualStore store.DualSt
 		Int("totalDocuments", totalDocuments).
 		Int("successfulDocuments", successfulDocuments).
 		Int("failedDocuments", failedDocuments).
-		Dur("duration", syncDuration).
+		Str("duration", syncDuration.String()).
 		Msg("MongoDB to Hazelcast synchronization completed")
 
 	if failedDocuments > 0 {
-		err := fmt.Errorf("%d out of %d documents failed to synchronize", failedDocuments, totalDocuments)
-		return err
+		failureRate := float64(failedDocuments) / float64(totalDocuments) * 100
+		logger.Warn().
+			Int("failedDocuments", failedDocuments).
+			Int("totalDocuments", totalDocuments).
+			Float64("failureRate", failureRate).
+			Msg("Some documents failed to synchronize, but synchronization completed. Cache may have partial data.")
 	}
 	return nil
-}
-
-func RunAsyncMongoToHazelcastSync(ctx context.Context, dualStore store.DualStore, wg *sync.WaitGroup, logger zerolog.Logger) {
-	if wg != nil {
-		wg.Add(1)
-	}
-
-	go func() {
-		if wg != nil {
-			defer wg.Done()
-		}
-
-		syncCtx := ctx
-		var cancel context.CancelFunc
-		if ctx == nil {
-			syncCtx, cancel = context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-		}
-
-		if err := syncMongoToHazelcastWithContext(syncCtx, dualStore); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				logger.Warn().Msg("Background MongoDB to Hazelcast synchronization timed out")
-			} else if errors.Is(err, context.Canceled) {
-				logger.Info().Msg("Background MongoDB to Hazelcast synchronization was cancelled")
-			} else {
-				logger.Warn().Err(err).Msg("Background MongoDB to Hazelcast synchronization completed with errors")
-			}
-		} else {
-			logger.Info().Msg("Background MongoDB to Hazelcast synchronization completed successfully")
-		}
-	}()
 }
