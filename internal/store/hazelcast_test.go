@@ -8,86 +8,16 @@ package store
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"github.com/hazelcast/hazelcast-go-client/serialization"
-	"github.com/telekom/quasar/internal/reconciliation"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"os"
 	"sync"
 	"testing"
 
+	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/test"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/dynamic/fake"
 )
-
-var hazelcastStore *HazelcastStore
-
-// TestMain sets up the test environment for all Hazelcast tests.
-// This is a package-level setup that runs before all tests in this package.
-// NOTE: This creates a global hazelcastStore instance that is shared across all tests.
-// Tests that modify the store state should reset it in defer blocks or at the start.
-func TestMain(m *testing.M) {
-	// Setup Docker containers for MongoDB and Hazelcast
-	test.SetupDocker(&test.Options{
-		MongoDb:   true,
-		Hazelcast: true,
-	})
-
-	// Initialize the global hazelcast store instance
-	hazelcastStore = new(HazelcastStore)
-	config.Current = buildTestConfig()
-
-	// Install log recorder to capture log output in tests
-	test.InstallLogRecorder()
-
-	// Run all tests in this package
-	code := m.Run()
-
-	// Cleanup
-	test.TeardownDocker()
-	os.Exit(code)
-}
-
-func buildTestConfig() *config.Configuration {
-	var testConfig = new(config.Configuration)
-	testConfig.Fallback.Mongo.Uri = fmt.Sprintf("mongodb://%s:%s", test.EnvOrDefault("MONGO_HOST", "localhost"), test.EnvOrDefault("MONGO_PORT", "27017"))
-	testConfig.Fallback.Mongo.Database = "horizon"
-	testConfig.Store.Hazelcast = config.HazelcastConfiguration{
-		ClusterName: "horizon",
-		Addresses:   []string{test.EnvOrDefault("HAZELCAST_HOST", "localhost")},
-	}
-	testConfig.Store.Hazelcast.ReconcileMode = config.ReconcileModeIncremental
-
-	var testResourceConfig = config.ResourceConfiguration{}
-	testResourceConfig.Kubernetes.Group = "mygroup"
-	testResourceConfig.Kubernetes.Version = "v1"
-	testResourceConfig.Kubernetes.Resource = "myresource"
-	testResourceConfig.Kubernetes.Namespace = "mynamespace"
-	testResourceConfig.MongoIndexes = []config.MongoResourceIndex{
-		{"spec.subscription.subscriptionId": 1},
-	}
-	testResourceConfig.HazelcastIndexes = []config.HazelcastResourceIndex{
-		{
-			Name:   "subscriptionId",
-			Fields: []string{"spec.subscription.subscriptionId"},
-			Type:   "sorted",
-		},
-	}
-
-	testConfig.Resources = append(testConfig.Resources, testResourceConfig)
-
-	return testConfig
-}
 
 func TestHazelcastStore_Initialize(t *testing.T) {
 	var assertions = assert.New(t)
@@ -172,27 +102,6 @@ func TestHazelcastStore_Shutdown(t *testing.T) {
 
 	hazelcastStore.Shutdown()
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel, zerolog.WarnLevel), "shutdown produces errors and/or warnings")
-}
-
-func createFakeDynamicClient() dynamic.Interface {
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
-	var scheme = runtime.NewScheme()
-
-	// Create a mapping for list kinds to support reconciliation List() operations
-	listKinds := map[schema.GroupVersionResource]string{
-		{
-			Group:    "mygroup",
-			Version:  "v1",
-			Resource: "myresource",
-		}: "MyResourceList",
-		{
-			Group:    "subscriber.horizon.telekom.de",
-			Version:  "v1",
-			Resource: "subscriptions",
-		}: "SubscriptionList",
-	}
-
-	return fake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, subscriptions[0], subscriptions[1])
 }
 
 func TestHazelcastStore_HandleClientEvents(t *testing.T) {
@@ -341,20 +250,4 @@ func TestHazelcastStore_Keys(t *testing.T) {
 		assertions.NotNil(keys, "Keys should return a non-nil slice")
 		assertions.IsType([]string{}, keys, "Keys should return a string slice")
 	}
-}
-
-func getMapItem(assertions *assert.Assertions, hzMap *hazelcast.Map, key any) *unstructured.Unstructured {
-	data, err := hzMap.Get(context.Background(), key)
-	assertions.NoError(err, "could not get subscription %s", key)
-
-	jsonData := data.(serialization.JSON)
-
-	unmarshalledData := make(map[string]any)
-	err = json.Unmarshal(jsonData, &unmarshalledData)
-	assertions.NoError(err, "could not unmarshal subscription %s", key)
-
-	obj := new(unstructured.Unstructured)
-	obj.Object = unmarshalledData
-
-	return obj
 }

@@ -30,24 +30,24 @@ var runCmd = &cobra.Command{
 			log.Fatal().Err(err).Msg("Invalid mode configuration")
 		}
 
-		if useServiceAccount := len(kubeConfigPath) == 0; useServiceAccount {
-			kubernetesClient, err = k8s.CreateInClusterClient()
-			if err != nil {
-				log.Fatal().Err(err).Msg("Could not create kubernetes client!")
-			}
-		} else {
-			kubernetesClient, err = k8s.CreateKubeConfigClient(kubeConfigPath)
-			if err != nil {
-				log.Fatal().Err(err).Msg("Could not create kubernetes client!")
-			}
-		}
-
 		switch config.Current.Mode {
 		case config.ModeProvisioning:
 			go provisioning.Listen(config.Current.Provisioning.Port)
 		case config.ModeWatcher:
 			k8s.SetupWatcherStore()
 			utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
+
+			if useServiceAccount := len(kubeConfigPath) == 0; useServiceAccount {
+				kubernetesClient, err = k8s.CreateInClusterClient()
+				if err != nil {
+					log.Fatal().Err(err).Msg("Could not create kubernetes client!")
+				}
+			} else {
+				kubernetesClient, err = k8s.CreateKubeConfigClient(kubeConfigPath)
+				if err != nil {
+					log.Fatal().Err(err).Msg("Could not create kubernetes client!")
+				}
+			}
 
 			for _, resourceConfig := range config.Current.Resources {
 				watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
