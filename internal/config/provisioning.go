@@ -4,14 +4,14 @@
 
 package config
 
-type ProvisioningConfiguration struct {
-	Port     int                               `mapstructure:"port"`
-	Security ProvisioningSecurityConfiguration `mapstructure:"security"`
-	LogLevel string                            `mapstructure:"logLevel"`
-	Store    DualStore                         `mapstructure:"store"`
+type Provisioning struct {
+	Port     int                  `mapstructure:"port"`
+	Security ProvisioningSecurity `mapstructure:"security"`
+	LogLevel string               `mapstructure:"logLevel"`
+	Store    DualStore            `mapstructure:"store"`
 }
 
-type ProvisioningSecurityConfiguration struct {
+type ProvisioningSecurity struct {
 	Enabled        bool     `mapstructure:"enabled"`
 	TrustedIssuers []string `mapstructure:"trustedIssuers"`
 	TrustedClients []string `mapstructure:"trustedClients"`

@@ -12,12 +12,12 @@ import (
 )
 
 type Configuration struct {
-	LogLevel     string                    `mapstructure:"logLevel"`
-	Mode         Mode                      `mapstructure:"mode"`
-	Provisioning ProvisioningConfiguration `mapstructure:"provisioning"`
-	Watcher      Watcher                   `mapstructure:"watcher"`
-	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
-	Resources    []Resource                `mapstructure:"resources"`
+	LogLevel     string        `mapstructure:"logLevel"`
+	Mode         Mode          `mapstructure:"mode"`
+	Provisioning Provisioning  `mapstructure:"provisioning"`
+	Watcher      Watcher       `mapstructure:"watcher"`
+	ReSyncPeriod time.Duration `mapstructure:"reSyncPeriod"`
+	Resources    []Resource    `mapstructure:"resources"`
 	Store        struct {
 		Redis     Redis     `mapstructure:"redis"`
 		Hazelcast Hazelcast `mapstructure:"hazelcast"`

@@ -11,13 +11,6 @@ const (
 	ReconcileModeFull        ReconcileMode = "full"
 )
 
-type Mode string
-
-const (
-	ModeProvisioning Mode = "provisioning"
-	ModeWatcher      Mode = "watcher"
-)
-
 func (m ReconcileMode) String() string {
 	switch m {
 	case ReconcileModeIncremental:
@@ -28,3 +21,10 @@ func (m ReconcileMode) String() string {
 		return "unknown"
 	}
 }
+
+type Mode string
+
+const (
+	ModeProvisioning Mode = "provisioning"
+	ModeWatcher      Mode = "watcher"
+)
