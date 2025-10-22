@@ -49,7 +49,7 @@ func NewMockDualStoreWithErrors() *MockDualStoreWithErrors {
 
 func (m *MockDualStoreWithErrors) Initialize() {}
 
-func (m *MockDualStoreWithErrors) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (m *MockDualStoreWithErrors) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 }
 
 func (m *MockDualStoreWithErrors) Create(obj *unstructured.Unstructured) error {

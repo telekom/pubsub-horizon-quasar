@@ -26,7 +26,7 @@ type MockDualStore struct{}
 
 func (m *MockDualStore) Initialize() {}
 
-func (m *MockDualStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (m *MockDualStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 }
 
 func (m *MockDualStore) Create(obj *unstructured.Unstructured) error {

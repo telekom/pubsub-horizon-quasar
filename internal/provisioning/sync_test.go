@@ -146,7 +146,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		originalResources := config.Current.Resources
 
 		// Clear resources temporarily
-		config.Current.Resources = []config.ResourceConfiguration{}
+		config.Current.Resources = []config.Resource{}
 
 		dualStore, err := store.SetupDualStoreManager(
 			"test-sync-empty-resources",
@@ -176,13 +176,13 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		originalResources := config.Current.Resources
 
 		// Add additional test resources
-		testResource1 := config.ResourceConfiguration{}
+		testResource1 := config.Resource{}
 		testResource1.Kubernetes.Group = "test.example.com"
 		testResource1.Kubernetes.Version = "v1"
 		testResource1.Kubernetes.Resource = "testresources1"
 		testResource1.Kubernetes.Kind = "TestResource1"
 
-		testResource2 := config.ResourceConfiguration{}
+		testResource2 := config.Resource{}
 		testResource2.Kubernetes.Group = "test.example.com"
 		testResource2.Kubernetes.Version = "v1"
 		testResource2.Kubernetes.Resource = "testresources2"
@@ -245,7 +245,7 @@ func TestSyncMongoToHazelcastEdgeCases(t *testing.T) {
 
 		// Add many test resources to increase iteration time
 		for i := 0; i < 5; i++ {
-			testResource := config.ResourceConfiguration{}
+			testResource := config.Resource{}
 			testResource.Kubernetes.Group = "test.example.com"
 			testResource.Kubernetes.Version = "v1"
 			testResource.Kubernetes.Resource = "testresources" + string(rune('a'+i))
