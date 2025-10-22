@@ -146,7 +146,7 @@ func TestDualStoreManagerInitializeResource(t *testing.T) {
 	defer manager.Shutdown()
 
 	kubernetesClient := test.CreateTestKubernetesClient()
-	resourceConfig := config.ResourceConfiguration{}
+	resourceConfig := config.Resource{}
 	resourceConfig.Kubernetes.Group = ""
 	resourceConfig.Kubernetes.Version = "v1"
 	resourceConfig.Kubernetes.Resource = "testresources"

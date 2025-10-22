@@ -46,7 +46,7 @@ func setupMongoStore() *MongoStore {
 		}
 
 		if !foundTestResourceConfig {
-			testResourceConfig := config.ResourceConfiguration{}
+			testResourceConfig := config.Resource{}
 			testResourceConfig.Kubernetes.Group = "" // Empty group for core v1
 			testResourceConfig.Kubernetes.Version = "v1"
 			testResourceConfig.Kubernetes.Resource = "testresources"
@@ -385,7 +385,7 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 
 	store := setupMongoStore()
 
-	resourceConfig := config.ResourceConfiguration{}
+	resourceConfig := config.Resource{}
 	resourceConfig.Kubernetes.Group = "" // Empty group for core v1
 	resourceConfig.Kubernetes.Version = "v1"
 	resourceConfig.Kubernetes.Resource = "testresources"

@@ -123,7 +123,32 @@ func pingMongoDb() error {
 	return client.Ping(ctx, nil)
 }
 
+// removeContainerIfExists removes a container by name if it exists.
+// This is useful for cleaning up containers from previous failed test runs.
+func removeContainerIfExists(containerName string) {
+	container, err := pool.Client.InspectContainer(containerName)
+	if err != nil {
+		// Container doesn't exist, nothing to do
+		return
+	}
+
+	log.Printf("Found existing container %s, removing it...", containerName)
+
+	removeOptions := docker.RemoveContainerOptions{
+		ID:            container.ID,
+		Force:         true, // Force removal even if running
+		RemoveVolumes: true,
+	}
+
+	if err := pool.Client.RemoveContainer(removeOptions); err != nil {
+		log.Printf("Warning: could not remove existing container %s: %s", containerName, err)
+	}
+}
+
 func setupMongoDb() error {
+	// Remove any existing container from previous failed runs
+	removeContainerIfExists("quasar-mongodb")
+
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Name:         "quasar-mongodb",
 		Repository:   mongoImage,
@@ -138,6 +163,9 @@ func setupMongoDb() error {
 }
 
 func setupHazelcast() error {
+	// Remove any existing container from previous failed runs
+	removeContainerIfExists("quasar-hazelcast")
+
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Name:         "quasar-hazelcast",
 		Repository:   hazelcastImage,

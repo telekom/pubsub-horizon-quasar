@@ -26,7 +26,7 @@ func (s *DummyStore) Initialize() {
 	s.IsInitialized = true
 }
 
-func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 	s.HasInitializedResource = true
 }
 
