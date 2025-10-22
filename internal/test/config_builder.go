@@ -30,7 +30,7 @@ func BuildBaseTestConfig() *config.Configuration {
 	testConfig.Store.Mongo.Database = "horizon"
 
 	// Hazelcast configuration
-	testConfig.Store.Hazelcast = config.HazelcastConfiguration{
+	testConfig.Store.Hazelcast = config.Hazelcast{
 		ClusterName: "horizon",
 		Addresses:   []string{EnvOrDefault("HAZELCAST_HOST", "localhost")},
 	}
