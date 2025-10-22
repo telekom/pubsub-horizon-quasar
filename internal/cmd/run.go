@@ -6,6 +6,8 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/telekom/quasar/internal/config"
@@ -15,7 +17,6 @@ import (
 	"github.com/telekom/quasar/internal/provisioning"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/client-go/dynamic"
-	"strings"
 )
 
 var runCmd = &cobra.Command{
@@ -26,13 +27,11 @@ var runCmd = &cobra.Command{
 		var kubeConfigPath, _ = cmd.Flags().GetString("kubeconfig")
 		var err error
 
-		if err := validateMode(); err != nil {
-			log.Fatal().Err(err).Msg("Invalid mode configuration")
-		}
-
 		switch config.Current.Mode {
+
 		case config.ModeProvisioning:
 			go provisioning.Listen(config.Current.Provisioning.Port)
+
 		case config.ModeWatcher:
 			k8s.SetupWatcherStore()
 			utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
@@ -57,6 +56,11 @@ var runCmd = &cobra.Command{
 				go watcher.Start()
 				utils.RegisterShutdownHook(watcher.Stop, 0)
 			}
+
+		default:
+			err = fmt.Errorf("invalid mode %q: must be 'provisioning' or 'watcher'", config.Current.Mode)
+			log.Fatal().Err(err).Msg("Invalid mode configuration")
+
 		}
 
 		if config.Current.Metrics.Enabled {
@@ -74,11 +78,4 @@ var runCmd = &cobra.Command{
 
 func init() {
 	runCmd.Flags().StringP("kubeconfig", "k", "", "sets the kubeconfig that should be used (service account will be used if unset)")
-}
-
-func validateMode() error {
-	if config.Current.Mode != config.ModeProvisioning && config.Current.Mode != config.ModeWatcher {
-		return fmt.Errorf("invalid mode %q: must be 'provisioning' or 'watcher'", config.Current.Mode)
-	}
-	return nil
 }
