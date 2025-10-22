@@ -25,14 +25,14 @@ var WatcherStore store.Store
 
 type ResourceWatcher struct {
 	client         dynamic.Interface
-	resourceConfig *config.ResourceConfiguration
+	resourceConfig *config.Resource
 	informer       cache.SharedIndexInformer
 	stopChan       chan struct{}
 }
 
 func NewResourceWatcher(
 	client dynamic.Interface,
-	resourceConfig *config.ResourceConfiguration,
+	resourceConfig *config.Resource,
 	reSyncPeriod time.Duration,
 ) (*ResourceWatcher, error) {
 
@@ -158,7 +158,7 @@ func (w *ResourceWatcher) Stop() {
 	close(w.stopChan)
 }
 
-func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfig *config.Resource) {
 	if err := recover(); err != nil {
 		log.Error().Msgf("Recovered from %s during kubernetes metric collection", err)
 		return

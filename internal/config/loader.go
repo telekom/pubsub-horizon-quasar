@@ -6,11 +6,12 @@ package config
 
 import (
 	"errors"
+	"os"
+	"strings"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"os"
-	"strings"
 )
 
 var Current = LoadConfiguration()
@@ -74,7 +75,7 @@ func setDefaults() {
 	viper.SetDefault("store.mongo.uri", "mongodb://localhost:27017")
 	viper.SetDefault("store.mongo.database", "horizon-config")
 
-	viper.SetDefault("resources", []ResourceConfiguration{})
+	viper.SetDefault("resources", []Resource{})
 
 	viper.SetDefault("fallback.type", "mongo")
 	viper.SetDefault("fallback.mongo.uri", "mongodb://localhost:27017")

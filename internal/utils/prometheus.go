@@ -5,14 +5,15 @@
 package utils
 
 import (
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"strings"
 )
 
-func GetLabelsForResource(obj *unstructured.Unstructured, resourceConfig *config.ResourceConfiguration) prometheus.Labels {
+func GetLabelsForResource(obj *unstructured.Unstructured, resourceConfig *config.Resource) prometheus.Labels {
 	var labels = make(prometheus.Labels)
 
 	for labelName, labelValue := range resourceConfig.Prometheus.Labels {

@@ -7,6 +7,12 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
@@ -16,11 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
-	"os"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
 )
 
 var (
@@ -46,13 +47,13 @@ func buildTestConfig() *config.Configuration {
 	var testConfig = new(config.Configuration)
 	testConfig.Watcher.Store.Primary.Type = "dummy"
 
-	var testResourceConfig = config.ResourceConfiguration{}
+	var testResourceConfig = config.Resource{}
 	testResourceConfig.Kubernetes.Group = "subscriber.horizon.telekom.de"
 	testResourceConfig.Kubernetes.Version = "v1"
 	testResourceConfig.Kubernetes.Resource = "subscriptions"
 	testResourceConfig.Kubernetes.Namespace = "playground"
 
-	testConfig.Resources = []config.ResourceConfiguration{testResourceConfig}
+	testConfig.Resources = []config.Resource{testResourceConfig}
 
 	return testConfig
 }

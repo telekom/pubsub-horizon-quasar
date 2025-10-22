@@ -89,7 +89,7 @@ golangci-lint run
 
 **Configuration** (`internal/config/`):
 - Uses Viper for configuration loading (environment variables + config file)
-- `ResourceConfiguration`: Defines which Kubernetes CRs to watch, Prometheus labels, indexes for Mongo/Hazelcast
+- `Resource`: Defines which Kubernetes CRs to watch, Prometheus labels, indexes for Mongo/Hazelcast
 - `Mode` type: `provisioning` or `watcher`
 - Dual store configuration per mode
 

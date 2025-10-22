@@ -5,15 +5,16 @@
 package store
 
 import (
+	"strings"
+
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"strings"
 )
 
 type Store interface {
 	Initialize()
-	InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration)
+	InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource)
 	Create(obj *unstructured.Unstructured) error
 	Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error
 	Delete(obj *unstructured.Unstructured) error

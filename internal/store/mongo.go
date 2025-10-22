@@ -7,6 +7,9 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync/atomic"
+
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
@@ -15,8 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"strings"
-	"sync/atomic"
 )
 
 type MongoStore struct {
@@ -45,7 +46,7 @@ func (m *MongoStore) Initialize() {
 	log.Info().Msg("MongoDB connection established")
 }
 
-func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (m *MongoStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
 		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetCacheName())

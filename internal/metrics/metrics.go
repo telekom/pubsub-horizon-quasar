@@ -6,12 +6,13 @@ package metrics
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
 	"golang.org/x/exp/maps"
-	"strings"
 )
 
 var (
@@ -28,7 +29,7 @@ func init() {
 	counters = make(map[string]*prometheus.CounterVec)
 }
 
-func GetOrCreate(resourceConfig *config.ResourceConfiguration) *prometheus.GaugeVec {
+func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
 	var gaugeName = resourceConfig.GetCacheName()
 
 	gauge, ok := gauges[gaugeName]

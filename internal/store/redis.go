@@ -7,6 +7,7 @@ package store
 import (
 	"context"
 	"fmt"
+
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
@@ -38,7 +39,7 @@ func (s *RedisStore) Initialize() {
 	log.Info().Msg("Redis connection established...")
 }
 
-func (s *RedisStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (s *RedisStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 	// Nothing to do here
 }
 

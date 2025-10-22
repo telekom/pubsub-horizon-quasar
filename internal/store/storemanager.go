@@ -5,12 +5,13 @@
 package store
 
 import (
+	"sync"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"sync"
 )
 
 type DualStore interface {
@@ -86,7 +87,7 @@ func (m *DualStoreManager) Initialize() {
 	}
 }
 
-func (m *DualStoreManager) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (m *DualStoreManager) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 	m.primary.InitializeResource(kubernetesClient, resourceConfig)
 
 	if m.secondary != nil {

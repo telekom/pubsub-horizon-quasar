@@ -17,7 +17,7 @@ type Configuration struct {
 	Provisioning ProvisioningConfiguration `mapstructure:"provisioning"`
 	Watcher      Watcher                   `mapstructure:"watcher"`
 	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
-	Resources    []ResourceConfiguration   `mapstructure:"resources"`
+	Resources    []Resource                `mapstructure:"resources"`
 	Store        struct {
 		Redis     Redis     `mapstructure:"redis"`
 		Hazelcast Hazelcast `mapstructure:"hazelcast"`
@@ -32,7 +32,7 @@ type Configuration struct {
 
 // GetResourceConfiguration returns a resource configuration for the given object if applicable.
 // The second return values represents whether the resource exists.
-func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured) (*ResourceConfiguration, bool) {
+func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured) (*Resource, bool) {
 	// As GroupVersionKind and GroupVersionResource define two different things with the first describing a single resource
 	// and the latter describing the plural of a custom resource we need to do a name-check and perform a normalization by
 	// putting everything into lower-case.

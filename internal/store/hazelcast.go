@@ -6,6 +6,11 @@ package store
 
 import (
 	"context"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
@@ -18,10 +23,6 @@ import (
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"os"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type HazelcastStore struct {
@@ -83,7 +84,7 @@ func (s *HazelcastStore) Initialize() {
 
 }
 
-func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
 
 	var mapName = resourceConfig.GetCacheName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)

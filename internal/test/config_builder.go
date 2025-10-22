@@ -42,7 +42,7 @@ func BuildBaseTestConfig() *config.Configuration {
 // AddTestResource adds a standard test resource configuration.
 // This is a helper for tests that need a basic resource configuration.
 func AddTestResource(cfg *config.Configuration, group, version, resource, kind, namespace string) {
-	resourceConfig := config.ResourceConfiguration{}
+	resourceConfig := config.Resource{}
 	resourceConfig.Kubernetes.Group = group
 	resourceConfig.Kubernetes.Version = version
 	resourceConfig.Kubernetes.Resource = resource
@@ -59,7 +59,7 @@ func AddTestResourceWithIndexes(
 	mongoIndexes []config.MongoResourceIndex,
 	hazelcastIndexes []config.HazelcastResourceIndex,
 ) {
-	resourceConfig := config.ResourceConfiguration{}
+	resourceConfig := config.Resource{}
 	resourceConfig.Kubernetes.Group = group
 	resourceConfig.Kubernetes.Version = version
 	resourceConfig.Kubernetes.Resource = resource

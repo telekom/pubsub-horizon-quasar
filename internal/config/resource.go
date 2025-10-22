@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type ResourceConfiguration struct {
+type Resource struct {
 	Kubernetes struct {
 		Group     string `mapstructure:"group"`
 		Version   string `mapstructure:"version"`
@@ -28,7 +28,7 @@ type ResourceConfiguration struct {
 	Prometheus       Prometheus               `mapstructure:"prometheus"`
 }
 
-func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionResource {
+func (c *Resource) GetGroupVersionResource() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    c.Kubernetes.Group,
 		Version:  c.Kubernetes.Version,
@@ -36,7 +36,7 @@ func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionRes
 	}
 }
 
-func (c *ResourceConfiguration) GetGroupVersionKind() schema.GroupVersionKind {
+func (c *Resource) GetGroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   c.Kubernetes.Group,
 		Version: c.Kubernetes.Version,
@@ -44,7 +44,7 @@ func (c *ResourceConfiguration) GetGroupVersionKind() schema.GroupVersionKind {
 	}
 }
 
-func (c *ResourceConfiguration) GetCacheName() string {
+func (c *Resource) GetCacheName() string {
 	var gvr = c.GetGroupVersionResource()
 	var name = fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 	return strings.ToLower(name)

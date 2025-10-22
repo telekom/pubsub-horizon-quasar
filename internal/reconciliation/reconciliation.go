@@ -6,19 +6,20 @@ package reconciliation
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"sync"
-	"time"
 )
 
 type Reconciliation struct {
 	client   dynamic.Interface
-	resource *config.ResourceConfiguration
+	resource *config.Resource
 	mu       sync.Mutex
 }
 
@@ -29,7 +30,7 @@ type Reconcilable interface {
 	Connected() bool
 }
 
-func NewReconciliation(client dynamic.Interface, resource *config.ResourceConfiguration) *Reconciliation {
+func NewReconciliation(client dynamic.Interface, resource *config.Resource) *Reconciliation {
 	return &Reconciliation{client: client, resource: resource}
 }
 
