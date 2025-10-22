@@ -9,14 +9,15 @@ package test
 import (
 	"context"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"log"
-	"time"
 )
 
 var (
@@ -126,7 +127,11 @@ func pingMongoDb() error {
 // removeContainerIfExists removes a container by name if it exists.
 // This is useful for cleaning up containers from previous failed test runs.
 func removeContainerIfExists(containerName string) {
+	log.Printf("Entered Removecontainer for %s", containerName)
 	container, err := pool.Client.InspectContainer(containerName)
+
+	log.Printf("Container was inspected: %+v, err: %v", container, err)
+
 	if err != nil {
 		// Container doesn't exist, nothing to do
 		return
@@ -139,6 +144,8 @@ func removeContainerIfExists(containerName string) {
 		Force:         true, // Force removal even if running
 		RemoveVolumes: true,
 	}
+
+	log.Printf("Remove options: %+v", removeOptions)
 
 	if err := pool.Client.RemoveContainer(removeOptions); err != nil {
 		log.Printf("Warning: could not remove existing container %s: %s", containerName, err)
