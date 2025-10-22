@@ -7,6 +7,8 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/fallback"
@@ -17,12 +19,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
-	"time"
 )
 
-var (
-	WatcherStore store.Store
-)
+var WatcherStore store.Store
 
 type ResourceWatcher struct {
 	client         dynamic.Interface
