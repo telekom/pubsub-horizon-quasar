@@ -6,6 +6,7 @@ package provisioning
 
 import (
 	"fmt"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/telekom/quasar/internal/store"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -74,7 +75,7 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 	return resource, nil
 }
 
-func getDatasetForGvr(gvr schema.GroupVersionResource) string {
+func getStoreNameForGvr(gvr schema.GroupVersionResource) string {
 	return fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 }
 

@@ -5,9 +5,10 @@
 package provisioning
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/telekom/quasar/internal/utils"
-	"strconv"
 )
 
 // putResource handles PUT requests to create or replace a Kubernetes resource
@@ -44,7 +45,7 @@ func getResource(ctx *fiber.Ctx) error {
 
 	logRequestDebug("Get", id, gvr, "Request received for resource")
 
-	dataset := getDatasetForGvr(gvr)
+	dataset := getStoreNameForGvr(gvr)
 	resource, err := provisioningApiStore.Read(dataset, id)
 	if err != nil {
 		logRequestError(err, "Get", id, gvr, "Failed to get resource")
@@ -85,7 +86,7 @@ func listResources(ctx *fiber.Ctx) error {
 		}
 	}
 
-	dataset := getDatasetForGvr(gvr)
+	dataset := getStoreNameForGvr(gvr)
 	resources, err := provisioningApiStore.List(dataset, fieldSelector, limit)
 	if err != nil {
 		logRequestError(err, "List-Resources", "", gvr, "Failed to list resources")
@@ -110,7 +111,7 @@ func listKeys(ctx *fiber.Ctx) error {
 
 	logRequestDebug("List-Keys", "", gvr, "Request received for resource")
 
-	dataset := getDatasetForGvr(gvr)
+	dataset := getStoreNameForGvr(gvr)
 	keys, err := provisioningApiStore.Keys(dataset)
 	if err != nil {
 		logRequestError(err, "List-Keys", "", gvr, "Failed to list keys")
@@ -134,7 +135,7 @@ func countResources(ctx *fiber.Ctx) error {
 
 	logRequestDebug("Count-Resources", "", gvr, "Request received for resource")
 
-	dataset := getDatasetForGvr(gvr)
+	dataset := getStoreNameForGvr(gvr)
 	count, err := provisioningApiStore.Count(dataset)
 	if err != nil {
 		logRequestError(err, "Count-Resources", "", gvr, "Failed to count resources")
