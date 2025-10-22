@@ -24,13 +24,13 @@ go build
 ### Run Tests
 ```bash
 # Run all tests with coverage
-go test -v ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./... -tags=testing
+go test -v ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./... -tags=testing -p=1
 
 # Run tests in a specific package
-go test -v ./internal/store -tags=testing
+go test -v ./internal/store -tags=testing -p=1
 
 # Run a specific test
-go test -v ./internal/store -run TestHazelcastStore_Create -tags=testing
+go test -v ./internal/store -run TestHazelcastStore_Create -tags=testing -p=1
 ```
 
 ### Run Application
