@@ -144,6 +144,14 @@ golangci-lint run
 - **Meaningful names** for all variables, functions, structs (no single-letter names except in tight loops)
 - **Error variables**: Named after the function that returns them, e.g., `errValidateCustomerFeedback := validateCustomerFeedback(...)`
 - **Type aliases**: Wrap external types in package-local type aliases for easier import management
+- **Package names**: should be short, concise, evocative. lower case, single-word names
+- **Interface names**: one-method interfaces are named by the method name plus an -er suffix or similar modification to construct an agent noun: Reader, Writer, Formatter, CloseNotifier etc.
+- **MixedCaps**: use MixedCaps or mixedCaps rather than underscores to write multiword names
+- **Functions/Variables**: Exported start with uppercase, unexported with lowercase (camel case)
+- **Constants**: Use all capital letters with underscores, e.g., `MAX_RETRY_COUNT`
+- **Boolean variables**: Prefix with Has, Is, Can, or Allow, e.g., `isConnected`, `hasPermission`
+- **Getters**: Avoid "Get" prefix; use `user.Name()` instead of `user.GetName()`
+- **File names**: single lowercase words; compound names use underscores; test files use `_test.go` suffix
 
 ### Nil Handling
 - **Internal functions**: Do NOT check input parameters for nil (caller's responsibility)

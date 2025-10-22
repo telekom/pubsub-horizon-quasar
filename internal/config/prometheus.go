@@ -4,7 +4,7 @@
 
 package config
 
-type PrometheusConfiguration struct {
+type Prometheus struct {
 	Enabled bool              `mapstructure:"enabled"`
 	Labels  map[string]string `mapstructure:"labels"`
 }

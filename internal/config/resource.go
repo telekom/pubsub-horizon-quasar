@@ -6,11 +6,12 @@ package config
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/hazelcast/hazelcast-go-client/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 )
 
 type ResourceConfiguration struct {
@@ -24,7 +25,7 @@ type ResourceConfiguration struct {
 	MongoId          string                   `mapstructure:"mongoId"`
 	MongoIndexes     []MongoResourceIndex     `mapstructure:"mongoIndexes"`
 	HazelcastIndexes []HazelcastResourceIndex `mapstructure:"hazelcastIndexes"`
-	Prometheus       PrometheusConfiguration  `mapstructure:"prometheus"`
+	Prometheus       Prometheus               `mapstructure:"prometheus"`
 }
 
 func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionResource {
