@@ -5,9 +5,10 @@
 package config
 
 import (
+	"time"
+
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"time"
 )
 
 type Configuration struct {
@@ -18,15 +19,15 @@ type Configuration struct {
 	ReSyncPeriod time.Duration             `mapstructure:"reSyncPeriod"`
 	Resources    []ResourceConfiguration   `mapstructure:"resources"`
 	Store        struct {
-		Redis     RedisConfiguration     `mapstructure:"redis"`
-		Hazelcast HazelcastConfiguration `mapstructure:"hazelcast"`
-		Mongo     MongoConfiguration     `mapstructure:"mongo"`
+		Redis     Redis     `mapstructure:"redis"`
+		Hazelcast Hazelcast `mapstructure:"hazelcast"`
+		Mongo     Mongo     `mapstructure:"mongo"`
 	} `mapstructure:"store"`
 	Fallback struct {
-		Type  string             `mapstructure:"type"`
-		Mongo MongoConfiguration `mapstructure:"mongo"`
+		Type  string `mapstructure:"type"`
+		Mongo Mongo  `mapstructure:"mongo"`
 	} `mapstructure:"fallback"`
-	Metrics MetricsConfiguration `mapstructure:"metrics"`
+	Metrics Metrics `mapstructure:"metrics"`
 }
 
 // GetResourceConfiguration returns a resource configuration for the given object if applicable.
@@ -46,7 +47,7 @@ func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured)
 	return nil, false
 }
 
-type RedisConfiguration struct {
+type Redis struct {
 	Host     string `mapstructure:"host"`
 	Port     uint   `mapstructure:"port"`
 	Username string `mapstructure:"username"`
@@ -54,7 +55,7 @@ type RedisConfiguration struct {
 	Database int    `mapstructure:"database"`
 }
 
-type HazelcastConfiguration struct {
+type Hazelcast struct {
 	ClusterName            string                      `mapstructure:"clusterName"`
 	Username               string                      `mapstructure:"username"`
 	Password               string                      `mapstructure:"password"`
@@ -82,26 +83,26 @@ type HazelcastRetry struct {
 	Jitter         float64       `mapstructure:"jitter"`
 }
 
-type MongoConfiguration struct {
+type Mongo struct {
 	Uri      string `mapstructure:"uri"`
 	Database string `mapstructure:"database"`
 }
 
-type MetricsConfiguration struct {
+type Metrics struct {
 	Enabled bool          `mapstructure:"enabled"`
 	Port    int           `mapstructure:"port"`
 	Timeout time.Duration `mapstructure:"timeout"`
 }
 
-type DualStoreConfiguration struct {
-	Primary   StoreConfiguration `mapstructure:"primary"`
-	Secondary StoreConfiguration `mapstructure:"secondary"`
+type DualStore struct {
+	Primary   Store `mapstructure:"primary"`
+	Secondary Store `mapstructure:"secondary"`
 }
 
-type StoreConfiguration struct {
+type Store struct {
 	Type string `mapstructure:"type"`
 }
 
 type Watcher struct {
-	Store DualStoreConfiguration `mapstructure:"store"`
+	Store DualStore `mapstructure:"store"`
 }

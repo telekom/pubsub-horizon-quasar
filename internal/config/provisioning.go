@@ -8,7 +8,7 @@ type ProvisioningConfiguration struct {
 	Port     int                               `mapstructure:"port"`
 	Security ProvisioningSecurityConfiguration `mapstructure:"security"`
 	LogLevel string                            `mapstructure:"logLevel"`
-	Store    DualStoreConfiguration            `mapstructure:"store"`
+	Store    DualStore                         `mapstructure:"store"`
 }
 
 type ProvisioningSecurityConfiguration struct {
