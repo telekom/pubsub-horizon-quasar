@@ -7,13 +7,14 @@ package provisioning
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/store"
-	"time"
 )
 
-func syncMongoToHazelcastWithContext(ctx context.Context, dualStore store.DualStore) error {
+func syncPrimaryToSecondaryWithContext(ctx context.Context, dualStore store.DualStore) error {
 	logger := log.With().Str("operation", "syncMongoToHazelcast").Logger()
 
 	syncStartTime := time.Now()

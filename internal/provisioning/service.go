@@ -244,7 +244,7 @@ func Listen(port int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	if err := syncMongoToHazelcastWithContext(ctx, provisioningApiStore); err != nil {
+	if err := syncPrimaryToSecondaryWithContext(ctx, provisioningApiStore); err != nil {
 		logger.Error().Err(err).Msg("Initial synchronization failed")
 		log.Fatal().Err(err).Msg("Could not populate Hazelcast cache during startup")
 	}

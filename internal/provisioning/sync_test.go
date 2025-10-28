@@ -46,7 +46,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		ctx := context.Background()
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.NoError(err)
 
 		// Verify no error logs
@@ -74,7 +74,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.NoError(err, "sync should complete within timeout")
 	})
 
@@ -94,7 +94,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.Error(err, "sync should fail with cancelled context")
 		assertions.Equal(context.Canceled, err)
 	})
@@ -112,7 +112,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		ctx := context.Background()
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.Error(err, "sync should fail when hazelcast store is missing")
 
 		// Verify error was logged
@@ -133,7 +133,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		ctx := context.Background()
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.Error(err, "sync should fail when mongo store is missing")
 
 		// Verify error was logged
@@ -160,7 +160,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		ctx := context.Background()
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.NoError(err, "sync should succeed with no resources")
 
 		// Verify info logs
@@ -202,7 +202,7 @@ func TestSyncMongoToHazelcastWithContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		ctx := context.Background()
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.NoError(err, "sync should succeed with multiple resources")
 
 		// Verify info logs for multiple resources
@@ -231,7 +231,7 @@ func TestSyncMongoToHazelcastEdgeCases(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		ctx := context.Background()
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.NoError(err)
 
 		// Verify completion log with duration
@@ -271,7 +271,7 @@ func TestSyncMongoToHazelcastEdgeCases(t *testing.T) {
 		// Wait a bit to ensure context is cancelled
 		time.Sleep(10 * time.Millisecond)
 
-		err = syncMongoToHazelcastWithContext(ctx, dualStore)
+		err = syncPrimaryToSecondaryWithContext(ctx, dualStore)
 		assertions.Error(err, "sync should fail with cancelled context during iteration")
 
 		// Restore original resources
