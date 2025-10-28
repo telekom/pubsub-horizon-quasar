@@ -22,7 +22,6 @@ import (
 	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type HazelcastStore struct {
@@ -84,7 +83,7 @@ func (s *HazelcastStore) Initialize() {
 
 }
 
-func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
+func (s *HazelcastStore) InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource) {
 
 	var mapName = resourceConfig.GetCacheName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
@@ -109,14 +108,13 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 		interval = 60 * time.Second
 	}
 
-	recon := reconciler.NewReconciliation(kubernetesClient, resourceConfig)
-	s.reconciliations.Store(mapName, recon)
+	s.reconciliations.Store(mapName, reconciliation)
 
-	go recon.StartPeriodicReconcile(s.ctx, interval, s)
+	go reconciliation.StartPeriodicReconcile(s.ctx, interval, s)
 
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
 		if event.State == cluster.MembershipStateRemoved {
-			recon.SafeReconcile(s)
+			reconciliation.SafeReconcile(s)
 		}
 	})
 

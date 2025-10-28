@@ -13,6 +13,7 @@ import (
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/fallback"
 	"github.com/telekom/quasar/internal/metrics"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -139,7 +140,8 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	WatcherStore.InitializeResource(w.client, w.resourceConfig)
+	recon := NewReconciliationForWatcher(w.client, w.resourceConfig)
+	WatcherStore.InitializeResource(recon, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -196,4 +198,9 @@ func SetupWatcherStore() {
 			"secondaryType": secondaryType,
 		}).Err(err).Msg("Could not create k8s watcher store manager!")
 	}
+}
+
+func NewReconciliationForWatcher(kubernetesClient dynamic.Interface, resource *config.Resource) *reconciliation.Reconciliation {
+	dataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, resource)
+	return reconciliation.NewReconciliation(dataSource, resource)
 }

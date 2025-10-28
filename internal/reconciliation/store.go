@@ -6,20 +6,19 @@ package reconciliation
 
 import (
 	"github.com/telekom/quasar/internal/config"
-	"github.com/telekom/quasar/internal/store"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // StoreDataSource implements DataSource using a store (e.g., MongoDB)
 type StoreDataSource struct {
-	store    store.Store
+	lister   ResourceLister
 	resource *config.Resource
 }
 
 // NewStoreDataSource creates a new store-based data source
-func NewStoreDataSource(store store.Store, resource *config.Resource) *StoreDataSource {
+func NewStoreDataSource(lister ResourceLister, resource *config.Resource) *StoreDataSource {
 	return &StoreDataSource{
-		store:    store,
+		lister:   lister,
 		resource: resource,
 	}
 }
@@ -27,5 +26,5 @@ func NewStoreDataSource(store store.Store, resource *config.Resource) *StoreData
 // ListResources retrieves all resources from the store
 func (s *StoreDataSource) ListResources(resourceName string) ([]unstructured.Unstructured, error) {
 	// Use the store's List method to get all resources
-	return s.store.List(resourceName, "", 0)
+	return s.lister.List(resourceName, "", 0)
 }

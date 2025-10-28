@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	"github.com/telekom/quasar/internal/config"
+	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type Store interface {
 	Initialize()
-	InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource)
+	InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource)
 	Create(obj *unstructured.Unstructured) error
 	Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error
 	Delete(obj *unstructured.Unstructured) error

@@ -10,8 +10,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type DualStore interface {
@@ -87,11 +87,11 @@ func (m *DualStoreManager) Initialize() {
 	}
 }
 
-func (m *DualStoreManager) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
-	m.primary.InitializeResource(kubernetesClient, resourceConfig)
+func (m *DualStoreManager) InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource) {
+	m.primary.InitializeResource(reconciliation, resourceConfig)
 
 	if m.secondary != nil {
-		m.secondary.InitializeResource(kubernetesClient, resourceConfig)
+		m.secondary.InitializeResource(reconciliation, resourceConfig)
 	}
 }
 

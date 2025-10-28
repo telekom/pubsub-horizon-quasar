@@ -10,15 +10,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"os"
+
 	"github.com/gofiber/contrib/fiberzerolog"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
-	"os"
 )
 
 var (
@@ -258,4 +260,9 @@ func Listen(port int) {
 	case err := <-serverError:
 		log.Fatal().Err(err).Msg("HTTP server stopped unexpectedly")
 	}
+}
+
+func NewReconciliationForProvisioningAPI(primaryStore store.Store, resource *config.Resource) *reconciliation.Reconciliation {
+	dataSource := reconciliation.NewStoreDataSource(primaryStore, resource)
+	return reconciliation.NewReconciliation(dataSource, resource)
 }
