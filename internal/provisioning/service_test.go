@@ -15,10 +15,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/test"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 // MockDualStore implements store.DualStore for testing
@@ -26,7 +26,7 @@ type MockDualStore struct{}
 
 func (m *MockDualStore) Initialize() {}
 
-func (m *MockDualStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
+func (m *MockDualStore) InitializeResource(reconciliation *reconciliation.Reconciliation, resourceConfig *config.Resource) {
 }
 
 func (m *MockDualStore) Create(obj *unstructured.Unstructured) error {

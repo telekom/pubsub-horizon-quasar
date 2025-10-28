@@ -34,7 +34,9 @@ func TestHazelcastStore_InitializeResource(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	var testResource = config.Current.Resources[0]
-	hazelcastStore.InitializeResource(createFakeDynamicClient(), &testResource)
+	var kubernetesDataSource = reconciliation.NewKubernetesDataSource(createFakeDynamicClient(), &testResource)
+	var fakeReconciliation = reconciliation.NewReconciliation(kubernetesDataSource, &testResource)
+	hazelcastStore.InitializeResource(fakeReconciliation, &testResource)
 
 	var errorCount = test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
 	assertions.Equal(0, errorCount, "unexpected errors have been logged")
@@ -133,9 +135,11 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 	hazelcastStore.reconciliations = sync.Map{}
 
 	// Store a real Reconciliation object for the resource
+	testResource := config.Current.Resources[0]
+	kubernetesDataSource := reconciliation.NewKubernetesDataSource(createFakeDynamicClient(), &testResource)
 	recon := reconciliation.NewReconciliation(
-		createFakeDynamicClient(),
-		&config.Current.Resources[0],
+		kubernetesDataSource,
+		&testResource,
 	)
 	cacheName := config.Current.Resources[0].GetCacheName()
 	hazelcastStore.reconciliations.Store(cacheName, recon)

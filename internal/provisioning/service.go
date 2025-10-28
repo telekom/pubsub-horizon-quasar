@@ -198,6 +198,11 @@ func Listen(port int) {
 		utils.RegisterShutdownHook(provisioningApiStore.Shutdown, 1)
 	}
 
+	for _, resourceConfig := range config.Current.Resources {
+		recon := NewReconciliationForProvisioningAPI(provisioningApiStore, &resourceConfig)
+		provisioningApiStore.InitializeResource(recon, &resourceConfig)
+	}
+
 	// Setup HTTP service
 	if service == nil {
 		setupService(logger)

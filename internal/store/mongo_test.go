@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/test"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -399,8 +400,10 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 	resourceConfig.MongoIndexes = []config.MongoResourceIndex{indexConfig}
 
 	kubernetesClient := test.CreateTestKubernetesClient()
+	kubernetesDataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, &resourceConfig)
+	fakeReconciliation := reconciliation.NewReconciliation(kubernetesDataSource, &resourceConfig)
 	assertions.NotPanics(func() {
-		store.InitializeResource(kubernetesClient, &resourceConfig)
+		store.InitializeResource(fakeReconciliation, &resourceConfig)
 	}, "no panic expected during resource initialization")
 
 	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetCacheName())

@@ -17,10 +17,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/test"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 // ========================================================================
@@ -49,7 +49,7 @@ func NewMockDualStoreWithErrors() *MockDualStoreWithErrors {
 
 func (m *MockDualStoreWithErrors) Initialize() {}
 
-func (m *MockDualStoreWithErrors) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
+func (m *MockDualStoreWithErrors) InitializeResource(reconciliation *reconciliation.Reconciliation, resourceConfig *config.Resource) {
 }
 
 func (m *MockDualStoreWithErrors) Create(obj *unstructured.Unstructured) error {
