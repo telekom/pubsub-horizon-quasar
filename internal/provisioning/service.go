@@ -5,7 +5,6 @@
 package provisioning
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -245,21 +244,6 @@ func Listen(port int) {
 		logger.Info().Msg("HTTP server started, /health and /ready endpoints available")
 	}
 
-	// Now perform synchronous cache population
-	logger.Info().Msg("Starting MongoDB to Hazelcast synchronization (this may take several minutes)...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	if err := syncMongoToHazelcastWithContext(ctx, provisioningApiStore); err != nil {
-		logger.Error().Err(err).Msg("Initial synchronization failed")
-		log.Fatal().Err(err).Msg("Could not populate Hazelcast cache during startup")
-	}
-
-	// Cache population complete - mark service as ready
-	isReady.Store(true)
-	logger.Info().Msg("Cache successfully populated - service is now READY to accept API requests")
-
 	// Block here waiting for server to exit (on shutdown signal or error)
 	select {
 	case err := <-serverError:
@@ -268,6 +252,6 @@ func Listen(port int) {
 }
 
 func NewReconciliationForProvisioningAPI(primaryStore store.Store, resource *config.Resource) *reconciliation.Reconciliation {
-	dataSource := reconciliation.NewStoreDataSource(primaryStore, resource)
+	dataSource := reconciliation.NewStoreDataSource(primaryStore)
 	return reconciliation.NewReconciliation(dataSource, resource)
 }

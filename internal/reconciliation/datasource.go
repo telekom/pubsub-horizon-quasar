@@ -14,7 +14,7 @@ type DataSource interface {
 }
 
 // ResourceLister provides minimal interface for listing resources from stores
-// This interface is satisfied by any store that implements List method
+// This interface is satisfied by any store that implements List and prevents circular dependencies
 type ResourceLister interface {
 	List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
 }

@@ -132,6 +132,12 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 		Str("cache", r.resource.GetCacheName()).
 		Msg("Starting periodic reconciliation")
 
+	// Initial reconciliation for provisioning mode
+	if (config.Current.Mode == config.ModeProvisioning) && reconcilable.Connected() {
+		r.SafeReconcile(reconcilable)
+	}
+
+	// Periodic reconciliation for all modes
 	for {
 		select {
 		case <-ticker.C:
