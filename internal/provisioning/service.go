@@ -117,13 +117,37 @@ func setupService(logger *zerolog.Logger) {
 		log.Warn().Msg("Provisioning service is running without security, this is not recommended for production environments")
 	}
 
-	v1 := service.Group("/api/v1/resources/:group/:version/:resource")
+	v1 := service.Group("/api/v1/resources/:group/:version/:resource", validateGroupParam)
 	v1.Get("/", withGvr, listResources)
 	v1.Get("/keys", withGvr, listKeys)
 	v1.Get("/count", withGvr, countResources)
 	v1.Get("/:id", withGvr, withResourceId, getResource)
 	v1.Put("/:id", withGvr, withResourceId, withKubernetesResource, putResource)
 	v1.Delete("/:id", withGvr, withResourceId, withKubernetesResource, deleteResource)
+}
+
+func validateGroupParam(c *fiber.Ctx) error {
+	group := c.Params("group")
+	version := c.Params("version")
+	resource := c.Params("resource")
+
+	// check if the provided group/version/resource exists in the configuration
+	found := false
+	for _, res := range config.Current.Resources {
+		if res.Kubernetes.Group == group && res.Kubernetes.Version == version && res.Kubernetes.Resource == resource {
+			found = true
+			log.Info().Msgf("Successfully validated GVR with: %s/%s/%s", group, version, resource)
+			break
+		}
+	}
+
+	if !found {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid group/version/resource combination in path",
+		})
+	}
+
+	return c.Next()
 }
 
 func createLogger() *zerolog.Logger {
