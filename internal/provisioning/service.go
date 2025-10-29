@@ -6,7 +6,6 @@ package provisioning
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"os"
@@ -14,6 +13,7 @@ import (
 	"github.com/gofiber/contrib/fiberzerolog"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/healthcheck"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
@@ -26,7 +26,6 @@ var (
 	service              *fiber.App
 	logger               *zerolog.Logger
 	provisioningApiStore store.DualStore
-	isReady              atomic.Bool // Tracks if the service is ready to accept requests
 )
 
 // ProvisioningService encapsulates the provisioning API service with its dependencies
@@ -98,19 +97,6 @@ func (s *ProvisioningService) GetApp() *fiber.App {
 	return s.app
 }
 
-// readinessMiddleware checks if the service is ready to accept requests
-// Returns 503 Service Unavailable if not ready
-func readinessMiddleware(c *fiber.Ctx) error {
-	if !isReady.Load() {
-		c.Set("Retry-After", "30") // Suggest retry after 30 seconds
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-			"error":  "Service is initializing, please retry later",
-			"status": "not_ready",
-		})
-	}
-	return c.Next()
-}
-
 func setupService(logger *zerolog.Logger) {
 	service = fiber.New(fiber.Config{
 		DisableStartupMessage: log.Logger.GetLevel() != zerolog.DebugLevel,
@@ -121,17 +107,7 @@ func setupService(logger *zerolog.Logger) {
 		Logger: logger,
 	}))
 
-	// Health and readiness endpoints
-	service.Get("/health", func(c *fiber.Ctx) error {
-		return c.SendString("OK")
-	})
-	service.Get("/ready", func(c *fiber.Ctx) error {
-		if isReady.Load() {
-			return c.SendString("READY")
-		}
-		c.Set("Retry-After", "30")
-		return c.Status(fiber.StatusServiceUnavailable).SendString("NOT READY")
-	})
+	service.Use(healthcheck.New())
 
 	if config.Current.Provisioning.Security.Enabled {
 		service.Use(jwtware.New(jwtware.Config{
@@ -141,7 +117,7 @@ func setupService(logger *zerolog.Logger) {
 		log.Warn().Msg("Provisioning service is running without security, this is not recommended for production environments")
 	}
 
-	v1 := service.Group("/api/v1/resources/:group/:version/:resource", readinessMiddleware)
+	v1 := service.Group("/api/v1/resources/:group/:version/:resource")
 	v1.Get("/", withGvr, listResources)
 	v1.Get("/keys", withGvr, listKeys)
 	v1.Get("/count", withGvr, countResources)
@@ -184,9 +160,6 @@ func setupApiProvisioningStore() {
 }
 
 func Listen(port int) {
-	// Set service as not ready initially
-	isReady.Store(false)
-
 	if logger == nil {
 		logger = createLogger()
 	}
