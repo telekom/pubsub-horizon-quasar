@@ -35,8 +35,7 @@ func TestHazelcastStore_InitializeResource(t *testing.T) {
 
 	var testResource = config.Current.Resources[0]
 	var kubernetesDataSource = reconciliation.NewKubernetesDataSource(createFakeDynamicClient(), &testResource)
-	var fakeReconciliation = reconciliation.NewReconciliation(kubernetesDataSource, &testResource)
-	hazelcastStore.InitializeResource(fakeReconciliation, &testResource)
+	hazelcastStore.InitializeResource(kubernetesDataSource, &testResource)
 
 	var errorCount = test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
 	assertions.Equal(0, errorCount, "unexpected errors have been logged")
