@@ -14,7 +14,7 @@ import (
 
 type Store interface {
 	Initialize()
-	InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource)
+	InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource)
 	Create(obj *unstructured.Unstructured) error
 	Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error
 	Delete(obj *unstructured.Unstructured) error

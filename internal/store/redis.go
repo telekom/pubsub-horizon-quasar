@@ -11,7 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
-	reconciler "github.com/telekom/quasar/internal/reconciliation"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -39,7 +39,7 @@ func (s *RedisStore) Initialize() {
 	log.Info().Msg("Redis connection established...")
 }
 
-func (s *RedisStore) InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource) {
+func (s *RedisStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 	// Nothing to do here
 }
 

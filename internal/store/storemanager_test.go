@@ -155,11 +155,10 @@ func TestDualStoreManagerInitializeResource(t *testing.T) {
 
 	// Create proper reconciliation object
 	kubernetesDataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, &resourceConfig)
-	fakeReconciliation := reconciliation.NewReconciliation(kubernetesDataSource, &resourceConfig)
 
 	// Should not panic even though this is a dual store
 	assertions.NotPanics(func() {
-		manager.InitializeResource(fakeReconciliation, &resourceConfig)
+		manager.InitializeResource(kubernetesDataSource, &resourceConfig)
 	}, "InitializeResource should not panic")
 }
 

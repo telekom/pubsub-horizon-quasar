@@ -102,8 +102,8 @@ func Listen(port int) {
 	}
 
 	for _, resourceConfig := range config.Current.Resources {
-		recon := NewReconciliationForProvisioningAPI(provisioningApiStore, &resourceConfig)
-		provisioningApiStore.InitializeResource(recon, &resourceConfig)
+		dataSource := reconciliation.NewStoreDataSource(provisioningApiStore)
+		provisioningApiStore.InitializeResource(dataSource, &resourceConfig)
 	}
 
 	// Setup HTTP service
@@ -153,9 +153,4 @@ func Listen(port int) {
 	case err := <-serverError:
 		log.Fatal().Err(err).Msg("HTTP server stopped unexpectedly")
 	}
-}
-
-func NewReconciliationForProvisioningAPI(primaryStore store.Store, resource *config.Resource) *reconciliation.Reconciliation {
-	dataSource := reconciliation.NewStoreDataSource(primaryStore)
-	return reconciliation.NewReconciliation(dataSource, resource)
 }

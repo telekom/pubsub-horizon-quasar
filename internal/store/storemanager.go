@@ -87,11 +87,11 @@ func (m *DualStoreManager) Initialize() {
 	}
 }
 
-func (m *DualStoreManager) InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource) {
-	m.primary.InitializeResource(reconciliation, resourceConfig)
+func (m *DualStoreManager) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
+	m.primary.InitializeResource(dataSource, resourceConfig)
 
 	if m.secondary != nil {
-		m.secondary.InitializeResource(reconciliation, resourceConfig)
+		m.secondary.InitializeResource(dataSource, resourceConfig)
 	}
 }
 

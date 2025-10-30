@@ -8,6 +8,7 @@ package test
 
 import (
 	"fmt"
+
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/reconciliation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -26,7 +27,7 @@ func (s *DummyStore) Initialize() {
 	s.IsInitialized = true
 }
 
-func (s *DummyStore) InitializeResource(reconciliation *reconciliation.Reconciliation, resourceConfig *config.Resource) {
+func (s *DummyStore) InitializeResource(dataSource *reconciliation.DataSource, resourceConfig *config.Resource) {
 	s.HasInitializedResource = true
 }
 

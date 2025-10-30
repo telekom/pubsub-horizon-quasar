@@ -83,7 +83,7 @@ func (s *HazelcastStore) Initialize() {
 
 }
 
-func (s *HazelcastStore) InitializeResource(reconciliation *reconciler.Reconciliation, resourceConfig *config.Resource) {
+func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
 
 	var mapName = resourceConfig.GetCacheName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
@@ -108,6 +108,7 @@ func (s *HazelcastStore) InitializeResource(reconciliation *reconciler.Reconcili
 		interval = 60 * time.Second
 	}
 
+	reconciliation := reconciler.NewReconciliation(dataSource, resourceConfig)
 	s.reconciliations.Store(mapName, reconciliation)
 
 	go reconciliation.StartPeriodicReconcile(s.ctx, interval, s)

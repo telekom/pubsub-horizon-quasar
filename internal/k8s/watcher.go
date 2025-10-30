@@ -140,8 +140,8 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	recon := NewReconciliationForWatcher(w.client, w.resourceConfig)
-	WatcherStore.InitializeResource(recon, w.resourceConfig)
+	dataSource := reconciliation.NewKubernetesDataSource(w.client, w.resourceConfig)
+	WatcherStore.InitializeResource(dataSource, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -198,9 +198,4 @@ func SetupWatcherStore() {
 			"secondaryType": secondaryType,
 		}).Err(err).Msg("Could not create k8s watcher store manager!")
 	}
-}
-
-func NewReconciliationForWatcher(kubernetesClient dynamic.Interface, resource *config.Resource) *reconciliation.Reconciliation {
-	dataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, resource)
-	return reconciliation.NewReconciliation(dataSource, resource)
 }
