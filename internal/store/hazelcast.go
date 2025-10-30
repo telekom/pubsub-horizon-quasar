@@ -108,14 +108,14 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 		interval = 60 * time.Second
 	}
 
-	reconciliation := reconciler.NewReconciliation(dataSource, resourceConfig)
-	s.reconciliations.Store(mapName, reconciliation)
+	recon := reconciler.NewReconciliation(dataSource, resourceConfig)
+	s.reconciliations.Store(mapName, recon)
 
-	go reconciliation.StartPeriodicReconcile(s.ctx, interval, s)
+	go recon.StartPeriodicReconcile(s.ctx, interval, s)
 
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
 		if event.State == cluster.MembershipStateRemoved {
-			reconciliation.SafeReconcile(s)
+			recon.SafeReconcile(s)
 		}
 	})
 
