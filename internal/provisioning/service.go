@@ -28,75 +28,6 @@ var (
 	provisioningApiStore store.DualStore
 )
 
-// ProvisioningService encapsulates the provisioning API service with its dependencies
-type ProvisioningService struct {
-	app    *fiber.App
-	logger *zerolog.Logger
-	store  store.DualStore
-}
-
-// Setup initializes the Fiber app with routes and middleware
-func (s *ProvisioningService) Setup() error {
-	if s.store == nil {
-		return fmt.Errorf("store is required")
-	}
-	if s.logger == nil {
-		return fmt.Errorf("logger is required")
-	}
-
-	s.app = fiber.New(fiber.Config{
-		DisableStartupMessage: log.Logger.GetLevel() != zerolog.DebugLevel,
-		UnescapePath:          true,
-	})
-
-	s.app.Use(fiberzerolog.New(fiberzerolog.Config{
-		Logger: s.logger,
-	}))
-
-	if config.Current.Provisioning.Security.Enabled {
-		s.app.Use(jwtware.New(jwtware.Config{
-			JWKSetURLs: config.Current.Provisioning.Security.TrustedIssuers,
-		}), withTrustedClients(config.Current.Provisioning.Security.TrustedClients))
-	} else {
-		s.logger.Warn().Msg("Provisioning service is running without security, this is not recommended for production environments")
-	}
-
-	v1 := s.app.Group("/api/v1/resources/:group/:version/:resource")
-	v1.Get("/", withGvr, listResources)
-	v1.Get("/keys", withGvr, listKeys)
-	v1.Get("/count", withGvr, countResources)
-	v1.Get("/:id", withGvr, withResourceId, getResource)
-	v1.Put("/:id", withGvr, withResourceId, withKubernetesResource, putResource)
-	v1.Delete("/:id", withGvr, withResourceId, withKubernetesResource, deleteResource)
-
-	return nil
-}
-
-// Start begins listening for HTTP requests
-func (s *ProvisioningService) Start(port int) error {
-	if s.app == nil {
-		return fmt.Errorf("service not setup, call Setup() first")
-	}
-
-	s.logger.Info().Int("port", port).Msg("Starting provisioning service...")
-	return s.app.Listen(fmt.Sprintf(":%d", port))
-}
-
-// Shutdown gracefully shuts down the service
-func (s *ProvisioningService) Shutdown(timeout time.Duration) error {
-	if s.app == nil {
-		return nil
-	}
-
-	s.logger.Info().Dur("timeout", timeout).Msg("Shutting down provisioning service...")
-	return s.app.ShutdownWithTimeout(timeout)
-}
-
-// GetApp returns the underlying Fiber app (useful for testing)
-func (s *ProvisioningService) GetApp() *fiber.App {
-	return s.app
-}
-
 func setupService(logger *zerolog.Logger) {
 	service = fiber.New(fiber.Config{
 		DisableStartupMessage: log.Logger.GetLevel() != zerolog.DebugLevel,
@@ -117,37 +48,13 @@ func setupService(logger *zerolog.Logger) {
 		log.Warn().Msg("Provisioning service is running without security, this is not recommended for production environments")
 	}
 
-	v1 := service.Group("/api/v1/resources/:group/:version/:resource", validateGroupParam)
-	v1.Get("/", withGvr, listResources)
-	v1.Get("/keys", withGvr, listKeys)
-	v1.Get("/count", withGvr, countResources)
-	v1.Get("/:id", withGvr, withResourceId, getResource)
-	v1.Put("/:id", withGvr, withResourceId, withKubernetesResource, putResource)
-	v1.Delete("/:id", withGvr, withResourceId, withKubernetesResource, deleteResource)
-}
-
-func validateGroupParam(c *fiber.Ctx) error {
-	group := c.Params("group")
-	version := c.Params("version")
-	resource := c.Params("resource")
-
-	// check if the provided group/version/resource exists in the configuration
-	found := false
-	for _, res := range config.Current.Resources {
-		if res.Kubernetes.Group == group && res.Kubernetes.Version == version && res.Kubernetes.Resource == resource {
-			found = true
-			log.Info().Msgf("Successfully validated GVR with: %s/%s/%s", group, version, resource)
-			break
-		}
-	}
-
-	if !found {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid group/version/resource combination in path",
-		})
-	}
-
-	return c.Next()
+	v1 := service.Group("/api/v1/resources/:group/:version/:resource", withGvr)
+	v1.Get("/", listResources)
+	v1.Get("/keys", listKeys)
+	v1.Get("/count", countResources)
+	v1.Get("/:id", withResourceId, getResource)
+	v1.Put("/:id", withResourceId, withKubernetesResource, putResource)
+	v1.Delete("/:id", withResourceId, withKubernetesResource, deleteResource)
 }
 
 func createLogger() *zerolog.Logger {

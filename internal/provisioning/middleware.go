@@ -6,12 +6,14 @@ package provisioning
 
 import (
 	"fmt"
+	"slices"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog/log"
+	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"slices"
 )
 
 func withTrustedClients(trustedClients []string) fiber.Handler {
@@ -42,9 +44,18 @@ func withKubernetesResource(ctx *fiber.Ctx) error {
 func withGvr(ctx *fiber.Ctx) error {
 	group, version, resource := ctx.Params("group"), ctx.Params("version"), ctx.Params("resource")
 
-	if version == "" || resource == "" || group == "" {
-		return handleInternalServerError(ctx, "Failed to retrieve group, version and resource from request",
-			fmt.Errorf("missing required URL parameters: group=%s, version=%s, resource=%s", group, version, resource))
+	// check if the provided group/version/resource exists in the configuration
+	found := false
+	for _, res := range config.Current.Resources {
+		if res.Kubernetes.Group == group && res.Kubernetes.Version == version && res.Kubernetes.Resource == resource {
+			found = true
+			log.Info().Msgf("Successfully validated GVR with: %s/%s/%s", group, version, resource)
+			break
+		}
+	}
+
+	if !found {
+		return handleBadRequestError(ctx, "Unsupported group, version, or resource in request path")
 	}
 
 	ctx.Locals("gvr", schema.GroupVersionResource{
