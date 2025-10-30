@@ -45,16 +45,14 @@ func withGvr(ctx *fiber.Ctx) error {
 	group, version, resource := ctx.Params("group"), ctx.Params("version"), ctx.Params("resource")
 
 	// check if the provided group/version/resource exists in the configuration
-	found := false
-	for _, res := range config.Current.Resources {
-		if res.Kubernetes.Group == group && res.Kubernetes.Version == version && res.Kubernetes.Resource == resource {
-			found = true
-			log.Info().Msgf("Successfully validated GVR with: %s/%s/%s", group, version, resource)
-			break
-		}
-	}
+	found := slices.ContainsFunc(config.Current.Resources, func(res config.Resource) bool {
+		return res.Kubernetes.Group == group &&
+			res.Kubernetes.Version == version &&
+			res.Kubernetes.Resource == resource
+	})
 
 	if !found {
+		log.Debug().Msgf("Unsupported group, version, or resource in request path: %s/%s/%s", group, version, resource)
 		return handleBadRequestError(ctx, "Unsupported group, version, or resource in request path")
 	}
 

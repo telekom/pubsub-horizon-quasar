@@ -14,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/test"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -21,6 +22,12 @@ import (
 func TestWithGvr(t *testing.T) {
 	var assertions = assert.New(t)
 	defer test.LogRecorder.Reset()
+
+	// Add test resources for the middleware tests
+	testConfig := test.BuildBaseTestConfig()
+	test.AddTestResource(testConfig, "subscriber.horizon.telekom.de", "v1", "subscriptions", "Subscription", "default")
+	test.AddTestResource(testConfig, "apps", "v1", "deployments", "Deployment", "default")
+	config.Current = testConfig
 
 	t.Run("valid GVR parameters", func(t *testing.T) {
 		app := createTestFiberApp()
