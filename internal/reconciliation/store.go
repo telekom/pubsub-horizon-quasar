@@ -10,17 +10,17 @@ import (
 
 // StoreDataSource implements DataSource using a store (e.g., MongoDB)
 type StoreDataSource struct {
-	lister ResourceLister
+	store Store
 }
 
 // NewStoreDataSource creates a new store-based data source
-func NewStoreDataSource(lister ResourceLister) *StoreDataSource {
+func NewStoreDataSource(store Store) *StoreDataSource {
 	return &StoreDataSource{
-		lister: lister,
+		store: store,
 	}
 }
 
 // ListResources retrieves all resources from the store
 func (s *StoreDataSource) ListResources(resourceName string) ([]unstructured.Unstructured, error) {
-	return s.lister.List(resourceName, "", 0)
+	return s.store.List(resourceName, "", 0)
 }

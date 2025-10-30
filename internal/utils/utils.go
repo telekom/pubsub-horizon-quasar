@@ -6,10 +6,11 @@ package utils
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/rs/zerolog/log"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 )
 
 func GetFieldsOfObject(obj *unstructured.Unstructured) map[string]any {
@@ -86,4 +87,12 @@ func AsAnySlice(args []string) []any {
 func GetGroupVersionId(obj *unstructured.Unstructured) string {
 	var gvk = obj.GroupVersionKind()
 	return strings.ToLower(fmt.Sprintf("%ss.%s.%s", gvk.Kind, gvk.Group, gvk.Version))
+}
+
+func MatchFieldSelector(obj *unstructured.Unstructured, fieldSelector string) bool {
+	jsonBytes, err := obj.MarshalJSON()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(jsonBytes), fieldSelector)
 }

@@ -325,12 +325,70 @@ func (s *HazelcastStore) onDisconnected() {
 	}
 
 }
+
 func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
-	panic("implement me")
+	hzMap, err := s.client.GetMap(s.ctx, gvr)
+	if err != nil {
+		return nil, err
+	}
+
+	val, err := hzMap.Get(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, ok := val.(serialization.JSON)
+	if !ok {
+		return nil, nil
+	}
+
+	var obj unstructured.Unstructured
+	if err := obj.UnmarshalJSON(jsonData); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
 }
 
 func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
-	panic("implement me")
+	hzMap, err := s.client.GetMap(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	keySet, err := hzMap.GetKeySet(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []unstructured.Unstructured
+	count := int64(0)
+	for _, key := range keySet {
+		if limit > 0 && count >= limit {
+			break
+		}
+		val, err := hzMap.Get(s.ctx, key)
+		if err != nil {
+			continue
+		}
+		jsonData, ok := val.(serialization.JSON)
+		if !ok {
+			continue
+		}
+		var obj unstructured.Unstructured
+		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
+			continue
+		}
+
+		if fieldSelector != "" {
+			if !utils.MatchFieldSelector(&obj, fieldSelector) {
+				continue
+			}
+		}
+		result = append(result, obj)
+		count++
+	}
+	return result, nil
 }
 
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }
