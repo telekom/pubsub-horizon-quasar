@@ -49,7 +49,7 @@ func NewMockDualStoreWithErrors() *MockDualStoreWithErrors {
 
 func (m *MockDualStoreWithErrors) Initialize() {}
 
-func (m *MockDualStoreWithErrors) InitializeResource(reconciliation *reconciliation.Reconciliation, resourceConfig *config.Resource) {
+func (m *MockDualStoreWithErrors) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 }
 
 func (m *MockDualStoreWithErrors) Create(obj *unstructured.Unstructured) error {

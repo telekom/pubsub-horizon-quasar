@@ -401,9 +401,8 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 
 	kubernetesClient := test.CreateTestKubernetesClient()
 	kubernetesDataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, &resourceConfig)
-	fakeReconciliation := reconciliation.NewReconciliation(kubernetesDataSource, &resourceConfig)
 	assertions.NotPanics(func() {
-		store.InitializeResource(fakeReconciliation, &resourceConfig)
+		store.InitializeResource(kubernetesDataSource, &resourceConfig)
 	}, "no panic expected during resource initialization")
 
 	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetCacheName())
