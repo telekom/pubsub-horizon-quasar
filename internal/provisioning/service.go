@@ -31,7 +31,6 @@ var (
 func setupService(logger *zerolog.Logger) {
 	service = fiber.New(fiber.Config{
 		DisableStartupMessage: log.Logger.GetLevel() != zerolog.DebugLevel,
-		UnescapePath:          true,
 	})
 
 	service.Use(fiberzerolog.New(fiberzerolog.Config{

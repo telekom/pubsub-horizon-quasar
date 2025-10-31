@@ -12,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -36,6 +37,7 @@ func withKubernetesResource(ctx *fiber.Ctx) error {
 		log.Error().Err(err).Msg("Failed to unmarshal JSON body: No valid Kubernetes resource provided.")
 		return handleBadRequestError(ctx, "Invalid JSON body: No valid Kubernetes resource provided")
 	}
+	utils.AddMissingEnvironment(resource)
 
 	ctx.Locals("resource", *resource)
 	return ctx.Next()

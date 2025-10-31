@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/telekom/quasar/internal/utils"
 )
 
 // putResource handles PUT requests to create or replace a Kubernetes resource
@@ -24,7 +23,6 @@ func putResource(ctx *fiber.Ctx) error {
 	logRequestDebug("Put", id, gvr, "Request received for resource")
 
 	// Store resource
-	utils.AddMissingEnvironment(&resource)
 	if err := provisioningApiStore.Create(&resource); err != nil {
 		logRequestError(err, "Put", id, gvr, "Failed to put resource")
 		return handleInternalServerError(ctx, "Failed to put resource", err)
@@ -45,8 +43,7 @@ func getResource(ctx *fiber.Ctx) error {
 
 	logRequestDebug("Get", id, gvr, "Request received for resource")
 
-	dataset := getStoreNameForGvr(gvr)
-	resource, err := provisioningApiStore.Read(dataset, id)
+	resource, err := provisioningApiStore.Read(getDataSetForGvr(gvr), id)
 	if err != nil {
 		logRequestError(err, "Get", id, gvr, "Failed to get resource")
 		return handleInternalServerError(ctx, "Failed to get resource", err)
@@ -57,9 +54,7 @@ func getResource(ctx *fiber.Ctx) error {
 	}
 
 	logRequestDebug("Get", id, gvr, "Request successfully")
-	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
-		Resource: resource,
-	})
+	return ctx.Status(fiber.StatusOK).JSON(resource)
 }
 
 // listResources handles GET requests to list Kubernetes resources of a specific type
@@ -86,8 +81,7 @@ func listResources(ctx *fiber.Ctx) error {
 		}
 	}
 
-	dataset := getStoreNameForGvr(gvr)
-	resources, err := provisioningApiStore.List(dataset, fieldSelector, limit)
+	resources, err := provisioningApiStore.List(getDataSetForGvr(gvr), fieldSelector, limit)
 	if err != nil {
 		logRequestError(err, "List-Resources", "", gvr, "Failed to list resources")
 		return handleInternalServerError(ctx, "Failed to list resources", err)
@@ -111,8 +105,7 @@ func listKeys(ctx *fiber.Ctx) error {
 
 	logRequestDebug("List-Keys", "", gvr, "Request received for resource")
 
-	dataset := getStoreNameForGvr(gvr)
-	keys, err := provisioningApiStore.Keys(dataset)
+	keys, err := provisioningApiStore.Keys(getDataSetForGvr(gvr))
 	if err != nil {
 		logRequestError(err, "List-Keys", "", gvr, "Failed to list keys")
 		return handleInternalServerError(ctx, "Failed to list keys", err)
@@ -135,8 +128,7 @@ func countResources(ctx *fiber.Ctx) error {
 
 	logRequestDebug("Count-Resources", "", gvr, "Request received for resource")
 
-	dataset := getStoreNameForGvr(gvr)
-	count, err := provisioningApiStore.Count(dataset)
+	count, err := provisioningApiStore.Count(getDataSetForGvr(gvr))
 	if err != nil {
 		logRequestError(err, "Count-Resources", "", gvr, "Failed to count resources")
 		return handleInternalServerError(ctx, "Failed to count resources", err)
