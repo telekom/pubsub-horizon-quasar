@@ -140,7 +140,7 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 		kubernetesDataSource,
 		&testResource,
 	)
-	cacheName := config.Current.Resources[0].GetCacheName()
+	cacheName := config.Current.Resources[0].GetDataSet()
 	hazelcastStore.reconciliations.Store(cacheName, recon)
 
 	// Trigger onConnected should iterate and run reconciliation

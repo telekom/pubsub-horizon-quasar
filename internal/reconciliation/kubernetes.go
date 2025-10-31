@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// KubernetesDataSource implements reconciliation's DataSource interface using Kubernetes API
+// KubernetesDataSource implements reconciliation's DataSource interface using Kubernetes Client
 type KubernetesDataSource struct {
 	client   dynamic.Interface
 	resource *config.Resource
@@ -27,12 +27,11 @@ func NewDataSourceFromKubernetesClient(client dynamic.Interface, resource *confi
 	}
 }
 
-// ListResources retrieves all resources from Kubernetes
-func (k *KubernetesDataSource) ListResources(resourceName string) ([]unstructured.Unstructured, error) {
+// ListResources retrieves all resources from Kubernetes Client relevant for reconciliation
+func (k *KubernetesDataSource) ListResources() ([]unstructured.Unstructured, error) {
 	resources, err := k.client.Resource(k.resource.GetGroupVersionResource()).
 		Namespace(k.resource.Kubernetes.Namespace).
 		List(context.Background(), v1.ListOptions{})
-
 	if err != nil {
 		return nil, err
 	}

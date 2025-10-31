@@ -173,14 +173,14 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 
 		if err != nil {
 			log.Error().Err(err).Fields(map[string]any{
-				"resource": resourceConfig.GetCacheName(),
+				"resource": resourceConfig.GetDataSet(),
 			}).Msg("Could not resource count")
 
 			time.Sleep(15 * time.Second)
 			continue
 		}
 
-		var gaugeName = resourceConfig.GetCacheName() + "_kubernetes_count"
+		var gaugeName = resourceConfig.GetDataSet() + "_kubernetes_count"
 		metrics.GetOrCreateCustom(gaugeName).WithLabelValues().Set(float64(len(list.Items)))
 		time.Sleep(15 * time.Second)
 	}

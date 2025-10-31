@@ -10,7 +10,7 @@ import (
 
 // DataSource represents a source of truth for reconciliation
 type DataSource interface {
-	ListResources(dataset string) ([]unstructured.Unstructured, error)
+	ListResources() ([]unstructured.Unstructured, error)
 }
 
 // Store provides minimal interface for listing resources from stores
