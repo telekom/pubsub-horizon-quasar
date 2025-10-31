@@ -4,7 +4,11 @@
 
 package provisioning
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"errors"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 // handleInternalServerError returns a standardized internal server error response
 func handleInternalServerError(ctx *fiber.Ctx, message string, err error) error {
@@ -28,5 +32,19 @@ func handleNotFoundError(ctx *fiber.Ctx, message string) error {
 	return ctx.Status(fiber.StatusNotFound).JSON(ErrorResponse{
 		Error: message,
 		Code:  fiber.StatusNotFound,
+	})
+}
+
+func handleErrors(ctx *fiber.Ctx, err error) error {
+	code := fiber.StatusInternalServerError
+
+	var fiberErr *fiber.Error
+	if ok := errors.As(err, &fiberErr); ok {
+		code = fiberErr.Code
+	}
+
+	return ctx.Status(code).JSON(fiber.Map{
+		"error": err.Error(),
+		"code":  code,
 	})
 }

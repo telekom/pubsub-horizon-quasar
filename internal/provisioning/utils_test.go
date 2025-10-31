@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/test"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -18,6 +19,8 @@ import (
 func TestGetDatasetForGvr(t *testing.T) {
 	var assertions = assert.New(t)
 	defer test.LogRecorder.Reset()
+
+	config.Current = test.CreateTestResourceConfig()
 
 	tests := []struct {
 		name     string
@@ -32,24 +35,6 @@ func TestGetDatasetForGvr(t *testing.T) {
 				Resource: "subscriptions",
 			},
 			expected: "subscriptions.subscriber.horizon.telekom.de.v1",
-		},
-		{
-			name: "core group (empty group)",
-			gvr: schema.GroupVersionResource{
-				Group:    "",
-				Version:  "v1",
-				Resource: "pods",
-			},
-			expected: "pods..v1",
-		},
-		{
-			name: "custom resource",
-			gvr: schema.GroupVersionResource{
-				Group:    "mygroup.example.com",
-				Version:  "v1beta1",
-				Resource: "myresources",
-			},
-			expected: "myresources.mygroup.example.com.v1beta1",
 		},
 	}
 

@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/test"
 	"github.com/valyala/fasthttp"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -38,7 +39,7 @@ func TestValidateResourceId(t *testing.T) {
 		resource := &unstructured.Unstructured{}
 		resource.SetName("test-resource")
 
-		err := validateResourceId(ctx, "test-resource", *resource)
+		err := validateResourceId("test-resource", *resource)
 		assertions.NoError(err)
 	})
 
@@ -49,9 +50,8 @@ func TestValidateResourceId(t *testing.T) {
 		resource := &unstructured.Unstructured{}
 		resource.SetName("test-resource")
 
-		validateResourceId(ctx, "different-resource", *resource)
-		// Check that the response status was set to BadRequest
-		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
+		err := validateResourceId("different-resource", *resource)
+		assertions.Error(err, "should return an error")
 	})
 
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -77,7 +77,7 @@ func TestValidateResourceGVR(t *testing.T) {
 			Resource: "subscriptions",
 		}
 
-		err := validateResourceGVR(ctx, gvr, *resource)
+		err := validateResourceApiVersion(gvr, *resource)
 		assertions.NoError(err)
 	})
 
@@ -94,8 +94,13 @@ func TestValidateResourceGVR(t *testing.T) {
 			Resource: "subscriptions",
 		}
 
-		validateResourceGVR(ctx, gvr, *resource)
-		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
+		err := validateResourceApiVersion(gvr, *resource)
+		assertions.Error(err, "should return an error")
+
+		// Verify it's a fiber error with the correct status code
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusBadRequest, fiberErr.Code, "should return BadRequest error code")
 	})
 
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -105,6 +110,8 @@ func TestValidateResourceGVR(t *testing.T) {
 func TestValidateResourceKind(t *testing.T) {
 	var assertions = assert.New(t)
 	defer test.LogRecorder.Reset()
+
+	config.Current = test.CreateTestResourceConfig()
 
 	app := createTestFiberApp()
 
@@ -121,7 +128,7 @@ func TestValidateResourceKind(t *testing.T) {
 			Resource: "subscriptions",
 		}
 
-		err := validateResourceKind(ctx, gvr, *resource)
+		err := validateResourceKind(gvr, *resource)
 		assertions.NoError(err)
 	})
 
@@ -138,8 +145,13 @@ func TestValidateResourceKind(t *testing.T) {
 			Resource: "subscriptions",
 		}
 
-		validateResourceKind(ctx, gvr, *resource)
-		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
+		err := validateResourceKind(gvr, *resource)
+		assertions.Error(err, "should return an error")
+
+		// Verify it's a fiber error with the correct status code
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusBadRequest, fiberErr.Code, "should return BadRequest error code")
 	})
 
 	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -163,7 +175,7 @@ func TestValidateContextWithGvr(t *testing.T) {
 		}
 		ctx.Locals("gvr", expectedGvr)
 
-		gvr, err := validateContextWithGvr(ctx)
+		gvr, err := getGvrFromContext(ctx)
 		assertions.NoError(err)
 		assertions.Equal(expectedGvr, gvr)
 	})
@@ -175,7 +187,7 @@ func TestValidateContextWithGvr(t *testing.T) {
 		// Reset log recorder for this test
 		test.LogRecorder.Reset()
 
-		validateContextWithGvr(ctx)
+		getGvrFromContext(ctx)
 		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 
@@ -188,12 +200,12 @@ func TestValidateContextWithGvr(t *testing.T) {
 
 		// Set invalid GVR (missing required fields)
 		ctx.Locals("gvr", schema.GroupVersionResource{
-			Group:   "subscriber.horizon.telekom.de",
-			Version: "",
+			Group:    "subscriber.horizon.telekom.de",
+			Version:  "",
 			Resource: "",
 		})
 
-		validateContextWithGvr(ctx)
+		getGvrFromContext(ctx)
 		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 }
@@ -216,7 +228,7 @@ func TestValidateContextWithGvrAndId(t *testing.T) {
 		ctx.Locals("gvr", expectedGvr)
 		ctx.Locals("resourceId", "test-resource")
 
-		gvr, id, err := validateContextWithGvrAndId(ctx)
+		gvr, id, err := getGvrAndIdFromContext(ctx)
 		assertions.NoError(err)
 		assertions.Equal(expectedGvr, gvr)
 		assertions.Equal("test-resource", id)
@@ -236,7 +248,7 @@ func TestValidateContextWithGvrAndId(t *testing.T) {
 		}
 		ctx.Locals("gvr", expectedGvr)
 
-		validateContextWithGvrAndId(ctx)
+		getGvrAndIdFromContext(ctx)
 		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 }
@@ -250,6 +262,8 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 	t.Run("valid complete validation", func(t *testing.T) {
 		ctx := app.AcquireCtx(&fasthttp.RequestCtx{})
 		defer app.ReleaseCtx(ctx)
+
+		config.Current = test.CreateTestResourceConfig()
 
 		resource := &unstructured.Unstructured{}
 		resource.SetName("test-subscription")
@@ -266,7 +280,7 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		gvr, id, res, err := validateContextWithGvrAndIdAndResource(ctx)
+		gvr, id, res, err := getGvrAndIdAndResourceFromContext(ctx)
 		assertions.NoError(err)
 		assertions.Equal(expectedGvr, gvr)
 		assertions.Equal("test-subscription", id)
@@ -292,7 +306,7 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		validateContextWithGvrAndIdAndResource(ctx)
+		getGvrAndIdAndResourceFromContext(ctx)
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 
@@ -315,7 +329,7 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		validateContextWithGvrAndIdAndResource(ctx)
+		getGvrAndIdAndResourceFromContext(ctx)
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 
@@ -338,7 +352,7 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		validateContextWithGvrAndIdAndResource(ctx)
+		getGvrAndIdAndResourceFromContext(ctx)
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 }

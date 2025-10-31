@@ -214,11 +214,11 @@ func TestGetResource_Success(t *testing.T) {
 	assertions.Equal(200, resp.StatusCode)
 
 	body, _ := io.ReadAll(resp.Body)
-	var response ResourceResponse
+	var response *unstructured.Unstructured
 	err = json.Unmarshal(body, &response)
 	assertions.NoError(err)
-	assertions.NotNil(response.Resource)
-	assertions.Equal("test-subscription", response.Resource.GetName())
+	assertions.NotNil(response)
+	assertions.Equal("test-subscription", response.GetName())
 }
 
 // TestGetResource_NotFound verifies getResource returns 404 when resource does not exist

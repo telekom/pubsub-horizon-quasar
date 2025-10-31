@@ -15,7 +15,7 @@ import (
 // Request body: JSON Kubernetes resource (name/GVR must match URL)
 // Response: HTTP 200 with empty body on success
 func putResource(ctx *fiber.Ctx) error {
-	gvr, id, resource, err := validateContextWithGvrAndIdAndResource(ctx)
+	gvr, id, resource, err := getGvrAndIdAndResourceFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func putResource(ctx *fiber.Ctx) error {
 // URL params: group, version, resource, name
 // Response: HTTP 200 with resource JSON or HTTP 404 if not found
 func getResource(ctx *fiber.Ctx) error {
-	gvr, id, err := validateContextWithGvrAndId(ctx)
+	gvr, id, err := getGvrAndIdFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func getResource(ctx *fiber.Ctx) error {
 // Query params: fieldSelector, limit
 // Response: HTTP 200 with array of resources
 func listResources(ctx *fiber.Ctx) error {
-	gvr, err := validateContextWithGvr(ctx)
+	gvr, err := getGvrFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func listResources(ctx *fiber.Ctx) error {
 // URL params: group, version, resource
 // Response: HTTP 200 with array of keys
 func listKeys(ctx *fiber.Ctx) error {
-	gvr, err := validateContextWithGvr(ctx)
+	gvr, err := getGvrFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func listKeys(ctx *fiber.Ctx) error {
 // URL params: group, version, resource
 // Response: HTTP 200 with count as result
 func countResources(ctx *fiber.Ctx) error {
-	gvr, err := validateContextWithGvr(ctx)
+	gvr, err := getGvrFromContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func countResources(ctx *fiber.Ctx) error {
 // Request body: JSON Kubernetes resource (name/GVR must match URL)
 // Response: HTTP 204 with empty body on success
 func deleteResource(ctx *fiber.Ctx) error {
-	gvr, id, resource, err := validateContextWithGvrAndIdAndResource(ctx)
+	gvr, id, resource, err := getGvrAndIdAndResourceFromContext(ctx)
 	if err != nil {
 		return err
 	}

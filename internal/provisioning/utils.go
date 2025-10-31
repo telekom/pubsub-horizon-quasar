@@ -75,6 +75,56 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 	return resource, nil
 }
 
+// getGvrAndIdAndResourceFromContext performs all context validation for operations requiring GVR, ID, and Resource
+func getGvrAndIdAndResourceFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, string, unstructured.Unstructured, error) {
+	gvr, err := getGvrFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+	}
+
+	id, err := getResourceIdFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+	}
+
+	resource, err := getResourceFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+	}
+
+	// Validate resource name matches URL
+	if err := validateResourceId(id, resource); err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+	}
+
+	// Validate resource GVR matches URL
+	if err := validateResourceApiVersion(gvr, resource); err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+	}
+
+	// Validate resource kind correlates to URL resource
+	if err := validateResourceKind(gvr, resource); err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+	}
+
+	return gvr, id, resource, nil
+}
+
+// getGvrAndIdFromContext performs validation for operations requiring GVR and ID
+func getGvrAndIdFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, string, error) {
+	gvr, err := getGvrFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", err
+	}
+
+	id, err := getResourceIdFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", err
+	}
+
+	return gvr, id, nil
+}
+
 func getDataSetForGvr(gvr schema.GroupVersionResource) string {
 	for i, r := range config.Current.Resources {
 		k := r.Kubernetes

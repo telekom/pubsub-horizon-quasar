@@ -8,11 +8,13 @@ package test
 
 import (
 	"encoding/json"
+	"os"
+
+	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-	"os"
 )
 
 // CreateTestResource is a test helper function that creates a test resource
@@ -67,4 +69,16 @@ func EnvOrDefault(name string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func CreateTestResourceConfig() *config.Configuration {
+	testConfig := new(config.Configuration)
+	testResourceConfig := config.Resource{}
+	testResourceConfig.Kubernetes.Group = "subscriber.horizon.telekom.de"
+	testResourceConfig.Kubernetes.Version = "v1"
+	testResourceConfig.Kubernetes.Resource = "subscriptions"
+	testResourceConfig.Kubernetes.Namespace = "playground"
+	testResourceConfig.Kubernetes.Kind = "Subscription"
+	testConfig.Resources = []config.Resource{testResourceConfig}
+	return testConfig
 }
