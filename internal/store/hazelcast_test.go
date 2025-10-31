@@ -34,7 +34,7 @@ func TestHazelcastStore_InitializeResource(t *testing.T) {
 	defer test.LogRecorder.Reset()
 
 	var testResource = config.Current.Resources[0]
-	var kubernetesDataSource = reconciliation.NewKubernetesDataSource(createFakeDynamicClient(), &testResource)
+	var kubernetesDataSource = reconciliation.NewDataSourceFromKubernetesClient(createFakeDynamicClient(), &testResource)
 	hazelcastStore.InitializeResource(kubernetesDataSource, &testResource)
 
 	var errorCount = test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
@@ -135,7 +135,7 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 
 	// Store a real Reconciliation object for the resource
 	testResource := config.Current.Resources[0]
-	kubernetesDataSource := reconciliation.NewKubernetesDataSource(createFakeDynamicClient(), &testResource)
+	kubernetesDataSource := reconciliation.NewDataSourceFromKubernetesClient(createFakeDynamicClient(), &testResource)
 	recon := reconciliation.NewReconciliation(
 		kubernetesDataSource,
 		&testResource,

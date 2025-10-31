@@ -95,15 +95,15 @@ func Listen(port int) {
 		logger = createLogger()
 	}
 
-	// Setup store if needed
+	// Setup store if needed and initialize its resources
 	if provisioningApiStore == nil {
 		setupApiProvisioningStore()
 		utils.RegisterShutdownHook(provisioningApiStore.Shutdown, 1)
 	}
 
 	for _, resourceConfig := range config.Current.Resources {
-		dataSource := reconciliation.NewStoreDataSource(provisioningApiStore)
-		provisioningApiStore.InitializeResource(dataSource, &resourceConfig)
+		reconciliationSource := reconciliation.NewDataSourceFromStore(provisioningApiStore)
+		provisioningApiStore.InitializeResource(reconciliationSource, &resourceConfig)
 	}
 
 	// Setup HTTP service

@@ -154,7 +154,7 @@ func TestDualStoreManagerInitializeResource(t *testing.T) {
 	resourceConfig.Kubernetes.Kind = "TestResource"
 
 	// Create proper reconciliation object
-	kubernetesDataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, &resourceConfig)
+	kubernetesDataSource := reconciliation.NewDataSourceFromKubernetesClient(kubernetesClient, &resourceConfig)
 
 	// Should not panic even though this is a dual store
 	assertions.NotPanics(func() {

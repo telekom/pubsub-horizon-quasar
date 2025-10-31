@@ -111,6 +111,12 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 	recon := reconciler.NewReconciliation(dataSource, resourceConfig)
 	s.reconciliations.Store(mapName, recon)
 
+	// start reconcile immediately for provisioning mode to ensure initial store filling
+	if (config.Current.Mode == config.ModeProvisioning) && s.Connected() {
+		recon.SafeReconcile(s)
+	}
+
+	// start reconcile periodically for all modes
 	go recon.StartPeriodicReconcile(s.ctx, interval, s)
 
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
@@ -176,10 +182,69 @@ func (s *HazelcastStore) Delete(obj *unstructured.Unstructured) error {
 	return nil
 }
 
-func (s *HazelcastStore) Shutdown() {
-	if err := s.client.Shutdown(s.ctx); err != nil {
-		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
+	hzMap, err := s.client.GetMap(s.ctx, gvr)
+	if err != nil {
+		return nil, err
 	}
+
+	val, err := hzMap.Get(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, ok := val.(serialization.JSON)
+	if !ok {
+		return nil, nil
+	}
+
+	var obj unstructured.Unstructured
+	if err := obj.UnmarshalJSON(jsonData); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
+}
+
+func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	hzMap, err := s.client.GetMap(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	keySet, err := hzMap.GetKeySet(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []unstructured.Unstructured
+	count := int64(0)
+	for _, key := range keySet {
+		if limit > 0 && count >= limit {
+			break
+		}
+		val, err := hzMap.Get(s.ctx, key)
+		if err != nil {
+			continue
+		}
+		jsonData, ok := val.(serialization.JSON)
+		if !ok {
+			continue
+		}
+		var obj unstructured.Unstructured
+		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
+			continue
+		}
+
+		if fieldSelector != "" {
+			if !utils.MatchFieldSelector(&obj, fieldSelector) {
+				continue
+			}
+		}
+		result = append(result, obj)
+		count++
+	}
+	return result, nil
 }
 
 func (s *HazelcastStore) Count(mapName string) (int, error) {
@@ -213,6 +278,12 @@ func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
 	}
 
 	return keys, nil
+}
+
+func (s *HazelcastStore) Shutdown() {
+	if err := s.client.Shutdown(s.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+	}
 }
 
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
@@ -324,71 +395,6 @@ func (s *HazelcastStore) onDisconnected() {
 		log.Debug().Msg("Hazelcast client disconnected — connected flag reset")
 	}
 
-}
-
-func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
-	hzMap, err := s.client.GetMap(s.ctx, gvr)
-	if err != nil {
-		return nil, err
-	}
-
-	val, err := hzMap.Get(s.ctx, name)
-	if err != nil {
-		return nil, err
-	}
-
-	jsonData, ok := val.(serialization.JSON)
-	if !ok {
-		return nil, nil
-	}
-
-	var obj unstructured.Unstructured
-	if err := obj.UnmarshalJSON(jsonData); err != nil {
-		return nil, err
-	}
-
-	return &obj, nil
-}
-
-func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
-	hzMap, err := s.client.GetMap(s.ctx, name)
-	if err != nil {
-		return nil, err
-	}
-
-	keySet, err := hzMap.GetKeySet(s.ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []unstructured.Unstructured
-	count := int64(0)
-	for _, key := range keySet {
-		if limit > 0 && count >= limit {
-			break
-		}
-		val, err := hzMap.Get(s.ctx, key)
-		if err != nil {
-			continue
-		}
-		jsonData, ok := val.(serialization.JSON)
-		if !ok {
-			continue
-		}
-		var obj unstructured.Unstructured
-		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
-			continue
-		}
-
-		if fieldSelector != "" {
-			if !utils.MatchFieldSelector(&obj, fieldSelector) {
-				continue
-			}
-		}
-		result = append(result, obj)
-		count++
-	}
-	return result, nil
 }
 
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

@@ -140,8 +140,8 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	dataSource := reconciliation.NewKubernetesDataSource(w.client, w.resourceConfig)
-	WatcherStore.InitializeResource(dataSource, w.resourceConfig)
+	reconciliationSource := reconciliation.NewDataSourceFromKubernetesClient(w.client, w.resourceConfig)
+	WatcherStore.InitializeResource(reconciliationSource, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {

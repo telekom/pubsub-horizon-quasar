@@ -400,7 +400,7 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 	resourceConfig.MongoIndexes = []config.MongoResourceIndex{indexConfig}
 
 	kubernetesClient := test.CreateTestKubernetesClient()
-	kubernetesDataSource := reconciliation.NewKubernetesDataSource(kubernetesClient, &resourceConfig)
+	kubernetesDataSource := reconciliation.NewDataSourceFromKubernetesClient(kubernetesClient, &resourceConfig)
 	assertions.NotPanics(func() {
 		store.InitializeResource(kubernetesDataSource, &resourceConfig)
 	}, "no panic expected during resource initialization")

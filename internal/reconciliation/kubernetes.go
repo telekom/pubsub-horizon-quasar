@@ -13,14 +13,14 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// KubernetesDataSource implements DataSource using Kubernetes API
+// KubernetesDataSource implements reconciliation's DataSource interface using Kubernetes API
 type KubernetesDataSource struct {
 	client   dynamic.Interface
 	resource *config.Resource
 }
 
-// NewKubernetesDataSource creates a new Kubernetes-based data source
-func NewKubernetesDataSource(client dynamic.Interface, resource *config.Resource) *KubernetesDataSource {
+// NewDataSourceFromKubernetesClient creates a new Kubernetes-based data source
+func NewDataSourceFromKubernetesClient(client dynamic.Interface, resource *config.Resource) *KubernetesDataSource {
 	return &KubernetesDataSource{
 		client:   client,
 		resource: resource,

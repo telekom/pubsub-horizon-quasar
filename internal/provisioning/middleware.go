@@ -33,8 +33,8 @@ func withTrustedClients(trustedClients []string) fiber.Handler {
 func withKubernetesResource(ctx *fiber.Ctx) error {
 	resource := new(unstructured.Unstructured)
 	if err := resource.UnmarshalJSON(ctx.Body()); err != nil {
-		log.Error().Err(err).Msg("Failed to unmarshal JSON body into Kubernetes resource")
-		return handleBadRequestError(ctx, "Invalid JSON body")
+		log.Error().Err(err).Msg("Failed to unmarshal JSON body: No valid Kubernetes resource provided.")
+		return handleBadRequestError(ctx, "Invalid JSON body: No valid Kubernetes resource provided")
 	}
 
 	ctx.Locals("resource", *resource)
