@@ -228,6 +228,9 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Top-level declarations**: Use `var` keyword without type (unless type differs from expression)
 
 ### Code Organization and Style
+- **Use guard clauses (reverse ifs)**: Check for error/invalid conditions first and return early to avoid deeply nested code
+- **Reduce nesting**: Handle errors/special cases first and return early
+- **Unnecessary else**: Eliminate else blocks when variable can be set with single if
 - **Reduce nesting**: Handle errors/special cases first and return early
 - **Unnecessary else**: Eliminate else blocks when variable can be set with single if
 - **Function grouping**: Sort functions by receiver; place utility functions at end
@@ -245,12 +248,12 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Define mock expectations**: In mutation functions within test tables
 - **Separate test types**: Unit tests (fast) vs integration tests (slower, use `dockertest`)
 - **Coverage**: Ensure test coverage for all exported functions
-- **Use goroutine leak detection**: Use `go.uber.org/goleak` to test for goroutine leaks
+- **Use goroutine leak detection**: Use `go.uber.org/goleak` to test for goroutine leaks, if needed
 
 ### Performance
 - **Prefer `strconv` over `fmt`** for primitive conversions
 - **Avoid repeated string-to-byte conversions**: Convert once and reuse
-- **Use `go.uber.org/atomic`** for type-safe atomic operations
+- **Atomic operations**: If needed, use `sync/atomic` or `go.uber.org/atomic` package for thread-safe operations
 
 ### Patterns
 - **Functional Options**: Use for optional constructor arguments (variadic `...Option`)
