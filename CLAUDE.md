@@ -143,59 +143,131 @@ golangci-lint run
 - Integration tests use `dockertest` for spinning up MongoDB/Hazelcast containers
 - Mock expectations defined in `mockExpectations` mutation functions within test tables
 
-## Code Conventions (from golang-conventions.md)
+## Code Conventions
 
-### Naming
+This project follows the Uber Go Style Guide with additional project-specific conventions. Key principles include:
+
+### Naming Conventions
 - **Meaningful names** for all variables, functions, structs (no single-letter names except in tight loops)
 - **Error variables**: Named after the function that returns them, e.g., `errValidateCustomerFeedback := validateCustomerFeedback(...)`
+- **Error types**: Prefix with `Err` or `err` for exported/unexported error variables; suffix with `Error` for custom error types
 - **Type aliases**: Wrap external types in package-local type aliases for easier import management
-- **Package names**: should be short, concise, evocative. lower case, single-word names
-- **Interface names**: one-method interfaces are named by the method name plus an -er suffix or similar modification to construct an agent noun: Reader, Writer, Formatter, CloseNotifier etc.
-- **MixedCaps**: use MixedCaps or mixedCaps rather than underscores to write multiword names
+- **Package names**: Short, concise, evocative, lowercase, single-word names (avoid "common", "util", "shared", "lib")
+- **Interface names**: One-method interfaces use method name + "-er" suffix (Reader, Writer, Formatter)
+- **MixedCaps**: Use MixedCaps or mixedCaps rather than underscores for multiword names
 - **Functions/Variables**: Exported start with uppercase, unexported with lowercase (camel case)
 - **Constants**: Use all capital letters with underscores, e.g., `MAX_RETRY_COUNT`
 - **Boolean variables**: Prefix with Has, Is, Can, or Allow, e.g., `isConnected`, `hasPermission`
 - **Getters**: Avoid "Get" prefix; use `user.Name()` instead of `user.GetName()`
-- **File names**: single lowercase words; compound names use underscores; test files use `_test.go` suffix
+- **File names**: Single lowercase words; compound names use underscores; test files use `_test.go` suffix
+- **Unexported globals**: Prefix with `_` (except error values with `err` prefix)
 
-### Nil Handling
+### Pointers and Interfaces
+- **Never use pointers to interfaces** - interfaces are already reference types
+- **Verify interface compliance at compile time**: Use `var _ Interface = (*Type)(nil)` for exported types
+- **Receivers**: Methods with value receivers can be called on pointers and values; pointer receivers only on pointers/addressable values
+- **Accept interfaces, return structs**: Interfaces declared on consumer side, not producer side
+
+### Error Handling
+- **Always check and handle errors explicitly**
+- **Handle errors once**: Don't log and return; choose one approach
+- **Error wrapping**: Use `fmt.Errorf("context: %w", err)` to wrap errors for traceability
+- **Error matching**: Use `%w` if callers should match the error; use `%v` to obfuscate
+- **Avoid "failed to" prefix**: Keep context succinct (use "new store" not "failed to create new store")
+- **Return errors from functions**: Only call `os.Exit` or `log.Fatal` in `main()`
+
+### Nil Handling and Zero Values
 - **Internal functions**: Do NOT check input parameters for nil (caller's responsibility)
 - **External functions**: DO check input parameters for nil
-- **Exception**: Always validate input structs (see below)
+- **Exception**: Always validate input structs
+- **nil is a valid slice**: Return `nil` instead of `[]T{}` for empty slices; check `len(s) == 0` not `s == nil`
+- **Zero-value mutexes are valid**: Don't use `new(sync.Mutex)`; use `var mu sync.Mutex`
 
 ### Structs
 - **Constructors required**: Always use constructors to instantiate structs (except parameter structs)
+- **Field names in initialization**: Always specify field names when initializing structs (enforced by `go vet`)
+- **Omit zero values**: Don't specify zero-value fields unless they provide meaningful context
+- **Use `var` for zero-value structs**: `var user User` instead of `user := User{}`
+- **Struct references**: Use `&T{}` instead of `new(T)` for consistency
 - **Parameter structs**: Instantiate inline, must be validated in the function
-- **Validation**: Parameter structs wrapped in a struct must be validated for expected values
+- **Avoid embedding in public structs**: Embedding leaks implementation details and inhibits evolution
+- **Embedded fields**: Place at top of struct with blank line separator
 
-### Interfaces
-- **Accept interfaces, return structs**: Interfaces declared on consumer side, not producer side
-- Exception: External functions may declare interfaces for consumer convenience
-
-### Immutability
+### Immutability and State
 - **Favor immutability**: Pass structs by value and return new structs rather than mutating pointers (unless performance-critical)
 - **Data flow transparency**: Write code with straightforward, transparent data flow
+- **Avoid mutable globals**: Use dependency injection instead of global variables
+- **Avoid `init()`**: Be deterministic, avoid I/O, no global state; use constructors or main() instead
 
-### Dependencies
+### Dependencies and Concurrency
 - Use **dependency injection** (constructor functions)
 - Avoid global state
 - Follow **inversion of control** principle
+- **Don't panic**: Return errors instead of panicking (except for truly irrecoverable situations)
+- **Use goroutines safely**: Always have a way to stop goroutines and wait for them to exit
+- **No goroutines in `init()`**: Expose objects that manage goroutine lifetimes
+- **Propagate context**: Always propagate `context.Context` for cancellation
+- **Defer to clean up**: Use defer for resource cleanup (files, locks, etc.)
 
-### Error Handling
-- Always check and handle errors explicitly
-- Use wrapped errors for traceability: `fmt.Errorf("context: %w", err)`
+### Maps, Slices, and Collections
+- **Copy slices and maps at boundaries**: Prevent unintended mutations when receiving/returning
+- **Specify container capacity**: Use `make(map[T]T, size)` and `make([]T, 0, capacity)` when size is known
+- **Channel size**: Channels should be unbuffered or size 1 (any other size requires scrutiny)
+- **Map initialization**: Use `make()` for empty maps; use literals for fixed sets of elements
 
-### Concurrency
-- Use goroutines safely with channels or sync primitives
-- Always propagate `context.Context` for cancellation
-- Defer closing resources
+### Time Handling
+- **Use `time.Time`** for instants of time (not int/string)
+- **Use `time.Duration`** for periods of time (not int/float)
+- **Use RFC 3339** format for string timestamps when needed
+- **AddDate vs Add**: Use `AddDate` for calendar arithmetic; use `Add` for duration arithmetic
+
+### Variables and Scope
+- **Short variable declarations**: Use `:=` when setting explicit values; use `var` for zero values
+- **Reduce scope**: Declare variables in smallest scope possible; use inline declarations with if statements
+- **Local constants**: Don't make constants global unless used across functions/files
+- **Top-level declarations**: Use `var` keyword without type (unless type differs from expression)
+
+### Code Organization and Style
+- **Reduce nesting**: Handle errors/special cases first and return early
+- **Unnecessary else**: Eliminate else blocks when variable can be set with single if
+- **Function grouping**: Sort functions by receiver; place utility functions at end
+- **Import groups**: Standard library, then everything else (blank line between)
+- **Group similar declarations**: Use `const ()`, `var ()`, `type ()` blocks for related declarations
+- **Avoid long lines**: Soft limit of 99 characters
+- **Be consistent**: Consistency is more important than individual preferences
 
 ### Testing
-- Use **table-driven tests**
-- Mock external interfaces (use Mockery)
-- Define mock logic in mutation functions within test tables
-- Separate unit tests (fast) from integration tests (slower, use `dockertest`)
-- Ensure test coverage for all exported functions
+- **Use table-driven tests** with subtests for repetitive test logic
+- **Avoid unnecessary complexity**: Split complex table tests into multiple tests or tables
+- **Test tables convention**: Slice named `tests`, variable `tt`, fields prefixed with `give`/`want`
+- **Parallel tests**: Explicitly assign loop variables: `tt := tt` before `t.Parallel()`
+- **Mock external interfaces**: Use Mockery for generating mocks
+- **Define mock expectations**: In mutation functions within test tables
+- **Separate test types**: Unit tests (fast) vs integration tests (slower, use `dockertest`)
+- **Coverage**: Ensure test coverage for all exported functions
+- **Use goroutine leak detection**: Use `go.uber.org/goleak` to test for goroutine leaks
+
+### Performance
+- **Prefer `strconv` over `fmt`** for primitive conversions
+- **Avoid repeated string-to-byte conversions**: Convert once and reuse
+- **Use `go.uber.org/atomic`** for type-safe atomic operations
+
+### Patterns
+- **Functional Options**: Use for optional constructor arguments (variadic `...Option`)
+- **Exit Once**: Prefer single `os.Exit` call in `main()`; use `run() error` pattern
+- **Field tags**: Always use field tags in marshaled structs (json, yaml, etc.)
+
+### Type Safety
+- **Handle type assertion failures**: Always use "comma ok" idiom: `t, ok := i.(string)`
+- **Start enums at one**: Use `iota + 1` so zero value is invalid/unknown
+- **Avoid built-in names**: Don't shadow built-in identifiers (error, string, etc.)
+- **Use raw string literals**: Use backticks for strings with quotes/backslashes
+
+### Linting
+- Run `goimports` on save
+- Run `golint` and `go vet` to check for errors
+- Use `golangci-lint` as primary linter with recommended configuration
+- Required linters: errcheck, goimports, golint, govet, staticcheck
 
 ## Important Implementation Notes
 
