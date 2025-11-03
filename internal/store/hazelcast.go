@@ -230,10 +230,11 @@ func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 }
 
 func (s *HazelcastStore) collectMetrics(resourceName string) {
-	if err := recover(); err != nil {
-		log.Error().Msgf("Recovered from %s during hazelcast metric collection", err)
-		return
-	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error().Msgf("Recovered from %v during hazelcast metric collection", err)
+		}
+	}()
 
 	for {
 		hzMap, err := s.client.GetMap(context.Background(), resourceName)

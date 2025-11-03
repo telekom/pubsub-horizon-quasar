@@ -159,10 +159,11 @@ func (w *ResourceWatcher) Stop() {
 }
 
 func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfig *config.Resource) {
-	if err := recover(); err != nil {
-		log.Error().Msgf("Recovered from %s during kubernetes metric collection", err)
-		return
-	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error().Msgf("Recovered from %v during kubernetes metric collection", err)
+		}
+	}()
 
 	for {
 		list, err := client.Resource(resourceConfig.GetGroupVersionResource()).
