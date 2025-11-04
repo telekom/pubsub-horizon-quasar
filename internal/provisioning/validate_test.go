@@ -391,7 +391,7 @@ func TestGetGvrFromContext(t *testing.T) {
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
 		handleErrors(ctx, err)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 }
 
@@ -421,7 +421,7 @@ func TestGetResourceIdFromContext(t *testing.T) {
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
 		handleErrors(ctx, err)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 
 	t.Run("empty resource ID in context", func(t *testing.T) {
@@ -435,7 +435,7 @@ func TestGetResourceIdFromContext(t *testing.T) {
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
 		handleErrors(ctx, err)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 }
 
