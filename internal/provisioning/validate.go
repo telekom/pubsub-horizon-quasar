@@ -27,7 +27,7 @@ func validateResourceApiVersion(gvr schema.GroupVersionResource, resource unstru
 	if resource.GetAPIVersion() != gvr.GroupVersion().String() {
 		return &fiber.Error{
 			Code:    fiber.StatusBadRequest,
-			Message: "Resource GroupVersion in URL does not match GVR in body",
+			Message: "Resource GroupVersion in URL does not match ApiVersion in body",
 		}
 	}
 	return nil

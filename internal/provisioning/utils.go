@@ -79,32 +79,32 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 func getGvrAndIdAndResourceFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, string, unstructured.Unstructured, error) {
 	gvr, err := getGvrFromContext(ctx)
 	if err != nil {
-		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
 	}
 
 	id, err := getResourceIdFromContext(ctx)
 	if err != nil {
-		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
 	}
 
 	resource, err := getResourceFromContext(ctx)
 	if err != nil {
-		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
 	}
 
 	// Validate resource name matches URL
 	if err := validateResourceId(id, resource); err != nil {
-		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
 	}
 
 	// Validate resource GVR matches URL
 	if err := validateResourceApiVersion(gvr, resource); err != nil {
-		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
 	}
 
 	// Validate resource kind correlates to URL resource
 	if err := validateResourceKind(gvr, resource); err != nil {
-		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, handleErrors(ctx, err)
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
 	}
 
 	return gvr, id, resource, nil

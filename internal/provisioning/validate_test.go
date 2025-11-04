@@ -306,7 +306,8 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		getGvrAndIdAndResourceFromContext(ctx)
+		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
+		handleErrors(ctx, err)
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 
@@ -329,7 +330,8 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		getGvrAndIdAndResourceFromContext(ctx)
+		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
+		handleErrors(ctx, err)
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 
@@ -352,7 +354,8 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resourceId", "test-subscription")
 		ctx.Locals("resource", *resource)
 
-		getGvrAndIdAndResourceFromContext(ctx)
+		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
+		handleErrors(ctx, err)
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 }
@@ -386,7 +389,8 @@ func TestGetGvrFromContext(t *testing.T) {
 		// Reset log recorder for this test
 		test.LogRecorder.Reset()
 
-		getGvrFromContext(ctx)
+		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
+		handleErrors(ctx, err)
 		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 }
@@ -415,7 +419,8 @@ func TestGetResourceIdFromContext(t *testing.T) {
 		// Reset log recorder for this test
 		test.LogRecorder.Reset()
 
-		getResourceIdFromContext(ctx)
+		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
+		handleErrors(ctx, err)
 		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 
@@ -428,7 +433,8 @@ func TestGetResourceIdFromContext(t *testing.T) {
 
 		ctx.Locals("resourceId", "")
 
-		getResourceIdFromContext(ctx)
+		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
+		handleErrors(ctx, err)
 		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
 	})
 }

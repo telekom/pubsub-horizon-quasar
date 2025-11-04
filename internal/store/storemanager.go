@@ -100,7 +100,7 @@ func (m *DualStoreManager) Create(obj *unstructured.Unstructured) error {
 	defer m.mu.RUnlock()
 
 	var primaryErr error
-	if primaryErr := m.primary.Create(obj); primaryErr != nil {
+	if primaryErr = m.primary.Create(obj); primaryErr != nil {
 		m.logPrimaryError("Create", primaryErr)
 	}
 
