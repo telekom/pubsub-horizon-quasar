@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/telekom/quasar/internal/store"
+	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -75,42 +75,67 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 	return resource, nil
 }
 
-func getStoreNameForGvr(gvr schema.GroupVersionResource) string {
-	return fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
+// getGvrAndIdAndResourceFromContext performs all context validation for operations requiring GVR, ID, and Resource
+func getGvrAndIdAndResourceFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, string, unstructured.Unstructured, error) {
+	gvr, err := getGvrFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
+	}
+
+	id, err := getResourceIdFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
+	}
+
+	resource, err := getResourceFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
+	}
+
+	// Validate resource name matches URL
+	if err := validateResourceId(id, resource); err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
+	}
+
+	// Validate resource GVR matches URL
+	if err := validateResourceApiVersion(gvr, resource); err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
+	}
+
+	// Validate resource kind correlates to URL resource
+	if err := validateResourceKind(gvr, resource); err != nil {
+		return schema.GroupVersionResource{}, "", unstructured.Unstructured{}, err
+	}
+
+	return gvr, id, resource, nil
 }
 
-func getMongoAndHazelcastStores(dualStore store.DualStore) (mongoStore store.Store, hazelcastStore store.Store) {
-	switch primary := dualStore.GetPrimary().(type) {
-	case *store.MongoStore:
-		mongoStore = primary
-	case *store.HazelcastStore:
-		hazelcastStore = primary
-	case *store.RedisStore:
-		logger.Warn().Msg("Primary store is Redis, not used for MongoDB/Hazelcast sync")
+// getGvrAndIdFromContext performs validation for operations requiring GVR and ID
+func getGvrAndIdFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, string, error) {
+	gvr, err := getGvrFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", err
 	}
 
-	switch secondary := dualStore.GetSecondary().(type) {
-	case *store.MongoStore:
-		mongoStore = secondary
-	case *store.HazelcastStore:
-		hazelcastStore = secondary
-	case *store.RedisStore:
-		logger.Warn().Msg("Secondary store is Redis, not used for MongoDB/Hazelcast sync")
+	id, err := getResourceIdFromContext(ctx)
+	if err != nil {
+		return schema.GroupVersionResource{}, "", err
 	}
 
-	return mongoStore, hazelcastStore
+	return gvr, id, nil
 }
 
-func logStoreIdentification(mongoStore, hazelcastStore store.Store) {
-	if mongoStore != nil {
-		logger.Debug().Str("store", "MongoDB").Msg("Store identified")
-	} else {
-		logger.Warn().Msg("No MongoDB store found in DualStore configuration")
+func getDataSetForGvr(gvr schema.GroupVersionResource) string {
+	for i, r := range config.Current.Resources {
+		k := r.Kubernetes
+		if k.Group == gvr.Group && k.Version == gvr.Version && k.Resource == gvr.Resource {
+			return config.Current.Resources[i].GetDataSet()
+		}
 	}
-
-	if hazelcastStore != nil {
-		logger.Debug().Str("store", "Hazelcast").Msg("Store identified")
-	} else {
-		logger.Warn().Msg("No Hazelcast store found in DualStore configuration")
-	}
+	logger.Warn().
+		Str("group", gvr.Group).
+		Str("version", gvr.Version).
+		Str("resource", gvr.Resource).
+		Msg("No Kubernetes configuration found for gvr")
+	return ""
 }

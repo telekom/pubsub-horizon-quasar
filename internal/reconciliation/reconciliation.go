@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom AG
+// Copyright 2025 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,15 +12,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type Reconciliation struct {
-	client   dynamic.Interface
-	resource *config.Resource
-	mu       sync.Mutex
+	dataSource DataSource
+	resource   *config.Resource
+	mu         sync.Mutex
 }
 
 type Reconcilable interface {
@@ -30,19 +28,20 @@ type Reconcilable interface {
 	Connected() bool
 }
 
-func NewReconciliation(client dynamic.Interface, resource *config.Resource) *Reconciliation {
-	return &Reconciliation{client: client, resource: resource}
+func NewReconciliation(dataSource DataSource, resource *config.Resource) *Reconciliation {
+	return &Reconciliation{
+		dataSource: dataSource,
+		resource:   resource,
+	}
 }
 
 func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
-	resources, err := r.client.Resource(r.resource.GetGroupVersionResource()).
-		Namespace(r.resource.Kubernetes.Namespace).
-		List(context.Background(), v1.ListOptions{})
+	resources, err := r.dataSource.ListResources()
 
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
-			"cache": r.resource.GetCacheName(),
-		}).Msg("Could not retrieve resources from cluster")
+			"cache": r.resource.GetDataSet(),
+		}).Msg("Could not retrieve resources from data source")
 		return
 	}
 
@@ -51,10 +50,10 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 	switch mode {
 	case config.ReconcileModeFull:
 		log.Debug().
-			Str("cache", r.resource.GetCacheName()).
-			Int("count", len(resources.Items)).
+			Str("cache", r.resource.GetDataSet()).
+			Int("count", len(resources)).
 			Msg("Performing full reconciliation: inserting all resources")
-		for _, item := range resources.Items {
+		for _, item := range resources {
 			utils.AddMissingEnvironment(&item)
 			reconcilable.Create(&item)
 			log.Debug().
@@ -63,32 +62,32 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 		}
 
 	case config.ReconcileModeIncremental:
-		resourceCount := len(resources.Items)
-		storeSize, err := reconcilable.Count(r.resource.GetCacheName())
+		resourceCount := len(resources)
+		storeSize, err := reconcilable.Count(r.resource.GetDataSet())
 		if err != nil {
 			log.Error().Err(err).Fields(map[string]any{
-				"cache": r.resource.GetCacheName(),
+				"cache": r.resource.GetDataSet(),
 			}).Msg("Could not get size of store")
 			return
 		}
 
 		log.Info().Fields(map[string]any{
-			"cache":         r.resource.GetCacheName(),
+			"cache":         r.resource.GetDataSet(),
 			"storeSize":     storeSize,
 			"resourceCount": resourceCount,
 		}).Msg("Checking for store size mismatch...")
 
 		if storeSize < resourceCount {
 			log.Warn().Fields(map[string]any{
-				"cache": r.resource.GetCacheName(),
+				"cache": r.resource.GetDataSet(),
 			}).Msg("Store size does not match resource count. Generating diff for reconciliation...")
 
-			storeKeys, err := reconcilable.Keys(r.resource.GetCacheName())
+			storeKeys, err := reconcilable.Keys(r.resource.GetDataSet())
 			if err != nil {
 				log.Error().Err(err).Msg("Could no retrieve store keys")
 			}
 
-			missingItems := r.generateDiff(resources.Items, storeKeys)
+			missingItems := r.generateDiff(resources, storeKeys)
 			log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingItems))
 			for _, items := range missingItems {
 				utils.AddMissingEnvironment(&items)
@@ -99,11 +98,10 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 
 	default:
 		log.Error().
-			Str("cache", r.resource.GetCacheName()).
+			Str("cache", r.resource.GetDataSet()).
 			Str("mode", mode.String()).
 			Msg("Unknown reconciliation mode, skipping")
 	}
-
 }
 
 func (r *Reconciliation) generateDiff(resources []unstructured.Unstructured, storeKeys []string) []unstructured.Unstructured {
@@ -131,7 +129,7 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 
 	log.Debug().
 		Dur("interval", interval).
-		Str("cache", r.resource.GetCacheName()).
+		Str("cache", r.resource.GetDataSet()).
 		Msg("Starting periodic reconciliation")
 
 	for {
@@ -139,14 +137,14 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 		case <-ticker.C:
 			if !reconcilable.Connected() {
 				log.Debug().
-					Str("cache", r.resource.GetCacheName()).
+					Str("cache", r.resource.GetDataSet()).
 					Msg("Skipping timed reconciliation: Hazelcast client disconnected")
 				continue
 			}
 			r.SafeReconcile(reconcilable)
 		case <-ctx.Done():
 			log.Debug().
-				Str("cache", r.resource.GetCacheName()).
+				Str("cache", r.resource.GetDataSet()).
 				Msg("Stopped periodic reconciliation")
 			return
 		}
@@ -155,12 +153,12 @@ func (r *Reconciliation) StartPeriodicReconcile(ctx context.Context, interval ti
 
 func (r *Reconciliation) SafeReconcile(reconcilable Reconcilable) {
 	log.Debug().
-		Str("cache", r.resource.GetCacheName()).
+		Str("cache", r.resource.GetDataSet()).
 		Msg("Starting safe reconciliation")
 
 	if !r.mu.TryLock() {
 		log.Warn().
-			Str("cache", r.resource.GetCacheName()).
+			Str("cache", r.resource.GetDataSet()).
 			Msg("Reconciliation already in progress, skipping")
 		return
 	}
@@ -169,7 +167,7 @@ func (r *Reconciliation) SafeReconcile(reconcilable Reconcilable) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.Error().
-				Str("cache", r.resource.GetCacheName()).
+				Str("cache", r.resource.GetDataSet()).
 				Interface("panic", rec).
 				Msg("Recovered from panic during reconciliation")
 		}

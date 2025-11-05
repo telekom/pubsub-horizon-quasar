@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/test"
 )
 
@@ -152,9 +153,12 @@ func TestDualStoreManagerInitializeResource(t *testing.T) {
 	resourceConfig.Kubernetes.Resource = "testresources"
 	resourceConfig.Kubernetes.Kind = "TestResource"
 
+	// Create proper reconciliation object
+	kubernetesDataSource := reconciliation.NewDataSourceFromKubernetesClient(kubernetesClient, &resourceConfig)
+
 	// Should not panic even though this is a dual store
 	assertions.NotPanics(func() {
-		manager.InitializeResource(kubernetesClient, &resourceConfig)
+		manager.InitializeResource(kubernetesDataSource, &resourceConfig)
 	}, "InitializeResource should not panic")
 }
 

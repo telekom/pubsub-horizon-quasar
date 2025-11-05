@@ -8,9 +8,10 @@ package test
 
 import (
 	"fmt"
+
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type DummyStore struct {
@@ -26,7 +27,7 @@ func (s *DummyStore) Initialize() {
 	s.IsInitialized = true
 }
 
-func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
+func (s *DummyStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 	s.HasInitializedResource = true
 }
 

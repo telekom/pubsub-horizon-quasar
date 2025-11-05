@@ -22,7 +22,6 @@ import (
 	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type HazelcastStore struct {
@@ -84,9 +83,9 @@ func (s *HazelcastStore) Initialize() {
 
 }
 
-func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.Resource) {
+func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
 
-	var mapName = resourceConfig.GetCacheName()
+	var mapName = resourceConfig.GetDataSet()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
 		log.Panic().Fields(map[string]any{
@@ -109,9 +108,15 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 		interval = 60 * time.Second
 	}
 
-	recon := reconciler.NewReconciliation(kubernetesClient, resourceConfig)
+	recon := reconciler.NewReconciliation(dataSource, resourceConfig)
 	s.reconciliations.Store(mapName, recon)
 
+	// start reconcile immediately for provisioning mode to ensure initial store filling
+	if (config.Current.Mode == config.ModeProvisioning) && s.Connected() {
+		recon.SafeReconcile(s)
+	}
+
+	// start reconcile periodically for all modes
 	go recon.StartPeriodicReconcile(s.ctx, interval, s)
 
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
@@ -122,11 +127,11 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
-			"cache": resourceConfig.GetCacheName(),
+			"cache": resourceConfig.GetDataSet(),
 		}).Msg("Could not register membership listener for reconciliation")
 	}
 
-	go s.collectMetrics(resourceConfig.GetCacheName())
+	go s.collectMetrics(resourceConfig.GetDataSet())
 }
 
 func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {
@@ -177,10 +182,69 @@ func (s *HazelcastStore) Delete(obj *unstructured.Unstructured) error {
 	return nil
 }
 
-func (s *HazelcastStore) Shutdown() {
-	if err := s.client.Shutdown(s.ctx); err != nil {
-		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
+	hzMap, err := s.client.GetMap(s.ctx, gvr)
+	if err != nil {
+		return nil, err
 	}
+
+	val, err := hzMap.Get(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, ok := val.(serialization.JSON)
+	if !ok {
+		return nil, nil
+	}
+
+	var obj unstructured.Unstructured
+	if err := obj.UnmarshalJSON(jsonData); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
+}
+
+func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	hzMap, err := s.client.GetMap(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	keySet, err := hzMap.GetKeySet(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []unstructured.Unstructured
+	count := int64(0)
+	for _, key := range keySet {
+		if limit > 0 && count >= limit {
+			break
+		}
+		val, err := hzMap.Get(s.ctx, key)
+		if err != nil {
+			continue
+		}
+		jsonData, ok := val.(serialization.JSON)
+		if !ok {
+			continue
+		}
+		var obj unstructured.Unstructured
+		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
+			continue
+		}
+
+		if fieldSelector != "" {
+			if !utils.MatchFieldSelector(&obj, fieldSelector) {
+				continue
+			}
+		}
+		result = append(result, obj)
+		count++
+	}
+	return result, nil
 }
 
 func (s *HazelcastStore) Count(mapName string) (int, error) {
@@ -214,6 +278,12 @@ func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
 	}
 
 	return keys, nil
+}
+
+func (s *HazelcastStore) Shutdown() {
+	if err := s.client.Shutdown(s.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+	}
 }
 
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
@@ -326,13 +396,6 @@ func (s *HazelcastStore) onDisconnected() {
 		log.Debug().Msg("Hazelcast client disconnected — connected flag reset")
 	}
 
-}
-func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
-	panic("implement me")
-}
-
-func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
-	panic("implement me")
 }
 
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

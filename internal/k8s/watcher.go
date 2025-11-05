@@ -13,6 +13,7 @@ import (
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/fallback"
 	"github.com/telekom/quasar/internal/metrics"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -139,7 +140,8 @@ func (w *ResourceWatcher) delete(obj any) {
 }
 
 func (w *ResourceWatcher) Start() {
-	WatcherStore.InitializeResource(w.client, w.resourceConfig)
+	reconciliationSource := reconciliation.NewDataSourceFromKubernetesClient(w.client, w.resourceConfig)
+	WatcherStore.InitializeResource(reconciliationSource, w.resourceConfig)
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -172,14 +174,14 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 
 		if err != nil {
 			log.Error().Err(err).Fields(map[string]any{
-				"resource": resourceConfig.GetCacheName(),
+				"resource": resourceConfig.GetDataSet(),
 			}).Msg("Could not resource count")
 
 			time.Sleep(15 * time.Second)
 			continue
 		}
 
-		var gaugeName = resourceConfig.GetCacheName() + "_kubernetes_count"
+		var gaugeName = resourceConfig.GetDataSet() + "_kubernetes_count"
 		metrics.GetOrCreateCustom(gaugeName).WithLabelValues().Set(float64(len(list.Items)))
 		time.Sleep(15 * time.Second)
 	}
