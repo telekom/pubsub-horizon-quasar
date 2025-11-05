@@ -78,9 +78,9 @@ golangci-lint run
 - Exposes REST API using Fiber framework (port 8081 by default)
 - Provides CRUD operations on resources stored in the configured stores
 - Implements JWT-based authentication with trusted issuers and clients (can be disabled)
-- On startup, performs synchronous MongoDB→Hazelcast cache population before accepting API requests
-- Readiness probes (`/ready`) return 503 until initial sync completes
-- Health endpoint (`/health`) available immediately
+- On startup, performs synchronous MongoDB→Hazelcast cache population before initializing the HTTP server. No endpoints are available during this time.
+- Liveness probe endpoint (`/livez`) becomes available after initial sync completes
+- Readiness probe endpoint (`/readyz`) becomes available after initial sync completes
 
 ### Core Components
 
