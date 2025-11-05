@@ -152,7 +152,7 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Error variables**: Named after the function that returns them, e.g., `errValidateCustomerFeedback := validateCustomerFeedback(...)`
 - **Error types**: Prefix with `Err` or `err` for exported/unexported error variables; suffix with `Error` for custom error types
 - **Type aliases**: Wrap external types in package-local type aliases for easier import management
-- **Package names**: Short, concise, evocative, lowercase, single-word names (avoid "common", "util", "shared", "lib")
+- **Package names**: Short, concise, evocative, lowercase, single-word names (avoid "common", "util", "shared", "lib" as catch-all packages)
 - **Interface names**: One-method interfaces use method name + "-er" suffix (Reader, Writer, Formatter)
 - **MixedCaps**: Use MixedCaps or mixedCaps rather than underscores for multiword names
 - **Functions/Variables**: Exported start with uppercase, unexported with lowercase (camel case)
