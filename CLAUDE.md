@@ -236,14 +236,12 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Function grouping**: Sort functions by receiver; place utility functions at end
 - **Import groups**: Standard library, then everything else (blank line between)
 - **Group similar declarations**: Use `const ()`, `var ()`, `type ()` blocks for related declarations
-- **Avoid long lines**: Soft limit of 99 characters
 - **Be consistent**: Consistency is more important than individual preferences
 
 ### Testing
 - **Use table-driven tests** with subtests for repetitive test logic
 - **Avoid unnecessary complexity**: Split complex table tests into multiple tests or tables
 - **Test tables convention**: Slice named `tests`, variable `tt`, fields prefixed with `give`/`want`
-- **Parallel tests**: Explicitly assign loop variables: `tt := tt` before `t.Parallel()`
 - **Mock external interfaces**: Use Mockery for generating mocks
 - **Define mock expectations**: In mutation functions within test tables
 - **Separate test types**: Unit tests (fast) vs integration tests (slower, use `dockertest`)
