@@ -22,7 +22,6 @@ func putResource(ctx *fiber.Ctx) error {
 
 	logRequestDebug("Put", id, gvr, "Request received for resource")
 
-	// Store resource
 	if err := provisioningApiStore.Create(&resource); err != nil {
 		logRequestError(err, "Put", id, gvr, "Failed to put resource")
 		return handleInternalServerError(ctx, "Failed to put resource", err)
