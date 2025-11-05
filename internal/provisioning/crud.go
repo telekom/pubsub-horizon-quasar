@@ -20,13 +20,13 @@ func putResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequestDebug("Put", id, gvr, "Request received for resource")
+	logger.Debug().Fields(generateLogAttributes("Put", id, gvr)).Msg("Request received for resource")
 
 	if err := provisioningApiStore.Create(&resource); err != nil {
-		logRequestError(err, "Put", id, gvr, "Failed to put resource")
+		logger.Error().Err(err).Fields(generateLogAttributes("Put", id, gvr)).Msg("Failed to put resource")
 		return handleInternalServerError(ctx, "Failed to put resource", err)
 	}
-	logRequestDebug("Put", id, gvr, "Request successfully")
+	logger.Debug().Fields(generateLogAttributes("Put", id, gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).Send(nil)
 
 }
@@ -40,11 +40,11 @@ func getResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequestDebug("Get", id, gvr, "Request received for resource")
+	logger.Debug().Fields(generateLogAttributes("Get", id, gvr)).Msg("Request received for resource")
 
 	resource, err := provisioningApiStore.Read(getDataSetForGvr(gvr), id)
 	if err != nil {
-		logRequestError(err, "Get", id, gvr, "Failed to get resource")
+		logger.Error().Err(err).Fields(generateLogAttributes("Get", id, gvr)).Msg("Failed to get resource")
 		return handleInternalServerError(ctx, "Failed to get resource", err)
 	}
 
@@ -52,7 +52,7 @@ func getResource(ctx *fiber.Ctx) error {
 		return handleNotFoundError(ctx, "Resource not found")
 	}
 
-	logRequestDebug("Get", id, gvr, "Request successfully")
+	logger.Debug().Fields(generateLogAttributes("Get", id, gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(resource)
 }
 
@@ -66,7 +66,7 @@ func listResources(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequestDebug("List-Resources", "", gvr, "Request received for resource")
+	logger.Debug().Fields(generateLogAttributes("List-Resources", "", gvr)).Msg("Request received for resource")
 
 	fieldSelector := ctx.Query("fieldSelector", "")
 	limitStr := ctx.Query("limit", "")
@@ -81,11 +81,11 @@ func listResources(ctx *fiber.Ctx) error {
 
 	resources, err := provisioningApiStore.List(getDataSetForGvr(gvr), fieldSelector, limit)
 	if err != nil {
-		logRequestError(err, "List-Resources", "", gvr, "Failed to list resources")
+		logger.Error().Err(err).Fields(generateLogAttributes("List-Resources", "", gvr)).Msg("Failed to list resources")
 		return handleInternalServerError(ctx, "Failed to list resources", err)
 	}
 
-	logRequestDebug("List-Resources", "", gvr, "Request successfully")
+	logger.Debug().Fields(generateLogAttributes("List-Resources", "", gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Items: resources,
 		Count: len(resources),
@@ -101,15 +101,15 @@ func listKeys(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequestDebug("List-Keys", "", gvr, "Request received for resource")
+	logger.Debug().Fields(generateLogAttributes("List-Keys", "", gvr)).Msg("Request received for resource")
 
 	keys, err := provisioningApiStore.Keys(getDataSetForGvr(gvr))
 	if err != nil {
-		logRequestError(err, "List-Keys", "", gvr, "Failed to list keys")
+		logger.Error().Err(err).Fields(generateLogAttributes("List-Keys", "", gvr)).Msg("Failed to list keys")
 		return handleInternalServerError(ctx, "Failed to list keys", err)
 	}
 
-	logRequestDebug("List-Keys", "", gvr, "Request successfully")
+	logger.Debug().Fields(generateLogAttributes("List-Keys", "", gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Keys: keys,
 	})
@@ -124,15 +124,15 @@ func countResources(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequestDebug("Count-Resources", "", gvr, "Request received for resource")
+	logger.Debug().Fields(generateLogAttributes("Count-Resources", "", gvr)).Msg("Request received for resource")
 
 	count, err := provisioningApiStore.Count(getDataSetForGvr(gvr))
 	if err != nil {
-		logRequestError(err, "Count-Resources", "", gvr, "Failed to count resources")
+		logger.Error().Err(err).Fields(generateLogAttributes("Count-Resources", "", gvr)).Msg("Failed to count resources")
 		return handleInternalServerError(ctx, "Failed to count resources", err)
 	}
 
-	logRequestDebug("Count-Resources", "", gvr, "Request successfully")
+	logger.Debug().Fields(generateLogAttributes("Count-Resources", "", gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).JSON(ResourceResponse{
 		Count: count,
 	})
@@ -148,13 +148,13 @@ func deleteResource(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	logRequestDebug("Delete", id, gvr, "Request received for resource")
+	logger.Debug().Fields(generateLogAttributes("Delete", id, gvr)).Msg("Request received for resource")
 
 	if err := provisioningApiStore.Delete(&resource); err != nil {
-		logRequestError(err, "Delete", id, gvr, "Failed to delete resource")
+		logger.Error().Err(err).Fields(generateLogAttributes("Delete", id, gvr)).Msg("Failed to delete resource")
 		return handleInternalServerError(ctx, "Failed to delete resource", err)
 	}
 
-	logRequestDebug("Delete", id, gvr, "Request successfully")
+	logger.Debug().Fields(generateLogAttributes("Delete", id, gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusNoContent).Send(nil)
 }

@@ -483,50 +483,6 @@ func createTestResourceJSON(name, kind, apiVersion string) []byte {
 	return data
 }
 
-func TestLogRequestDebug(t *testing.T) {
-	var assertions = assert.New(t)
-	defer test.LogRecorder.Reset()
-
-	gvr := schema.GroupVersionResource{
-		Group:    "subscriber.horizon.telekom.de",
-		Version:  "v1",
-		Resource: "subscriptions",
-	}
-
-	// Reset log recorder
-	test.LogRecorder.Reset()
-
-	assertions.NotPanics(func() {
-		logRequestDebug("TestOperation", "test-id", gvr, "Test message")
-	})
-
-	// Should log at debug level
-	debugCount := test.LogRecorder.GetRecordCount(zerolog.DebugLevel)
-	assertions.GreaterOrEqual(debugCount, 1, "should log at debug level")
-}
-
-func TestLogRequestError(t *testing.T) {
-	var assertions = assert.New(t)
-	defer test.LogRecorder.Reset()
-
-	gvr := schema.GroupVersionResource{
-		Group:    "subscriber.horizon.telekom.de",
-		Version:  "v1",
-		Resource: "subscriptions",
-	}
-
-	// Reset log recorder
-	test.LogRecorder.Reset()
-
-	assertions.NotPanics(func() {
-		logRequestError(assert.AnError, "TestOperation", "test-id", gvr, "Test error message")
-	})
-
-	// Should log at error level
-	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
-	assertions.GreaterOrEqual(errorCount, 1, "should log at error level")
-}
-
 func TestWithKubernetesResource(t *testing.T) {
 	var assertions = assert.New(t)
 	defer test.LogRecorder.Reset()

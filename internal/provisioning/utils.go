@@ -13,24 +13,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func logRequestDebug(operation string, id string, gvr schema.GroupVersionResource, msg string) {
-	logger.Debug().
-		Str("id", id).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Str("operation", operation).
-		Msg(msg)
-}
+func generateLogAttributes(operation string, id string, gvr schema.GroupVersionResource) map[string]string {
+	result := make(map[string]string)
 
-func logRequestError(err error, operation string, id string, gvr schema.GroupVersionResource, msg string) {
-	logger.Error().Err(err).
-		Str("id", id).
-		Str("group", gvr.Group).
-		Str("version", gvr.Version).
-		Str("resource", gvr.Resource).
-		Str("operation", operation).
-		Msg(msg)
+	if operation != "" {
+		result["operation"] = operation
+	}
+
+	if id != "" {
+		result["id"] = id
+	}
+
+	if gvr.Group != "" && gvr.Version != "" && gvr.Resource != "" {
+		result["group"] = gvr.Group
+		result["version"] = gvr.Version
+		result["resource"] = gvr.Resource
+	}
+	return result
 }
 
 func getGvrFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, error) {
