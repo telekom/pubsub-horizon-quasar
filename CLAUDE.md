@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Quasar is a Kubernetes configuration controller that synchronizes the state of Custom Resources (CRs) with caches (Hazelcast) and databases (MongoDB). It is part of the Horizon ecosystem. The service operates in two distinct modes:
+Quasar is a Kubernetes configuration controller that synchronizes caches (Hazelcast) and databases (MongoDB) with either the state of Custom Resources (CRs) or using the provisioning API. It is part of the Horizon ecosystem. The service operates in two distinct modes:
 
 1. **Watcher Mode**: Watches Kubernetes custom resources using informers and synchronizes changes to configured stores (Hazelcast, MongoDB, Redis)
 2. **Provisioning Mode**: Exposes an HTTP REST API (using Fiber) for provisioning/CRUD operations on resources stored in the configured stores
@@ -197,7 +197,7 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Favor immutability**: Pass structs by value and return new structs rather than mutating pointers (unless performance-critical)
 - **Data flow transparency**: Write code with straightforward, transparent data flow
 - **Avoid mutable globals**: Use dependency injection instead of global variables
-- **Avoid `init()`**: Be deterministic, avoid I/O, no global state; use constructors or main() instead
+- **Avoid `init()`**: If unavoidable, Be deterministic, avoid I/O, no global state; use constructors or main() instead
 
 ### Dependencies and Concurrency
 - Use **dependency injection** (constructor functions)
