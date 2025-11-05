@@ -69,7 +69,6 @@ func listResources(ctx *fiber.Ctx) error {
 
 	logRequestDebug("List-Resources", "", gvr, "Request received for resource")
 
-	// Parse query parameters
 	fieldSelector := ctx.Query("fieldSelector", "")
 	limitStr := ctx.Query("limit", "")
 
