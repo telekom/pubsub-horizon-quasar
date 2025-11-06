@@ -16,16 +16,13 @@ import (
 	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/provisioning"
 	"github.com/telekom/quasar/internal/utils"
-	"k8s.io/client-go/dynamic"
 )
 
 var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Starts synchronizing resources with the configured data store",
 	Run: func(cmd *cobra.Command, args []string) {
-		var kubernetesClient *dynamic.DynamicClient
 		var kubeConfigPath, _ = cmd.Flags().GetString("kubeconfig")
-		var err error
 
 		switch config.Current.Mode {
 
@@ -33,32 +30,10 @@ var runCmd = &cobra.Command{
 			go provisioning.Listen(config.Current.Provisioning.Port)
 
 		case config.ModeWatcher:
-			k8s.SetupWatcherStore()
-			utils.RegisterShutdownHook(k8s.WatcherStore.Shutdown, 1)
-
-			if useServiceAccount := len(kubeConfigPath) == 0; useServiceAccount {
-				kubernetesClient, err = k8s.CreateInClusterClient()
-				if err != nil {
-					log.Fatal().Err(err).Msg("Could not create kubernetes client!")
-				}
-			} else {
-				kubernetesClient, err = k8s.CreateKubeConfigClient(kubeConfigPath)
-				if err != nil {
-					log.Fatal().Err(err).Msg("Could not create kubernetes client!")
-				}
-			}
-
-			for _, resourceConfig := range config.Current.Resources {
-				watcher, err := k8s.NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
-				if err != nil {
-					log.Fatal().Err(err).Msg("Could not create resource watcher!")
-				}
-				go watcher.Start()
-				utils.RegisterShutdownHook(watcher.Stop, 0)
-			}
+			k8s.SetupWatchers(kubeConfigPath)
 
 		default:
-			err = fmt.Errorf("invalid mode %q: must be 'provisioning' or 'watcher'", config.Current.Mode)
+			err := fmt.Errorf("invalid mode %q: must be 'provisioning' or 'watcher'", config.Current.Mode)
 			log.Fatal().Err(err).Msg("Invalid mode configuration")
 
 		}

@@ -31,6 +31,35 @@ type ResourceWatcher struct {
 	stopChan       chan struct{}
 }
 
+func SetupWatchers(kubeConfigPath string) {
+	var kubernetesClient *dynamic.DynamicClient
+	var err error
+
+	SetupWatcherStore()
+	utils.RegisterShutdownHook(WatcherStore.Shutdown, 1)
+
+	if useServiceAccount := len(kubeConfigPath) == 0; useServiceAccount {
+		kubernetesClient, err = CreateInClusterClient()
+		if err != nil {
+			log.Fatal().Err(err).Msg("Could not create kubernetes client!")
+		}
+	} else {
+		kubernetesClient, err = CreateKubeConfigClient(kubeConfigPath)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Could not create kubernetes client!")
+		}
+	}
+
+	for _, resourceConfig := range config.Current.Resources {
+		watcher, err := NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Could not create resource watcher!")
+		}
+		go watcher.Start()
+		utils.RegisterShutdownHook(watcher.Stop, 0)
+	}
+}
+
 func NewResourceWatcher(
 	client dynamic.Interface,
 	resourceConfig *config.Resource,
