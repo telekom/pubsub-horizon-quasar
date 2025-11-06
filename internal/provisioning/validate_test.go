@@ -187,8 +187,11 @@ func TestValidateContextWithGvr(t *testing.T) {
 		// Reset log recorder for this test
 		test.LogRecorder.Reset()
 
-		getGvrFromContext(ctx)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		_, err := getGvrFromContext(ctx)
+
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 
 	t.Run("invalid GVR in context", func(t *testing.T) {
@@ -205,8 +208,11 @@ func TestValidateContextWithGvr(t *testing.T) {
 			Resource: "",
 		})
 
-		getGvrFromContext(ctx)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		_, err := getGvrFromContext(ctx)
+
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 }
 
@@ -248,8 +254,11 @@ func TestValidateContextWithGvrAndId(t *testing.T) {
 		}
 		ctx.Locals("gvr", expectedGvr)
 
-		getGvrAndIdFromContext(ctx)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		_, _, err := getGvrAndIdFromContext(ctx)
+
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 }
 
@@ -390,8 +399,10 @@ func TestGetGvrFromContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
-		handleErrors(ctx, err)
-		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return InternalServerError status")
+
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 }
 
@@ -420,8 +431,10 @@ func TestGetResourceIdFromContext(t *testing.T) {
 		test.LogRecorder.Reset()
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
-		handleErrors(ctx, err)
-		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return InternalServerError status")
+
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 
 	t.Run("empty resource ID in context", func(t *testing.T) {
@@ -434,8 +447,10 @@ func TestGetResourceIdFromContext(t *testing.T) {
 		ctx.Locals("resourceId", "")
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
-		handleErrors(ctx, err)
-		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return InternalServerError status")
+
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 }
 
@@ -466,8 +481,10 @@ func TestGetResourceFromContext(t *testing.T) {
 		// Reset log recorder for this test
 		test.LogRecorder.Reset()
 
-		getResourceFromContext(ctx)
-		assertions.Equal(fiber.StatusInternalServerError, ctx.Response().StatusCode(), "should return InternalServerError status")
+		_, err := getResourceFromContext(ctx)
+		var fiberErr *fiber.Error
+		assertions.ErrorAs(err, &fiberErr)
+		assertions.Equal(fiber.StatusInternalServerError, fiberErr.Code, "should return InternalServerError status")
 	})
 }
 

@@ -5,7 +5,6 @@
 package provisioning
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/gofiber/fiber/v2"
@@ -35,7 +34,10 @@ func withKubernetesResource(ctx *fiber.Ctx) error {
 	resource := new(unstructured.Unstructured)
 	if err := resource.UnmarshalJSON(ctx.Body()); err != nil {
 		log.Error().Err(err).Msg("Failed to unmarshal JSON body: No valid Kubernetes resource provided.")
-		return handleBadRequestError(ctx, "Invalid JSON body: No valid Kubernetes resource provided")
+		return &fiber.Error{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid JSON body: No valid Kubernetes resource provided",
+		}
 	}
 	utils.AddMissingEnvironment(resource)
 
@@ -55,7 +57,10 @@ func withGvr(ctx *fiber.Ctx) error {
 
 	if !found {
 		log.Debug().Msgf("Unsupported group, version, or resource in request path: %s/%s/%s", group, version, resource)
-		return handleBadRequestError(ctx, "Unsupported group, version, or resource in request path")
+		return &fiber.Error{
+			Code:    fiber.StatusBadRequest,
+			Message: "Unsupported group, version, or resource in request path",
+		}
 	}
 
 	ctx.Locals("gvr", schema.GroupVersionResource{
@@ -70,8 +75,10 @@ func withResourceId(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
 
 	if id == "" {
-		return handleInternalServerError(ctx, "Failed to retrieve resource id from request",
-			fmt.Errorf("missing required URL parameter: id"))
+		return &fiber.Error{
+			Code:    fiber.StatusBadRequest,
+			Message: "Missing required URL parameter: id",
+		}
 	}
 	ctx.Locals("resourceId", id)
 	return ctx.Next()

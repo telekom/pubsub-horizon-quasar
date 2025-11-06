@@ -135,7 +135,7 @@ func TestWithResourceId(t *testing.T) {
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
-		assertions.Equal(fiber.StatusInternalServerError, resp.StatusCode)
+		assertions.Equal(fiber.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("resource ID with special characters", func(t *testing.T) {

@@ -24,7 +24,10 @@ func putResource(ctx *fiber.Ctx) error {
 
 	if err := provisioningApiStore.Create(&resource); err != nil {
 		logger.Error().Err(err).Fields(generateLogAttributes("Put", id, gvr)).Msg("Failed to put resource")
-		return handleInternalServerError(ctx, "Failed to put resource", err)
+		return &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to put resource",
+		}
 	}
 	logger.Debug().Fields(generateLogAttributes("Put", id, gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).Send(nil)
@@ -45,11 +48,17 @@ func getResource(ctx *fiber.Ctx) error {
 	resource, err := provisioningApiStore.Read(getDataSetForGvr(gvr), id)
 	if err != nil {
 		logger.Error().Err(err).Fields(generateLogAttributes("Get", id, gvr)).Msg("Failed to get resource")
-		return handleInternalServerError(ctx, "Failed to get resource", err)
+		return &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to get resource",
+		}
 	}
 
 	if resource == nil {
-		return handleNotFoundError(ctx, "Resource not found")
+		return &fiber.Error{
+			Code:    fiber.StatusNotFound,
+			Message: "Resource not found",
+		}
 	}
 
 	logger.Debug().Fields(generateLogAttributes("Get", id, gvr)).Msg("Request successfully")
@@ -82,7 +91,10 @@ func listResources(ctx *fiber.Ctx) error {
 	resources, err := provisioningApiStore.List(getDataSetForGvr(gvr), fieldSelector, limit)
 	if err != nil {
 		logger.Error().Err(err).Fields(generateLogAttributes("List-Resources", "", gvr)).Msg("Failed to list resources")
-		return handleInternalServerError(ctx, "Failed to list resources", err)
+		return &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to list resources",
+		}
 	}
 
 	logger.Debug().Fields(generateLogAttributes("List-Resources", "", gvr)).Msg("Request successfully")
@@ -106,7 +118,10 @@ func listKeys(ctx *fiber.Ctx) error {
 	keys, err := provisioningApiStore.Keys(getDataSetForGvr(gvr))
 	if err != nil {
 		logger.Error().Err(err).Fields(generateLogAttributes("List-Keys", "", gvr)).Msg("Failed to list keys")
-		return handleInternalServerError(ctx, "Failed to list keys", err)
+		return &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to list keys",
+		}
 	}
 
 	logger.Debug().Fields(generateLogAttributes("List-Keys", "", gvr)).Msg("Request successfully")
@@ -129,7 +144,10 @@ func countResources(ctx *fiber.Ctx) error {
 	count, err := provisioningApiStore.Count(getDataSetForGvr(gvr))
 	if err != nil {
 		logger.Error().Err(err).Fields(generateLogAttributes("Count-Resources", "", gvr)).Msg("Failed to count resources")
-		return handleInternalServerError(ctx, "Failed to count resources", err)
+		return &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to count resources",
+		}
 	}
 
 	logger.Debug().Fields(generateLogAttributes("Count-Resources", "", gvr)).Msg("Request successfully")
@@ -152,7 +170,10 @@ func deleteResource(ctx *fiber.Ctx) error {
 
 	if err := provisioningApiStore.Delete(&resource); err != nil {
 		logger.Error().Err(err).Fields(generateLogAttributes("Delete", id, gvr)).Msg("Failed to delete resource")
-		return handleInternalServerError(ctx, "Failed to delete resource", err)
+		return &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to delete resource",
+		}
 	}
 
 	logger.Debug().Fields(generateLogAttributes("Delete", id, gvr)).Msg("Request successfully")

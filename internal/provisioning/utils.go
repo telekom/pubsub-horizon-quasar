@@ -5,8 +5,6 @@
 package provisioning
 
 import (
-	"fmt"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,9 +37,10 @@ func getGvrFromContext(ctx *fiber.Ctx) (schema.GroupVersionResource, error) {
 			Str("group", ctx.Request().URI().String()).
 			Msg("Failed to retrieve group, version and resource from context")
 
-		return schema.GroupVersionResource{},
-			handleInternalServerError(ctx, "Failed to retrieve group, version and resource from context",
-				fmt.Errorf("invalid or missing GVR in context"))
+		return schema.GroupVersionResource{}, &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Invalid or missing GVR in context",
+		}
 	}
 	return gvr, nil
 }
@@ -53,9 +52,10 @@ func getResourceIdFromContext(ctx *fiber.Ctx) (string, error) {
 			Str("group", ctx.Request().URI().String()).
 			Msg("Failed to retrieve Resource Id from context")
 
-		return "",
-			handleInternalServerError(ctx, "Failed to retrieve resource id from context",
-				fmt.Errorf("invalid or missing resource id in context"))
+		return "", &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Invalid or missing resource id in context",
+		}
 	}
 	return name, nil
 }
@@ -67,9 +67,10 @@ func getResourceFromContext(ctx *fiber.Ctx) (unstructured.Unstructured, error) {
 			Str("group", ctx.Request().URI().String()).
 			Msg("Failed to retrieve resource from context")
 
-		return unstructured.Unstructured{},
-			handleInternalServerError(ctx, "Failed to retrieve resource from context",
-				fmt.Errorf("invalid or missing resource in context"))
+		return unstructured.Unstructured{}, &fiber.Error{
+			Code:    fiber.StatusInternalServerError,
+			Message: "invalid or missing resource in context",
+		}
 	}
 	return resource, nil
 }
