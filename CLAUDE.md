@@ -148,7 +148,7 @@ golangci-lint run
 This project follows the Uber Go Style Guide with additional project-specific conventions. Key principles include:
 
 ### Naming Conventions
-- **Meaningful names** for all variables, functions, structs (no single-letter names except in tight loops)
+- **Meaningful names** for all variables, functions, structs
 - **Error variables**: Named after the function that returns them, e.g., `errValidateCustomerFeedback := validateCustomerFeedback(...)`
 - **Error types**: Prefix with `Err` or `err` for exported/unexported error variables; suffix with `Error` for custom error types
 - **Type aliases**: Wrap external types in package-local type aliases for easier import management
