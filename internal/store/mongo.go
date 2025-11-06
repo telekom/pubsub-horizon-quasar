@@ -49,7 +49,7 @@ func (m *MongoStore) Initialize() {
 func (m *MongoStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
-		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetDataSet())
+		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetGroupVersionName())
 		_, err := collection.Indexes().CreateOne(m.ctx, model)
 		if err != nil {
 			var resource = resourceConfig.GetGroupVersionResource()

@@ -106,12 +106,8 @@ func Listen(port int) {
 		provisioningApiStore.InitializeResource(reconciliationSource, &resourceConfig)
 	}
 
-	// Setup HTTP service
-	if service == nil {
-		setupService(logger)
-	}
+	setupService(logger)
 
-	// Register shutdown hook
 	utils.RegisterShutdownHook(func() {
 		timeout := 30 * time.Second
 		logger.Info().Dur("timeout", timeout).Msg("Shutting down provisioning service...")
@@ -123,34 +119,10 @@ func Listen(port int) {
 		}
 	}, 1)
 
-	// Start HTTP server in goroutine so it can accept health/readiness probes
-	// while cache population is running
-	serverStarted := make(chan struct{})
-	serverError := make(chan error, 1)
-
-	go func() {
-		logger.Info().Int("port", port).Msg("Starting HTTP server (not yet ready for API requests)...")
-		close(serverStarted) // Signal that we're about to start listening
-		if err := service.Listen(fmt.Sprintf(":%d", port)); err != nil {
-			serverError <- err
-		}
-	}()
-
-	// Wait for server to start
-	<-serverStarted
-	time.Sleep(100 * time.Millisecond) // Brief pause to ensure server is bound to port
-
-	// Check if server failed to start
-	select {
-	case err := <-serverError:
-		log.Fatal().Err(err).Msg("Failed to start HTTP server")
-	default:
-		logger.Info().Msg("HTTP server started, /health and /ready endpoints available")
-	}
-
-	// Block here waiting for server to exit (on shutdown signal or error)
-	select {
-	case err := <-serverError:
-		log.Fatal().Err(err).Msg("HTTP server stopped unexpectedly")
+	// Start provisioning http service
+	logger.Info().Int("port", port).Msg("Starting provisioning http service...")
+	if err := service.Listen(fmt.Sprintf(":%d", port)); err != nil {
+		log.Error().Err(err).Msg("Failed to start provisioning http service")
+		utils.GracefulShutdown()
 	}
 }

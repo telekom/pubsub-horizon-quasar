@@ -405,7 +405,7 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 		store.InitializeResource(kubernetesDataSource, &resourceConfig)
 	}, "no panic expected during resource initialization")
 
-	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetDataSet())
+	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetGroupVersionName())
 	indexCursor, err := collection.Indexes().List(context.Background())
 	assertions.NoError(err)
 

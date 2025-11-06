@@ -30,7 +30,7 @@ func init() {
 }
 
 func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
-	var gaugeName = resourceConfig.GetDataSet()
+	var gaugeName = resourceConfig.GetGroupVersionName()
 
 	gauge, ok := gauges[gaugeName]
 	if !ok {

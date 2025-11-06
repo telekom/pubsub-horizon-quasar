@@ -25,7 +25,7 @@ func NewDataSourceFromStore(store Store, resource config.Resource) *StoreDataSou
 
 // ListResources retrieves all resources from the store relevant for reconciliation
 func (s *StoreDataSource) ListResources() ([]unstructured.Unstructured, error) {
-	resources, err := s.store.List(s.resource.GetDataSet(), "", 0)
+	resources, err := s.store.List(s.resource.GetGroupVersionName(), "", 0)
 	if err != nil {
 		return nil, err
 	}

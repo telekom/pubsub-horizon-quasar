@@ -44,7 +44,7 @@ func (c *Resource) GetGroupVersionKind() schema.GroupVersionKind {
 	}
 }
 
-func (c *Resource) GetDataSet() string {
+func (c *Resource) GetGroupVersionName() string {
 	var gvr = c.GetGroupVersionResource()
 	var name = fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 	return strings.ToLower(name)

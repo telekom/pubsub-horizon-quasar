@@ -85,7 +85,7 @@ func (s *HazelcastStore) Initialize() {
 
 func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
 
-	var mapName = resourceConfig.GetDataSet()
+	var mapName = resourceConfig.GetGroupVersionName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
 		log.Panic().Fields(map[string]any{
@@ -127,11 +127,11 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
-			"cache": resourceConfig.GetDataSet(),
+			"cache": resourceConfig.GetGroupVersionName(),
 		}).Msg("Could not register membership listener for reconciliation")
 	}
 
-	go s.collectMetrics(resourceConfig.GetDataSet())
+	go s.collectMetrics(resourceConfig.GetGroupVersionName())
 }
 
 func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {

@@ -129,7 +129,7 @@ func getDataSetForGvr(gvr schema.GroupVersionResource) string {
 	for i, r := range config.Current.Resources {
 		k := r.Kubernetes
 		if k.Group == gvr.Group && k.Version == gvr.Version && k.Resource == gvr.Resource {
-			return config.Current.Resources[i].GetDataSet()
+			return config.Current.Resources[i].GetGroupVersionName()
 		}
 	}
 	logger.Warn().
