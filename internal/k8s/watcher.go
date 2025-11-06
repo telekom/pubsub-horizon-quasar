@@ -41,19 +41,23 @@ func SetupWatchers(kubeConfigPath string) {
 	if useServiceAccount := len(kubeConfigPath) == 0; useServiceAccount {
 		kubernetesClient, err = CreateInClusterClient()
 		if err != nil {
-			log.Fatal().Err(err).Msg("Could not create kubernetes client!")
+			log.Error().Err(err).Msg("Could not create kubernetes client!")
+			utils.GracefulShutdown()
 		}
+
 	} else {
 		kubernetesClient, err = CreateKubeConfigClient(kubeConfigPath)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Could not create kubernetes client!")
+			log.Error().Err(err).Msg("Could not create kubernetes client!")
+			utils.GracefulShutdown()
 		}
 	}
 
 	for _, resourceConfig := range config.Current.Resources {
 		watcher, err := NewResourceWatcher(kubernetesClient, &resourceConfig, config.Current.ReSyncPeriod)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Could not create resource watcher!")
+			log.Error().Err(err).Msg("Could not create resource watcher!")
+			utils.GracefulShutdown()
 		}
 		go watcher.Start()
 		utils.RegisterShutdownHook(watcher.Stop, 0)
