@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,12 +7,13 @@ package store
 import (
 	"context"
 	"fmt"
+
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type RedisStore struct {
@@ -38,42 +39,57 @@ func (s *RedisStore) Initialize() {
 	log.Info().Msg("Redis connection established...")
 }
 
-func (s *RedisStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (s *RedisStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 	// Nothing to do here
 }
 
-func (s *RedisStore) OnAdd(obj *unstructured.Unstructured) {
+func (s *RedisStore) Create(obj *unstructured.Unstructured) error {
 	var status = s.client.JSONSet(s.ctx, obj.GetName(), ".", obj.Object)
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not write resource to store!")
+		return err
 	}
+	return nil
 }
 
-func (s *RedisStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
+func (s *RedisStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	var status = s.client.JSONSet(s.ctx, oldObj.GetName(), ".", newObj)
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not update resource in store!")
+		return err
 	}
+	return nil
 }
 
-func (s *RedisStore) OnDelete(obj *unstructured.Unstructured) {
+func (s *RedisStore) Delete(obj *unstructured.Unstructured) error {
 	var status = s.client.JSONDel(s.ctx, obj.GetName(), ".")
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
+		return err
 	}
+	return nil
 }
 
 func (s *RedisStore) Shutdown() {
 
 }
 
-func (s *RedisStore) Count(mapName string) (int, error) {
+func (s *RedisStore) Count(dataset string) (int, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *RedisStore) Keys(mapName string) ([]string, error) {
+func (s *RedisStore) Keys(dataset string) ([]string, error) {
 	//TODO implement me
+	panic("implement me")
+}
+
+func (s *RedisStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *RedisStore) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("implement me")
 }
 

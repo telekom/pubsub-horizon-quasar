@@ -1,35 +1,38 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
 package config
 
 import (
+	"time"
+
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"time"
 )
 
 type Configuration struct {
-	LogLevel     string                  `mapstructure:"logLevel"`
-	ReSyncPeriod time.Duration           `mapstructure:"reSyncPeriod"`
-	Resources    []ResourceConfiguration `mapstructure:"resources"`
+	LogLevel     string        `mapstructure:"logLevel"`
+	Mode         Mode          `mapstructure:"mode"`
+	Provisioning Provisioning  `mapstructure:"provisioning"`
+	Watcher      Watcher       `mapstructure:"watcher"`
+	ReSyncPeriod time.Duration `mapstructure:"reSyncPeriod"`
+	Resources    []Resource    `mapstructure:"resources"`
 	Store        struct {
-		Type      string                 `mapstructure:"type"`
-		Redis     RedisConfiguration     `mapstructure:"redis"`
-		Hazelcast HazelcastConfiguration `mapstructure:"hazelcast"`
-		Mongo     MongoConfiguration     `mapstructure:"mongo"`
+		Redis     Redis     `mapstructure:"redis"`
+		Hazelcast Hazelcast `mapstructure:"hazelcast"`
+		Mongo     Mongo     `mapstructure:"mongo"`
 	} `mapstructure:"store"`
 	Fallback struct {
-		Type  string             `mapstructure:"type"`
-		Mongo MongoConfiguration `mapstructure:"mongo"`
+		Type  string `mapstructure:"type"`
+		Mongo Mongo  `mapstructure:"mongo"`
 	} `mapstructure:"fallback"`
-	Metrics MetricsConfiguration `mapstructure:"metrics"`
+	Metrics Metrics `mapstructure:"metrics"`
 }
 
 // GetResourceConfiguration returns a resource configuration for the given object if applicable.
 // The second return values represents whether the resource exists.
-func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured) (*ResourceConfiguration, bool) {
+func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured) (*Resource, bool) {
 	// As GroupVersionKind and GroupVersionResource define two different things with the first describing a single resource
 	// and the latter describing the plural of a custom resource we need to do a name-check and perform a normalization by
 	// putting everything into lower-case.
@@ -44,7 +47,7 @@ func (c *Configuration) GetResourceConfiguration(obj *unstructured.Unstructured)
 	return nil, false
 }
 
-type RedisConfiguration struct {
+type Redis struct {
 	Host     string `mapstructure:"host"`
 	Port     uint   `mapstructure:"port"`
 	Username string `mapstructure:"username"`
@@ -52,12 +55,11 @@ type RedisConfiguration struct {
 	Database int    `mapstructure:"database"`
 }
 
-type HazelcastConfiguration struct {
+type Hazelcast struct {
 	ClusterName            string                      `mapstructure:"clusterName"`
 	Username               string                      `mapstructure:"username"`
 	Password               string                      `mapstructure:"password"`
 	Addresses              []string                    `mapstructure:"addresses"`
-	WriteBehind            bool                        `mapstructure:"writeBehind"`
 	Unisocket              bool                        `mapstructure:"unisocket"`
 	ReconcileMode          ReconcileMode               `mapstructure:"reconcileMode"`
 	ReconciliationInterval time.Duration               `mapstructure:"reconciliationInterval"`
@@ -81,13 +83,26 @@ type HazelcastRetry struct {
 	Jitter         float64       `mapstructure:"jitter"`
 }
 
-type MongoConfiguration struct {
+type Mongo struct {
 	Uri      string `mapstructure:"uri"`
 	Database string `mapstructure:"database"`
 }
 
-type MetricsConfiguration struct {
+type Metrics struct {
 	Enabled bool          `mapstructure:"enabled"`
 	Port    int           `mapstructure:"port"`
 	Timeout time.Duration `mapstructure:"timeout"`
+}
+
+type DualStore struct {
+	Primary   Store `mapstructure:"primary"`
+	Secondary Store `mapstructure:"secondary"`
+}
+
+type Store struct {
+	Type string `mapstructure:"type"`
+}
+
+type Watcher struct {
+	Store DualStore `mapstructure:"store"`
 }

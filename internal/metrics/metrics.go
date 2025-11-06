@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,12 +6,13 @@ package metrics
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
 	"golang.org/x/exp/maps"
-	"strings"
 )
 
 var (
@@ -28,8 +29,8 @@ func init() {
 	counters = make(map[string]*prometheus.CounterVec)
 }
 
-func GetOrCreate(resourceConfig *config.ResourceConfiguration) *prometheus.GaugeVec {
-	var gaugeName = resourceConfig.GetCacheName()
+func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
+	var gaugeName = resourceConfig.GetGroupVersionName()
 
 	gauge, ok := gauges[gaugeName]
 	if !ok {

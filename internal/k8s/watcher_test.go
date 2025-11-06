@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,21 +7,21 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/telekom/quasar/internal/config"
-	"github.com/telekom/quasar/internal/store"
 	"github.com/telekom/quasar/internal/test"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
-	"os"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
 )
 
 var (
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 	subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 
 	config.Current = buildTestConfig()
-	store.CurrentStore = new(test.DummyStore)
+	WatcherStore = new(test.DummyStore)
 
 	fakeClient = createFakeClient()
 
@@ -45,15 +45,15 @@ func TestMain(m *testing.M) {
 
 func buildTestConfig() *config.Configuration {
 	var testConfig = new(config.Configuration)
-	testConfig.Store.Type = "dummy"
+	testConfig.Watcher.Store.Primary.Type = "dummy"
 
-	var testResourceConfig = config.ResourceConfiguration{}
+	var testResourceConfig = config.Resource{}
 	testResourceConfig.Kubernetes.Group = "subscriber.horizon.telekom.de"
 	testResourceConfig.Kubernetes.Version = "v1"
 	testResourceConfig.Kubernetes.Resource = "subscriptions"
 	testResourceConfig.Kubernetes.Namespace = "playground"
 
-	testConfig.Resources = []config.ResourceConfiguration{testResourceConfig}
+	testConfig.Resources = []config.Resource{testResourceConfig}
 
 	return testConfig
 }
@@ -97,7 +97,7 @@ func TestNewResourceWatcher(t *testing.T) {
 
 func TestResourceWatcher_Start(t *testing.T) {
 	var assertions = assert.New(t)
-	var dummyStore = store.CurrentStore.(*test.DummyStore)
+	var dummyStore = WatcherStore.(*test.DummyStore)
 	defer test.LogRecorder.Reset()
 
 	go watcher.Start()

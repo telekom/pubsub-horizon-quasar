@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,9 +8,10 @@ package test
 
 import (
 	"fmt"
+
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/reconciliation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 )
 
 type DummyStore struct {
@@ -26,30 +27,41 @@ func (s *DummyStore) Initialize() {
 	s.IsInitialized = true
 }
 
-func (s *DummyStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
+func (s *DummyStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 	s.HasInitializedResource = true
 }
 
-func (s *DummyStore) OnAdd(obj *unstructured.Unstructured) {
+func (s *DummyStore) Create(obj *unstructured.Unstructured) error {
 	fmt.Printf("Add: %+v\n", obj.GetName())
 	s.AddCalls++
+	return nil
 }
 
-func (s *DummyStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
+func (s *DummyStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	fmt.Printf("Updated: %+v\n", oldObj.GetName())
 	s.UpdateCalls++
+	return nil
 }
 
-func (s *DummyStore) OnDelete(obj *unstructured.Unstructured) {
+func (s *DummyStore) Delete(obj *unstructured.Unstructured) error {
 	fmt.Printf("Deleted: %+v\n", obj.GetName())
 	s.DeleteCalls++
+	return nil
 }
 
-func (s *DummyStore) Count(mapName string) (int, error) {
+func (s *DummyStore) Count(dataset string) (int, error) {
 	panic("not implemented")
 }
 
-func (s *DummyStore) Keys(mapName string) ([]string, error) {
+func (s *DummyStore) Keys(dataset string) ([]string, error) {
+	panic("not implemented")
+}
+
+func (s *DummyStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
+	panic("not implemented")
+}
+
+func (s *DummyStore) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	panic("not implemented")
 }
 

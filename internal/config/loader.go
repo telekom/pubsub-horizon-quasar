@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,11 +6,12 @@ package config
 
 import (
 	"errors"
+	"os"
+	"strings"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"os"
-	"strings"
 )
 
 var Current = LoadConfiguration()
@@ -31,9 +32,21 @@ func setDefaults() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	viper.SetDefault("logLevel", "info")
+	viper.SetDefault("mode", ModeProvisioning)
 	viper.SetDefault("reSyncPeriod", "30s")
 
-	viper.SetDefault("store.type", "hazelcast")
+	viper.SetDefault("provisioning.port", 8081)
+	viper.SetDefault("provisioning.logLevel", "info")
+
+	viper.SetDefault("provisioning.store.primary.type", "mongo")
+	viper.SetDefault("provisioning.store.secondary.type", "hazelcast")
+
+	viper.SetDefault("provisioning.security.enabled", true)
+	viper.SetDefault("provisioning.security.trustedIssuers", []string{"https://auth.example.com/certs"})
+	viper.SetDefault("provisioning.security.trustedClients", []string{"example-client"})
+
+	viper.SetDefault("watcher.store.primary.type", "hazelcast")
+	viper.SetDefault("watcher.store.secondary.type", "mongo")
 
 	viper.SetDefault("store.redis.host", "localhost")
 	viper.SetDefault("store.redis.port", 6379)
@@ -45,7 +58,6 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.clusterName", "horizon")
 	viper.SetDefault("store.hazelcast.username", "")
 	viper.SetDefault("store.hazelcast.password", "")
-	viper.SetDefault("store.hazelcast.writeBehind", true)
 	viper.SetDefault("store.hazelcast.unisocket", false)
 	viper.SetDefault("store.hazelcast.reconcileMode", ReconcileModeFull)
 	viper.SetDefault("store.hazelcast.reconciliationInterval", "60s")
@@ -61,9 +73,9 @@ func setDefaults() {
 	viper.SetDefault("store.hazelcast.connectionStrategy.retry.jitter", 0.0)
 
 	viper.SetDefault("store.mongo.uri", "mongodb://localhost:27017")
-	viper.SetDefault("store.mongo.database", "horizon")
+	viper.SetDefault("store.mongo.database", "horizon-config")
 
-	viper.SetDefault("resources", []ResourceConfiguration{})
+	viper.SetDefault("resources", []Resource{})
 
 	viper.SetDefault("fallback.type", "mongo")
 	viper.SetDefault("fallback.mongo.uri", "mongodb://localhost:27017")

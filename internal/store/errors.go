@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,4 +6,7 @@ package store
 
 import "errors"
 
-var ErrUnknownStoreType = errors.New("unknown store type")
+var (
+	ErrUnknownStoreType = errors.New("unknown store type")
+	ErrNoConnectedStore = errors.New("no connected store available")
+)

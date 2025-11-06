@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,6 +6,11 @@ package store
 
 import (
 	"context"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
@@ -14,20 +19,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/metrics"
-	"github.com/telekom/quasar/internal/mongo"
 	reconciler "github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
-	"os"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type HazelcastStore struct {
 	client          *hazelcast.Client
-	wtClient        *mongo.WriteThroughClient
 	ctx             context.Context
 	reconciliations sync.Map
 	connected       atomic.Bool
@@ -78,10 +76,6 @@ func (s *HazelcastStore) Initialize() {
 		time.Sleep(30 * time.Second)
 	}
 
-	if config.Current.Store.Hazelcast.WriteBehind {
-		s.wtClient = mongo.NewWriteTroughClient(&config.Current.Fallback.Mongo)
-	}
-
 	_, err = s.client.AddLifecycleListener(s.handleClientEvents)
 	if err != nil {
 		log.Error().Err(err).Msg("Could not create hazelcast client lifecycle listener!")
@@ -89,12 +83,9 @@ func (s *HazelcastStore) Initialize() {
 
 }
 
-func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration) {
-	if s.wtClient != nil {
-		s.wtClient.EnsureIndexesOfResource(resourceConfig)
-	}
+func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
 
-	var mapName = resourceConfig.GetCacheName()
+	var mapName = resourceConfig.GetGroupVersionName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
 		log.Panic().Fields(map[string]any{
@@ -117,9 +108,15 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 		interval = 60 * time.Second
 	}
 
-	recon := reconciler.NewReconciliation(kubernetesClient, resourceConfig)
+	recon := reconciler.NewReconciliation(dataSource, resourceConfig)
 	s.reconciliations.Store(mapName, recon)
 
+	// start reconcile immediately for provisioning mode to ensure initial store filling
+	if (config.Current.Mode == config.ModeProvisioning) && s.Connected() {
+		recon.SafeReconcile(s)
+	}
+
+	// start reconcile periodically for all modes
 	go recon.StartPeriodicReconcile(s.ctx, interval, s)
 
 	_, err = s.client.AddMembershipListener(func(event cluster.MembershipStateChanged) {
@@ -130,67 +127,124 @@ func (s *HazelcastStore) InitializeResource(kubernetesClient dynamic.Interface, 
 
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
-			"cache": resourceConfig.GetCacheName(),
+			"cache": resourceConfig.GetGroupVersionName(),
 		}).Msg("Could not register membership listener for reconciliation")
 	}
 
-	go s.collectMetrics(resourceConfig.GetCacheName())
+	go s.collectMetrics(resourceConfig.GetGroupVersionName())
 }
 
-func (s *HazelcastStore) OnAdd(obj *unstructured.Unstructured) {
+func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	json, err := obj.MarshalJSON()
 	if err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not marshal resource to json string!")
+		return err
 	}
 
 	if err := cacheMap.Set(s.ctx, obj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not write resource to store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).Err(err).Msg("Could not write resource to store!")
+		return err
 	}
 
-	if s.wtClient != nil {
-		go s.wtClient.Add(obj)
-	}
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).Msg("Resource created or updated in Hazelcast")
+	return nil
 }
 
-func (s *HazelcastStore) OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) {
+func (s *HazelcastStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(oldObj)
 
 	json, err := newObj.MarshalJSON()
 	if err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not marshal resource to json string!")
+		return err
 	}
 
 	if err := cacheMap.Set(s.ctx, newObj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not update resource in store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "update", newObj)).Err(err).Msg("Could not update resource in store!")
+		return err
 	}
 
-	if s.wtClient != nil {
-		go s.wtClient.Update(newObj)
-	}
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "update", newObj)).Msg("Resource updated in Hazelcast")
+	return nil
 }
 
-func (s *HazelcastStore) OnDelete(obj *unstructured.Unstructured) {
+func (s *HazelcastStore) Delete(obj *unstructured.Unstructured) error {
 	var cacheMap = s.getMap(obj)
 
 	if err := cacheMap.Delete(s.ctx, obj.GetName()); err != nil {
-		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
+		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Err(err).Msg("Could not delete resource from store!")
+		return err
 	}
 
-	if s.wtClient != nil {
-		go s.wtClient.Delete(obj)
-	}
+	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Msg("Resource deleted in Hazelcast")
+	return nil
 }
 
-func (s *HazelcastStore) Shutdown() {
-	if err := s.client.Shutdown(s.ctx); err != nil {
-		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructured, error) {
+	hzMap, err := s.client.GetMap(s.ctx, gvr)
+	if err != nil {
+		return nil, err
 	}
 
-	if s.wtClient != nil {
-		s.wtClient.Disconnect()
+	val, err := hzMap.Get(s.ctx, name)
+	if err != nil {
+		return nil, err
 	}
+
+	jsonData, ok := val.(serialization.JSON)
+	if !ok {
+		return nil, nil
+	}
+
+	var obj unstructured.Unstructured
+	if err := obj.UnmarshalJSON(jsonData); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
+}
+
+func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	hzMap, err := s.client.GetMap(s.ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	keySet, err := hzMap.GetKeySet(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []unstructured.Unstructured
+	count := int64(0)
+	for _, key := range keySet {
+		if limit > 0 && count >= limit {
+			break
+		}
+		val, err := hzMap.Get(s.ctx, key)
+		if err != nil {
+			continue
+		}
+		jsonData, ok := val.(serialization.JSON)
+		if !ok {
+			continue
+		}
+		var obj unstructured.Unstructured
+		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
+			continue
+		}
+
+		if fieldSelector != "" {
+			if !utils.MatchFieldSelector(&obj, fieldSelector) {
+				continue
+			}
+		}
+		result = append(result, obj)
+		count++
+	}
+	return result, nil
 }
 
 func (s *HazelcastStore) Count(mapName string) (int, error) {
@@ -226,6 +280,12 @@ func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
 	return keys, nil
 }
 
+func (s *HazelcastStore) Shutdown() {
+	if err := s.client.Shutdown(s.ctx); err != nil {
+		log.Error().Err(err).Msg("Could not shutdown hazelcast client")
+	}
+}
+
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 	var mapName = utils.GetGroupVersionId(obj)
 
@@ -240,10 +300,11 @@ func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
 }
 
 func (s *HazelcastStore) collectMetrics(resourceName string) {
-	if err := recover(); err != nil {
-		log.Error().Msgf("Recovered from %s during hazelcast metric collection", err)
-		return
-	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error().Msgf("Recovered from %v during hazelcast metric collection", err)
+		}
+	}()
 
 	for {
 		hzMap, err := s.client.GetMap(context.Background(), resourceName)
@@ -336,4 +397,5 @@ func (s *HazelcastStore) onDisconnected() {
 	}
 
 }
+
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

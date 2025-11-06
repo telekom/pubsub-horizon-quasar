@@ -1,41 +1,29 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
 package store
 
 import (
-	"github.com/rs/zerolog/log"
-	"github.com/telekom/quasar/internal/config"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 	"strings"
-)
 
-var CurrentStore Store
+	"github.com/telekom/quasar/internal/config"
+	reconciler "github.com/telekom/quasar/internal/reconciliation"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
 
 type Store interface {
 	Initialize()
-	InitializeResource(kubernetesClient dynamic.Interface, resourceConfig *config.ResourceConfiguration)
-	OnAdd(obj *unstructured.Unstructured)
-	OnUpdate(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured)
-	OnDelete(obj *unstructured.Unstructured)
-	Count(mapName string) (int, error)
-	Keys(mapName string) ([]string, error)
+	InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource)
+	Create(obj *unstructured.Unstructured) error
+	Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error
+	Delete(obj *unstructured.Unstructured) error
+	Count(dataset string) (int, error)
+	Keys(dataset string) ([]string, error)
+	Read(dataset string, key string) (*unstructured.Unstructured, error)
+	List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error)
 	Shutdown()
 	Connected() bool
-}
-
-func SetupStore() {
-	var storeType = config.Current.Store.Type
-	var err error
-	CurrentStore, err = createStore(storeType)
-	if err != nil {
-		log.Fatal().Fields(map[string]any{
-			"storageType": storeType,
-		}).Err(err).Msg("Could not create store!")
-	}
-	CurrentStore.Initialize()
 }
 
 func createStore(storeType string) (Store, error) {

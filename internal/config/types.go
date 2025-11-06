@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -21,3 +21,10 @@ func (m ReconcileMode) String() string {
 		return "unknown"
 	}
 }
+
+type Mode string
+
+const (
+	ModeProvisioning Mode = "provisioning"
+	ModeWatcher      Mode = "watcher"
+)

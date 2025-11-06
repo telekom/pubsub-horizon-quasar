@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,14 +6,15 @@ package config
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/hazelcast/hazelcast-go-client/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 )
 
-type ResourceConfiguration struct {
+type Resource struct {
 	Kubernetes struct {
 		Group     string `mapstructure:"group"`
 		Version   string `mapstructure:"version"`
@@ -24,10 +25,10 @@ type ResourceConfiguration struct {
 	MongoId          string                   `mapstructure:"mongoId"`
 	MongoIndexes     []MongoResourceIndex     `mapstructure:"mongoIndexes"`
 	HazelcastIndexes []HazelcastResourceIndex `mapstructure:"hazelcastIndexes"`
-	Prometheus       PrometheusConfiguration  `mapstructure:"prometheus"`
+	Prometheus       Prometheus               `mapstructure:"prometheus"`
 }
 
-func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionResource {
+func (c *Resource) GetGroupVersionResource() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    c.Kubernetes.Group,
 		Version:  c.Kubernetes.Version,
@@ -35,7 +36,7 @@ func (c *ResourceConfiguration) GetGroupVersionResource() schema.GroupVersionRes
 	}
 }
 
-func (c *ResourceConfiguration) GetGroupVersionKind() schema.GroupVersionKind {
+func (c *Resource) GetGroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   c.Kubernetes.Group,
 		Version: c.Kubernetes.Version,
@@ -43,7 +44,7 @@ func (c *ResourceConfiguration) GetGroupVersionKind() schema.GroupVersionKind {
 	}
 }
 
-func (c *ResourceConfiguration) GetCacheName() string {
+func (c *Resource) GetGroupVersionName() string {
 	var gvr = c.GetGroupVersionResource()
 	var name = fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 	return strings.ToLower(name)

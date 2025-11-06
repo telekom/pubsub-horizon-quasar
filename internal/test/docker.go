@@ -1,4 +1,4 @@
-// Copyright 2024 Deutsche Telekom IT GmbH
+// Copyright 2024 Deutsche Telekom AG
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,14 +9,15 @@ package test
 import (
 	"context"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/cluster"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"log"
-	"time"
 )
 
 var (
@@ -25,12 +26,12 @@ var (
 
 	hazelcastImage = EnvOrDefault("HAZELCAST_IMAGE", "hazelcast/hazelcast")
 	hazelcastTag   = EnvOrDefault("HAZELCAST_TAG", "5.3.6")
-	hazelcastHost  = EnvOrDefault("HAZELCAST_HOST", "localhost")
+	hazelcastHost  = EnvOrDefault("HAZELCAST_HOST", "0.0.0.0")
 	hazelcastPort  = EnvOrDefault("HAZELCAST_PORT", "5701")
 
 	mongoImage = EnvOrDefault("MONGO_IMAGE", "mongo")
 	mongoTag   = EnvOrDefault("MONGO_TAG", "7.0.5-rc0")
-	mongoHost  = EnvOrDefault("MONGO_HOST", "localhost")
+	mongoHost  = EnvOrDefault("MONGO_HOST", "0.0.0.0")
 	mongoPort  = EnvOrDefault("MONGO_PORT", "27017")
 
 	alreadySetUp bool = false
