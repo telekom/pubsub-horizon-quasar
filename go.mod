@@ -11,11 +11,12 @@ require (
 	github.com/hazelcast/hazelcast-go-client v1.4.2
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/redis/go-redis/v9 v9.10.0
+	github.com/redis/go-redis/v9 v9.16.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
+	github.com/valyala/fasthttp v1.63.0
 	go.mongodb.org/mongo-driver v1.17.4
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
 	k8s.io/apimachinery v0.33.1
@@ -92,7 +93,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.63.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
