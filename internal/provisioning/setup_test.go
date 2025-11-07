@@ -75,10 +75,10 @@ func buildTestConfig() *config.Configuration {
 	test.AddTestResource(
 		testConfig,
 		"subscriber.horizon.telekom.de", // group
-		"v1",                             // version
-		"subscriptions",                  // resource
-		"Subscription",                   // kind
-		"default",                        // namespace
+		"v1",                            // version
+		"subscriptions",                 // resource
+		"Subscription",                  // kind
+		"default",                       // namespace
 	)
 
 	return testConfig
