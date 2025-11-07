@@ -1,0 +1,35 @@
+# Copyright 2025 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Linting
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:20.10.12-dind
+        ports:
+          - 5701:5701
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1
+          args: --build-tags testing
