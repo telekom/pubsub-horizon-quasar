@@ -47,7 +47,9 @@ func TestHazelcastStore_OnAdd(t *testing.T) {
 
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
-		hazelcastStore.Create(subscription)
+		if err := hazelcastStore.Create(subscription); err != nil {
+			return
+		}
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not write subscription %s", subscription.GetName())
 
 		hzMap := hazelcastStore.getMap(subscription)
@@ -70,7 +72,9 @@ func TestHazelcastStore_OnUpdate(t *testing.T) {
 		labels["hazelcast_test"] = "true"
 		updatedSubscription.SetLabels(labels)
 
-		hazelcastStore.Update(subscription, updatedSubscription)
+		if err := hazelcastStore.Update(subscription, updatedSubscription); err != nil {
+			return
+		}
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not update subscription %s", subscription.GetName())
 
 		hzMap := hazelcastStore.getMap(subscription)
@@ -90,7 +94,9 @@ func TestHazelcastStore_OnDelete(t *testing.T) {
 
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
-		hazelcastStore.Delete(subscription)
+		if err := hazelcastStore.Delete(subscription); err != nil {
+			return
+		}
 		assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "could not delete subscription %s", subscription.GetName())
 	}
 }

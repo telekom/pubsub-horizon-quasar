@@ -19,27 +19,6 @@ import (
 	"github.com/telekom/quasar/internal/test"
 )
 
-// Global dual store manager for tests
-var dualStoreManager DualStore
-
-// setupDualStoreManager initializes the dual store manager for tests
-func setupDualStoreManager() DualStore {
-	if dualStoreManager == nil {
-		// Create a dual store manager with MongoDB as primary and Hazelcast as secondary
-		manager, err := SetupDualStoreManager(
-			"test-manager",
-			"mongo",
-			"hazelcast",
-		)
-		if err != nil {
-			// Fallback to single store if setup fails
-			return nil
-		}
-		dualStoreManager = manager
-	}
-	return dualStoreManager
-}
-
 // TestSetupDualStoreManager tests the SetupDualStoreManager function
 func TestSetupDualStoreManager(t *testing.T) {
 	var assertions = assert.New(t)
@@ -178,7 +157,7 @@ func TestDualStoreManagerCreate(t *testing.T) {
 	resource := test.CreateTestResource("test-resource", "default", nil)
 
 	// Create should succeed or fail based on primary store
-	err = manager.Create(resource)
+	_ = manager.Create(resource)
 	// We don't assert on error here as it depends on MongoDB availability
 	assertions.NotNil(manager)
 }
@@ -200,7 +179,7 @@ func TestDualStoreManagerUpdate(t *testing.T) {
 	newResource := test.CreateTestResource("test-resource", "default", map[string]string{"updated": "true"})
 
 	// Update should succeed or fail based on primary store
-	err = manager.Update(oldResource, newResource)
+	_ = manager.Update(oldResource, newResource)
 	// We don't assert on error here as it depends on MongoDB availability
 	assertions.NotNil(manager)
 }
@@ -221,7 +200,7 @@ func TestDualStoreManagerDelete(t *testing.T) {
 	resource := test.CreateTestResource("test-resource", "default", nil)
 
 	// Delete should succeed or fail based on primary store
-	err = manager.Delete(resource)
+	_ = manager.Delete(resource)
 	// We don't assert on error here as it depends on MongoDB availability
 	assertions.NotNil(manager)
 }
@@ -240,7 +219,7 @@ func TestDualStoreManagerCount(t *testing.T) {
 	assertions.NoError(err)
 	defer manager.Shutdown()
 
-	_, err = manager.Count("test-collection")
+	_, _ = manager.Count("test-collection")
 	assertions.NotNil(manager)
 	// Count result depends on MongoDB
 }
@@ -259,7 +238,7 @@ func TestDualStoreManagerKeys(t *testing.T) {
 	defer manager.Shutdown()
 
 	// Keys should read from primary store
-	keys, err := manager.Keys("test-collection")
+	keys, _ := manager.Keys("test-collection")
 	assertions.NotNil(manager)
 	// Keys result depends on MongoDB
 	_ = keys
@@ -279,7 +258,7 @@ func TestDualStoreManagerRead(t *testing.T) {
 	defer manager.Shutdown()
 
 	// Read should read from primary store
-	result, err := manager.Read("test-collection", "test-key")
+	result, _ := manager.Read("test-collection", "test-key")
 	assertions.NotNil(manager)
 	// Result depends on MongoDB
 	_ = result
@@ -299,7 +278,7 @@ func TestDualStoreManagerList(t *testing.T) {
 	defer manager.Shutdown()
 
 	// List should read from primary store
-	results, err := manager.List("test-collection", "", 0)
+	results, _ := manager.List("test-collection", "", 0)
 	assertions.NotNil(manager)
 	// Results depend on MongoDB
 	_ = results

@@ -192,10 +192,7 @@ func (m *DualStoreManager) Shutdown() {
 }
 
 func (m *DualStoreManager) Connected() bool {
-	if m.primary.Connected() {
-		return true
-	}
-	return false
+	return m.primary.Connected()
 }
 
 func (m *DualStoreManager) GetPrimary() Store {
