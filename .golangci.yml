@@ -16,6 +16,12 @@ linters:
     - staticcheck
     - unused
     - zerologlint
+    - godoclint
+  settings:
+    godoclint:
+      enable:
+        - start-with-name
+        - deprecated
 
 formatters:
   settings:
