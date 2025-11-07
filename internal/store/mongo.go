@@ -237,7 +237,11 @@ func (m *MongoStore) List(collectionName string, fieldSelector string, limit int
 			Msg("Failed to list resources from MongoDB")
 		return nil, err
 	}
-	defer cursor.Close(m.ctx)
+	defer func(cursor *mongo.Cursor, ctx context.Context) {
+		if err := cursor.Close(ctx); err != nil {
+			return
+		}
+	}(cursor, m.ctx)
 
 	var results []unstructured.Unstructured
 	for cursor.Next(m.ctx) {

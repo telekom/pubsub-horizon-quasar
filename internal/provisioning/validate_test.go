@@ -316,7 +316,10 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resource", *resource)
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
-		handleErrors(ctx, err)
+
+		if err := handleErrors(ctx, err); err != nil {
+			return
+		}
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 
@@ -340,7 +343,10 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resource", *resource)
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
-		handleErrors(ctx, err)
+
+		if err := handleErrors(ctx, err); err != nil {
+			return
+		}
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 
@@ -364,7 +370,10 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 		ctx.Locals("resource", *resource)
 
 		_, _, _, err := getGvrAndIdAndResourceFromContext(ctx)
-		handleErrors(ctx, err)
+
+		if err := handleErrors(ctx, err); err != nil {
+			return
+		}
 		assertions.Equal(fiber.StatusBadRequest, ctx.Response().StatusCode(), "should return BadRequest status")
 	})
 }
@@ -527,7 +536,10 @@ func TestWithKubernetesResource(t *testing.T) {
 
 		// Parse response to verify resource name
 		var response map[string]string
-		json.NewDecoder(resp.Body).Decode(&response)
+
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return
+		}
 		assertions.Equal("test-resource", response["name"])
 	})
 

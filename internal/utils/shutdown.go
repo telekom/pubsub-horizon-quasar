@@ -6,11 +6,12 @@ package utils
 
 import (
 	"cmp"
-	"github.com/rs/zerolog/log"
 	"os"
 	"os/signal"
 	"slices"
 	"syscall"
+
+	"github.com/rs/zerolog/log"
 )
 
 var shutdownHooks []ShutdownHook
@@ -31,7 +32,7 @@ func RegisterShutdownHook(shutdownFunc ShutdownFunc, priority int) {
 }
 
 func GracefulShutdown() {
-	var sig = make(chan os.Signal)
+	var sig = make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	<-sig
 

@@ -70,7 +70,10 @@ func getTestCollectionName() string {
 // cleanupMongoCollection deletes test data from the collection
 func cleanupMongoCollection() {
 	if mongoStore != nil && mongoStore.Connected() {
-		mongoStore.client.Database(config.Current.Store.Mongo.Database).Collection(getTestCollectionName()).Drop(context.Background())
+		err := mongoStore.client.Database(config.Current.Store.Mongo.Database).Collection(getTestCollectionName()).Drop(context.Background())
+		if err != nil {
+			return
+		}
 	}
 }
 

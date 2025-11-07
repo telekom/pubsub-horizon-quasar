@@ -118,7 +118,10 @@ func (w *ResourceWatcher) add(obj any) {
 	uObj, ok := obj.(*unstructured.Unstructured)
 	if ok {
 		utils.AddMissingEnvironment(uObj)
-		WatcherStore.Create(uObj)
+		err := WatcherStore.Create(uObj)
+		if err != nil {
+			return
+		}
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
 			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
@@ -143,7 +146,10 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 		}
 
 		utils.AddMissingEnvironment(uNewObj)
-		WatcherStore.Update(uOldObj, uNewObj)
+		err := WatcherStore.Update(uOldObj, uNewObj)
+		if err != nil {
+			return
+		}
 		log.Debug().Fields(utils.CreateFieldsForOp("update", uOldObj)).Msg("Updated dataset")
 	} else {
 		log.Warn().Fields(map[string]any{
@@ -157,7 +163,10 @@ func (w *ResourceWatcher) update(oldObj any, newObj any) {
 func (w *ResourceWatcher) delete(obj any) {
 	uObj, ok := obj.(*unstructured.Unstructured)
 	if ok {
-		WatcherStore.Delete(uObj)
+		err := WatcherStore.Delete(uObj)
+		if err != nil {
+			return
+		}
 		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Fields("Deleted dataset")
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {

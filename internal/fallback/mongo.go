@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
@@ -16,7 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 )
 
 type MongoFallback struct {
@@ -67,7 +68,10 @@ func (m *MongoFallback) ReplayResource(gvr *schema.GroupVersionResource, replayF
 		var unstructuredObj unstructured.Unstructured
 		_ = unstructuredObj.UnmarshalJSON(bytes)
 
-		replayFunc(&unstructuredObj)
+		err := replayFunc(&unstructuredObj)
+		if err != nil {
+			return 0, err
+		}
 		replayedDocuments++
 		log.Debug().Fields(utils.CreateFieldsForOp("replay", &unstructuredObj)).Msg("Replayed resource from MongoDB")
 	}
