@@ -8,6 +8,15 @@ run:
   build-tags:
     - testing
 
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - zerologlint
+
 formatters:
   settings:
     gci: {}
