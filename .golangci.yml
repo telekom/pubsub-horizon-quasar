@@ -10,6 +10,12 @@ run:
 
 linters:
   enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - copyloopvar
     - errcheck
     - govet
     - ineffassign
@@ -18,6 +24,8 @@ linters:
     - zerologlint
     - godoclint
     - whitespace
+    - dupl
+
   settings:
     godoclint:
       enable:
@@ -29,7 +37,8 @@ linters:
 
 formatters:
   settings:
-    gci: {}
+    gci:
+      no-inline-comments: true
     gofmt:
       simplify: true
       rewrite-rules:
