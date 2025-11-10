@@ -70,7 +70,6 @@ func processSubscriptions(action string) {
 
 	for _, subscription := range subscriptions {
 		switch strings.ToLower(action) {
-
 		case "add":
 			_, _ = resource.Create(ctx, subscription, v1.CreateOptions{})
 
@@ -83,7 +82,6 @@ func processSubscriptions(action string) {
 
 		case "delete":
 			_ = resource.Delete(ctx, subscription.GetName(), v1.DeleteOptions{})
-
 		}
 	}
 }

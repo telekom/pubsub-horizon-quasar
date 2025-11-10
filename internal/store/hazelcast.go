@@ -80,11 +80,9 @@ func (s *HazelcastStore) Initialize() {
 	if err != nil {
 		log.Error().Err(err).Msg("Could not create hazelcast client lifecycle listener!")
 	}
-
 }
 
 func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
-
 	var mapName = resourceConfig.GetGroupVersionName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
@@ -395,7 +393,6 @@ func (s *HazelcastStore) onDisconnected() {
 	if s.connected.CompareAndSwap(true, false) {
 		log.Debug().Msg("Hazelcast client disconnected — connected flag reset")
 	}
-
 }
 
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

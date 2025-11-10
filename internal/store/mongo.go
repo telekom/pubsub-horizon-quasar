@@ -47,6 +47,7 @@ func (m *MongoStore) Initialize() {
 }
 
 func (m *MongoStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
+	_ = dataSource
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
 		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetGroupVersionName())
@@ -315,7 +316,6 @@ func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
 				filter[key] = value
 			}
 		}
-
 	}
 	return filter, nil
 }

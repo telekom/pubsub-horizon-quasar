@@ -44,7 +44,6 @@ func SetupWatchers(kubeConfigPath string) {
 			log.Error().Err(err).Msg("Could not create kubernetes client!")
 			utils.GracefulShutdown()
 		}
-
 	} else {
 		kubernetesClient, err = CreateKubeConfigClient(kubeConfigPath)
 		if err != nil {

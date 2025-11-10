@@ -79,7 +79,6 @@ func SetupDocker(opts *Options) {
 	pool.MaxWait = 30 * time.Second
 
 	err = pool.Retry(func() error {
-
 		// MongoDB readiness
 		if opts.MongoDb {
 			if err := pingMongoDb(); err != nil {
@@ -88,7 +87,7 @@ func SetupDocker(opts *Options) {
 		}
 		log.Println("MongoDB is ready!")
 
-		// Hazelcast rediness
+		// Hazelcast readiness
 		if opts.Hazelcast {
 			if err := pingHazelcast(); err != nil {
 				return err

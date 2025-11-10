@@ -5,11 +5,12 @@
 package fallback
 
 import (
+	"strings"
+
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strings"
 )
 
 var CurrentFallback Fallback
@@ -34,12 +35,10 @@ func SetupFallback() {
 
 func createFallback(fallbackType string) (Fallback, error) {
 	switch strings.ToLower(fallbackType) {
-
 	case "mongo":
 		return new(MongoFallback), nil
 
 	default:
 		return nil, ErrUnknownFallback
-
 	}
 }

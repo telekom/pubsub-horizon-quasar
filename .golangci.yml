@@ -17,11 +17,15 @@ linters:
     - unused
     - zerologlint
     - godoclint
+    - whitespace
   settings:
     godoclint:
       enable:
         - start-with-name
         - deprecated
+    whitespace:
+      multi-if: true
+      multi-func: true
 
 formatters:
   settings:
