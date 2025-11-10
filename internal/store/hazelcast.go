@@ -88,7 +88,7 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 	if err != nil {
 		log.Panic().Fields(map[string]any{
 			"name": mapName,
-		}).Msg("Could not find map")
+		}).Err(err).Msg("Could not find map")
 	}
 
 	for _, index := range resourceConfig.HazelcastIndexes {
