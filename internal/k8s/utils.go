@@ -5,13 +5,14 @@
 package k8s
 
 import (
+	"time"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	"time"
 )
 
 func CreateInClusterClient() (*dynamic.DynamicClient, error) {

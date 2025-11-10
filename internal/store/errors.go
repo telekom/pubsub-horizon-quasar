@@ -6,7 +6,4 @@ package store
 
 import "errors"
 
-var (
-	ErrUnknownStoreType = errors.New("unknown store type")
-	ErrNoConnectedStore = errors.New("no connected store available")
-)
+var ErrUnknownStoreType = errors.New("unknown store type")

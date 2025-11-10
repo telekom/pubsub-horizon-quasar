@@ -27,7 +27,7 @@ func (s *DummyStore) Initialize() {
 	s.IsInitialized = true
 }
 
-func (s *DummyStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
+func (s *DummyStore) InitializeResource(reconciliation.DataSource, *config.Resource) {
 	s.HasInitializedResource = true
 }
 
@@ -38,6 +38,7 @@ func (s *DummyStore) Create(obj *unstructured.Unstructured) error {
 }
 
 func (s *DummyStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
+	_ = newObj
 	fmt.Printf("Updated: %+v\n", oldObj.GetName())
 	s.UpdateCalls++
 	return nil
@@ -50,18 +51,22 @@ func (s *DummyStore) Delete(obj *unstructured.Unstructured) error {
 }
 
 func (s *DummyStore) Count(dataset string) (int, error) {
+	_ = dataset
 	panic("not implemented")
 }
 
 func (s *DummyStore) Keys(dataset string) ([]string, error) {
+	_ = dataset
 	panic("not implemented")
 }
 
 func (s *DummyStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
+	_, _ = dataset, key
 	panic("not implemented")
 }
 
 func (s *DummyStore) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	_, _, _ = dataset, fieldSelector, limit
 	panic("not implemented")
 }
 

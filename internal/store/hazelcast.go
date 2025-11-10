@@ -230,7 +230,7 @@ func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([
 			continue
 		}
 		var obj unstructured.Unstructured
-		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
+		if err := obj.UnmarshalJSON(jsonData); err != nil {
 			continue
 		}
 

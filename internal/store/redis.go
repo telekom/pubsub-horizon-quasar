@@ -40,6 +40,7 @@ func (s *RedisStore) Initialize() {
 }
 
 func (s *RedisStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
+	_, _ = dataSource, resourceConfig
 	// Nothing to do here
 }
 
@@ -75,21 +76,25 @@ func (s *RedisStore) Shutdown() {
 }
 
 func (s *RedisStore) Count(dataset string) (int, error) {
+	_ = dataset
 	//TODO implement me
 	panic("implement me")
 }
 
 func (s *RedisStore) Keys(dataset string) ([]string, error) {
+	_ = dataset
 	//TODO implement me
 	panic("implement me")
 }
 
 func (s *RedisStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
+	_, _ = dataset, key
 	//TODO implement me
 	panic("implement me")
 }
 
 func (s *RedisStore) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	_, _, _ = dataset, fieldSelector, limit
 	panic("implement me")
 }
 

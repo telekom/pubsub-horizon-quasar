@@ -34,7 +34,7 @@ var (
 	mongoHost  = EnvOrDefault("MONGO_HOST", "0.0.0.0")
 	mongoPort  = EnvOrDefault("MONGO_PORT", "27017")
 
-	alreadySetUp bool = false
+	alreadySetUp = false
 )
 
 type Options struct {

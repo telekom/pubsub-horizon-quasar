@@ -7,9 +7,10 @@
 package test
 
 import (
+	"os"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"os"
 )
 
 var LogRecorder *LogRecorderHook
@@ -27,7 +28,7 @@ type LogRecorderHook struct {
 	records map[zerolog.Level]int
 }
 
-func (h *LogRecorderHook) Run(e *zerolog.Event, level zerolog.Level, message string) {
+func (h *LogRecorderHook) Run(_ *zerolog.Event, level zerolog.Level, _ string) {
 	h.record(level)
 }
 
