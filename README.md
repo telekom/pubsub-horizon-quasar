@@ -46,7 +46,13 @@ go build
 This repository provides a multi-stage Dockerfile that will also take care of compiling the software, as well as dockerizing Quasar. Simply run:
 
 ```bash
-docker build -t horizon-quasar:latest  . 
+docker build -t horizon-quasar:latest  .
+```
+
+### Linting
+Run linting to check code quality:
+```bash
+golangci-lint run .
 ```
 
 ## Configuration

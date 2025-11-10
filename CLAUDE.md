@@ -56,11 +56,9 @@ The project uses pre-commit hooks:
 - Conventional commits enforcement
 
 ### Linting
-Use standard Go tooling:
+Run linting to check code quality:
 ```bash
-go fmt ./...
-goimports -w .
-golangci-lint run
+golangci-lint run .
 ```
 
 ## Architecture
