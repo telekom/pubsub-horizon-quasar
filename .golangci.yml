@@ -15,6 +15,7 @@ linters:
     - bidichk
     - bodyclose
     - canonicalheader
+    - cyclop
     - copyloopvar
     - errcheck
     - govet
@@ -27,6 +28,9 @@ linters:
     - dupl
 
   settings:
+    cyclop:
+      max-complexity: 30
+      package-average: 10
     godoclint:
       enable:
         - start-with-name

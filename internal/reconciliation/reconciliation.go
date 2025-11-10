@@ -49,62 +49,70 @@ func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 
 	switch mode {
 	case config.ReconcileModeFull:
-		log.Debug().
-			Str("cache", r.resource.GetGroupVersionName()).
-			Int("count", len(resources)).
-			Msg("Performing full reconciliation: inserting all resources")
-		for _, item := range resources {
-			utils.AddMissingEnvironment(&item)
-			if err := reconcilable.Create(&item); err != nil {
-				log.Error().Err(err).Fields(utils.CreateFieldsForOp("create", &item)).Msg("Failed to reconcile (full) item")
-			}
-			log.Debug().
-				Fields(utils.CreateFieldsForOp("create", &item)).
-				Msg("Reconciled (full) item")
-		}
+		r.fullyReconcile(reconcilable, resources)
 
 	case config.ReconcileModeIncremental:
-		resourceCount := len(resources)
-		storeSize, err := reconcilable.Count(r.resource.GetGroupVersionName())
-		if err != nil {
-			log.Error().Err(err).Fields(map[string]any{
-				"cache": r.resource.GetGroupVersionName(),
-			}).Msg("Could not get size of store")
-			return
-		}
-
-		log.Info().Fields(map[string]any{
-			"cache":         r.resource.GetGroupVersionName(),
-			"storeSize":     storeSize,
-			"resourceCount": resourceCount,
-		}).Msg("Checking for store size mismatch...")
-
-		if storeSize < resourceCount {
-			log.Warn().Fields(map[string]any{
-				"cache": r.resource.GetGroupVersionName(),
-			}).Msg("Store size does not match resource count. Generating diff for reconciliation...")
-
-			storeKeys, err := reconcilable.Keys(r.resource.GetGroupVersionName())
-			if err != nil {
-				log.Error().Err(err).Msg("Could no retrieve store keys")
-			}
-
-			missingItems := r.generateDiff(resources, storeKeys)
-			log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingItems))
-			for _, item := range missingItems {
-				utils.AddMissingEnvironment(&item)
-				if err := reconcilable.Create(&item); err != nil {
-					log.Error().Err(err).Fields(utils.CreateFieldsForOp("restore", &item)).Msg("Failed to reconcile (diff) item")
-				}
-				log.Warn().Fields(utils.CreateFieldsForOp("restore", &item)).Msg("Reconciled (diff) item")
-			}
-		}
+		r.incrementallyReconcile(reconcilable, resources)
 
 	default:
 		log.Error().
 			Str("cache", r.resource.GetGroupVersionName()).
 			Str("mode", mode.String()).
 			Msg("Unknown reconciliation mode, skipping")
+	}
+}
+
+func (r *Reconciliation) incrementallyReconcile(reconcilable Reconcilable, resources []unstructured.Unstructured) {
+	resourceCount := len(resources)
+	storeSize, err := reconcilable.Count(r.resource.GetGroupVersionName())
+	if err != nil {
+		log.Error().Err(err).Fields(map[string]any{
+			"cache": r.resource.GetGroupVersionName(),
+		}).Msg("Could not get size of store")
+		return
+	}
+
+	log.Info().Fields(map[string]any{
+		"cache":         r.resource.GetGroupVersionName(),
+		"storeSize":     storeSize,
+		"resourceCount": resourceCount,
+	}).Msg("Checking for store size mismatch...")
+
+	if storeSize < resourceCount {
+		log.Warn().Fields(map[string]any{
+			"cache": r.resource.GetGroupVersionName(),
+		}).Msg("Store size does not match resource count. Generating diff for reconciliation...")
+
+		storeKeys, err := reconcilable.Keys(r.resource.GetGroupVersionName())
+		if err != nil {
+			log.Error().Err(err).Msg("Could no retrieve store keys")
+		}
+
+		missingItems := r.generateDiff(resources, storeKeys)
+		log.Warn().Msgf("Identified %d missing cache entries. Reprocessing...", len(missingItems))
+		for _, item := range missingItems {
+			utils.AddMissingEnvironment(&item)
+			if err := reconcilable.Create(&item); err != nil {
+				log.Error().Err(err).Fields(utils.CreateFieldsForOp("restore", &item)).Msg("Failed to reconcile (diff) item")
+			}
+			log.Warn().Fields(utils.CreateFieldsForOp("restore", &item)).Msg("Reconciled (diff) item")
+		}
+	}
+}
+
+func (r *Reconciliation) fullyReconcile(reconcilable Reconcilable, resources []unstructured.Unstructured) {
+	log.Debug().
+		Str("cache", r.resource.GetGroupVersionName()).
+		Int("count", len(resources)).
+		Msg("Performing full reconciliation: inserting all resources")
+	for _, item := range resources {
+		utils.AddMissingEnvironment(&item)
+		if err := reconcilable.Create(&item); err != nil {
+			log.Error().Err(err).Fields(utils.CreateFieldsForOp("create", &item)).Msg("Failed to reconcile (full) item")
+		}
+		log.Debug().
+			Fields(utils.CreateFieldsForOp("create", &item)).
+			Msg("Reconciled (full) item")
 	}
 }
 
