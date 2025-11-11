@@ -58,7 +58,7 @@ The project uses pre-commit hooks:
 ### Linting
 Run linting to check code quality:
 ```bash
-golangci-lint run .
+golangci-lint run
 ```
 
 ## Architecture

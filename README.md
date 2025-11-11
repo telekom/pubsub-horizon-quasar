@@ -52,7 +52,7 @@ docker build -t horizon-quasar:latest  .
 ### Linting
 Run linting to check code quality:
 ```bash
-golangci-lint run .
+golangci-lint run
 ```
 
 ## Configuration

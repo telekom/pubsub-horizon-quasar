@@ -66,6 +66,36 @@ linters:
       multi-if: true
       multi-func: true
 
+  # Move exclusions here - at the linters level, not under settings
+  exclusions:
+    generated: lax
+    presets:
+      - comments  # Note: fixed typo from "commments"
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gocritic
+        source: //noinspection
+      - linters:
+          - bodyclose
+          - dupl
+          - funlen
+          - goconst
+          - gosec
+          - noctx
+          - wrapcheck
+          - errcheck
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-same-issues: 50
+
 formatters:
   settings:
     gci:
@@ -80,5 +110,3 @@ formatters:
     gofumpt: {}
     goimports: {}
     golines: {}
-
-
