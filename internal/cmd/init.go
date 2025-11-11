@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"errors"
+
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -17,7 +18,7 @@ var initCmd = &cobra.Command{
 	Run:   initializeConfig,
 }
 
-func initializeConfig(cmd *cobra.Command, args []string) {
+func initializeConfig(*cobra.Command, []string) {
 	if err := viper.SafeWriteConfig(); err != nil {
 		handleConfigInitErr(err)
 		return

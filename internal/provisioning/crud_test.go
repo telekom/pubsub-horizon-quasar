@@ -49,7 +49,7 @@ func NewMockDualStoreWithErrors() *MockDualStoreWithErrors {
 
 func (m *MockDualStoreWithErrors) Initialize() {}
 
-func (m *MockDualStoreWithErrors) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
+func (m *MockDualStoreWithErrors) InitializeResource(reconciliation.DataSource, *config.Resource) {
 }
 
 func (m *MockDualStoreWithErrors) Create(obj *unstructured.Unstructured) error {
@@ -61,6 +61,7 @@ func (m *MockDualStoreWithErrors) Create(obj *unstructured.Unstructured) error {
 }
 
 func (m *MockDualStoreWithErrors) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
+	_, _ = oldObj, newObj
 	return nil
 }
 
@@ -73,6 +74,7 @@ func (m *MockDualStoreWithErrors) Delete(obj *unstructured.Unstructured) error {
 }
 
 func (m *MockDualStoreWithErrors) Count(dataset string) (int, error) {
+	_ = dataset
 	if m.CountError {
 		return 0, fmt.Errorf("mock count error")
 	}
@@ -80,6 +82,7 @@ func (m *MockDualStoreWithErrors) Count(dataset string) (int, error) {
 }
 
 func (m *MockDualStoreWithErrors) Keys(dataset string) ([]string, error) {
+	_ = dataset
 	if m.KeysError {
 		return nil, fmt.Errorf("mock keys error")
 	}
@@ -91,6 +94,7 @@ func (m *MockDualStoreWithErrors) Keys(dataset string) ([]string, error) {
 }
 
 func (m *MockDualStoreWithErrors) Read(dataset string, key string) (*unstructured.Unstructured, error) {
+	_ = dataset
 	if m.ReadError {
 		return nil, fmt.Errorf("mock read error")
 	}
@@ -104,6 +108,7 @@ func (m *MockDualStoreWithErrors) Read(dataset string, key string) (*unstructure
 }
 
 func (m *MockDualStoreWithErrors) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
+	_, _ = dataset, fieldSelector
 	if m.ListError {
 		return nil, fmt.Errorf("mock list error")
 	}

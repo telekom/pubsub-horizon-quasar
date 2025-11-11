@@ -8,11 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/utils"
-	"net/http"
 )
 
 var server *http.Server

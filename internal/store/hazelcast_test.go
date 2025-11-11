@@ -66,7 +66,6 @@ func TestHazelcastStore_OnUpdate(t *testing.T) {
 
 	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
-
 		updatedSubscription := subscription.DeepCopy()
 		labels := make(map[string]string)
 		labels["hazelcast_test"] = "true"

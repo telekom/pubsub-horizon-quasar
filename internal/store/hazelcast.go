@@ -80,17 +80,15 @@ func (s *HazelcastStore) Initialize() {
 	if err != nil {
 		log.Error().Err(err).Msg("Could not create hazelcast client lifecycle listener!")
 	}
-
 }
 
 func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
-
 	var mapName = resourceConfig.GetGroupVersionName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
 		log.Panic().Fields(map[string]any{
 			"name": mapName,
-		}).Msg("Could not find map")
+		}).Err(err).Msg("Could not find map")
 	}
 
 	for _, index := range resourceConfig.HazelcastIndexes {
@@ -232,7 +230,7 @@ func (s *HazelcastStore) List(name string, fieldSelector string, limit int64) ([
 			continue
 		}
 		var obj unstructured.Unstructured
-		if err := obj.UnmarshalJSON([]byte(jsonData)); err != nil {
+		if err := obj.UnmarshalJSON(jsonData); err != nil {
 			continue
 		}
 
@@ -395,7 +393,6 @@ func (s *HazelcastStore) onDisconnected() {
 	if s.connected.CompareAndSwap(true, false) {
 		log.Debug().Msg("Hazelcast client disconnected — connected flag reset")
 	}
-
 }
 
 func (s *HazelcastStore) Connected() bool { return s.connected.Load() }

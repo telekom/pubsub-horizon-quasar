@@ -44,7 +44,6 @@ func SetupWatchers(kubeConfigPath string) {
 			log.Error().Err(err).Msg("Could not create kubernetes client!")
 			utils.GracefulShutdown()
 		}
-
 	} else {
 		kubernetesClient, err = CreateKubeConfigClient(kubeConfigPath)
 		if err != nil {
@@ -167,7 +166,7 @@ func (w *ResourceWatcher) delete(obj any) {
 		if err != nil {
 			return
 		}
-		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Fields("Deleted dataset")
+		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Msg("Deleted dataset")
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
 			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)

@@ -225,7 +225,7 @@ func TestWithTrustedClients(t *testing.T) {
 	t.Run("empty trusted clients list allows all", func(t *testing.T) {
 		app := createTestFiberApp()
 
-		trustedClients := []string{} // Empty list
+		var trustedClients []string // Empty list
 
 		// Middleware that mocks JWT
 		mockJwtMiddleware := func(c *fiber.Ctx) error {

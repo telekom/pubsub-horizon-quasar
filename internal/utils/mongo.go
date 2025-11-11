@@ -6,9 +6,10 @@ package utils
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/telekom/quasar/internal/config"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"strings"
 )
 
 func GetMongoId(obj *unstructured.Unstructured) (string, error) {

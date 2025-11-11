@@ -7,3 +7,51 @@ version: "2"
 run:
   build-tags:
     - testing
+
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - cyclop
+    - copyloopvar
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - zerologlint
+    - godoclint
+    - whitespace
+    - dupl
+
+  settings:
+    cyclop:
+      max-complexity: 30
+      package-average: 10
+    godoclint:
+      enable:
+        - start-with-name
+        - deprecated
+    whitespace:
+      multi-if: true
+      multi-func: true
+
+formatters:
+  settings:
+    gci:
+      no-inline-comments: true
+    gofmt:
+      simplify: true
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+        - pattern: 'a[b:len(a)]'
+          replacement: 'a[b:]'
+    gofumpt: {}
+    goimports: {}
+    golines: {}
+
+

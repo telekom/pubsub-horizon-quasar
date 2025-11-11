@@ -31,7 +31,6 @@ func putResource(ctx *fiber.Ctx) error {
 	}
 	logger.Debug().Fields(generateLogAttributes("Put", id, gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusOK).Send(nil)
-
 }
 
 // getResource handles GET requests to retrieve a specific Kubernetes resource

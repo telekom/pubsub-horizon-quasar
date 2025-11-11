@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -47,6 +48,7 @@ func (m *MongoStore) Initialize() {
 }
 
 func (m *MongoStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
+	_ = dataSource
 	for _, index := range resourceConfig.MongoIndexes {
 		var model = index.ToIndexModel()
 		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetGroupVersionName())
@@ -188,7 +190,7 @@ func (m *MongoStore) Read(collectionName string, key string) (*unstructured.Unst
 
 	err := collection.FindOne(m.ctx, filter).Decode(&result.Object)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil
 		}
 		log.Error().Err(err).
@@ -315,7 +317,6 @@ func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
 				filter[key] = value
 			}
 		}
-
 	}
 	return filter, nil
 }

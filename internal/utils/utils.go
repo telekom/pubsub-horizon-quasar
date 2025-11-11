@@ -76,14 +76,6 @@ func AddMissingEnvironment(obj *unstructured.Unstructured) {
 	obj.SetUnstructuredContent(raw)
 }
 
-func AsAnySlice(args []string) []any {
-	var slice = make([]any, len(args))
-	for i, arg := range args {
-		slice[i] = arg
-	}
-	return slice
-}
-
 func GetGroupVersionId(obj *unstructured.Unstructured) string {
 	var gvk = obj.GroupVersionKind()
 	return strings.ToLower(fmt.Sprintf("%ss.%s.%s", gvk.Kind, gvk.Group, gvk.Version))

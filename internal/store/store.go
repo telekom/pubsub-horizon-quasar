@@ -28,7 +28,6 @@ type Store interface {
 
 func createStore(storeType string) (Store, error) {
 	switch strings.ToLower(storeType) {
-
 	case "redis":
 		return new(RedisStore), nil
 
@@ -40,6 +39,5 @@ func createStore(storeType string) (Store, error) {
 
 	default:
 		return nil, ErrUnknownStoreType
-
 	}
 }

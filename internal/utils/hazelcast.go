@@ -18,7 +18,6 @@ func (l *HazelcastZerologLogger) Log(weight logger.Weight, f func() string) {
 
 func (*HazelcastZerologLogger) translateWeight(weight logger.Weight) zerolog.Level {
 	switch weight {
-
 	case logger.WeightDebug, logger.WeightTrace:
 		return zerolog.DebugLevel
 
