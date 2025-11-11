@@ -455,7 +455,7 @@ func TestDualStoreManagerConcurrency(t *testing.T) {
 	// Run concurrent reads
 	done := make(chan error, 10)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(index int) {
 			_, err := manager.Read(
 				fmt.Sprintf("collection-%d", index),
@@ -466,7 +466,7 @@ func TestDualStoreManagerConcurrency(t *testing.T) {
 	}
 
 	// Collect results - should handle concurrent access safely
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 

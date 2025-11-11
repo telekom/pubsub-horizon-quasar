@@ -36,6 +36,8 @@ linters:
     - govet
     - gocyclo
     - ineffassign
+    - intrange
+    - lll
     - staticcheck
     - unused
     - zerologlint
@@ -63,15 +65,17 @@ linters:
       enable:
         - start-with-name
         - deprecated
+    lll:
+      line-width: 140
+      tab-width: 1
     whitespace:
       multi-if: true
       multi-func: true
 
-  # Move exclusions here - at the linters level, not under settings
   exclusions:
     generated: lax
     presets:
-      - comments  # Note: fixed typo from "commments"
+      - comments
       - common-false-positives
       - legacy
       - std-error-handling
