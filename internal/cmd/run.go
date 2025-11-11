@@ -22,7 +22,7 @@ var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Starts synchronizing resources with the configured data store",
 	Run: func(cmd *cobra.Command, args []string) {
-		var kubeConfigPath, _ = cmd.Flags().GetString("kubeconfig")
+		kubeConfigPath, _ := cmd.Flags().GetString("kubeconfig")
 
 		switch config.Current.Mode {
 

@@ -22,19 +22,19 @@ func GetFieldsOfObject(obj *unstructured.Unstructured) map[string]any {
 }
 
 func CreateFieldsForOp(operation string, obj *unstructured.Unstructured) map[string]any {
-	var objFields = GetFieldsOfObject(obj)
+	objFields := GetFieldsOfObject(obj)
 	objFields["operation"] = operation
 	return objFields
 }
 
 func CreateFieldsForCacheMap(cacheMap string, operation string, obj *unstructured.Unstructured) map[string]any {
-	var objFields = CreateFieldsForOp(operation, obj)
+	objFields := CreateFieldsForOp(operation, obj)
 	objFields["map"] = cacheMap
 	return objFields
 }
 
 func CreateFieldsForCollection(collection string, operation string, obj *unstructured.Unstructured) map[string]any {
-	var objFields = make(map[string]any)
+	objFields := make(map[string]any)
 	if obj != nil {
 		objFields = CreateFieldsForOp(operation, obj)
 		objFields["uid"] = obj.GetUID()
@@ -44,8 +44,14 @@ func CreateFieldsForCollection(collection string, operation string, obj *unstruc
 	return objFields
 }
 
-func CreateFieldsForCollectionWithListOptions(collection string, operation string, obj *unstructured.Unstructured, limit int64, fieldSelector string) map[string]any {
-	var objFields = CreateFieldsForCollection(collection, operation, obj)
+func CreateFieldsForCollectionWithListOptions(
+	collection string,
+	operation string,
+	obj *unstructured.Unstructured,
+	limit int64,
+	fieldSelector string,
+) map[string]any {
+	objFields := CreateFieldsForCollection(collection, operation, obj)
 	objFields["limit"] = fmt.Sprintf("%d", limit)
 	objFields["fieldSelector"] = fieldSelector
 	return objFields
@@ -60,7 +66,7 @@ func CreateFieldForResource(resource *schema.GroupVersionResource) map[string]an
 }
 
 func AddMissingEnvironment(obj *unstructured.Unstructured) {
-	var raw = obj.UnstructuredContent()
+	raw := obj.UnstructuredContent()
 	_, ok, err := unstructured.NestedString(raw, "spec", "environment")
 	if err != nil {
 		log.Warn().Fields(GetFieldsOfObject(obj)).Err(err).Msg("Environment is not a string (spec.environment)")
@@ -77,7 +83,7 @@ func AddMissingEnvironment(obj *unstructured.Unstructured) {
 }
 
 func GetGroupVersionId(obj *unstructured.Unstructured) string {
-	var gvk = obj.GroupVersionKind()
+	gvk := obj.GroupVersionKind()
 	return strings.ToLower(fmt.Sprintf("%ss.%s.%s", gvk.Kind, gvk.Group, gvk.Version))
 }
 

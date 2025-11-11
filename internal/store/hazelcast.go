@@ -33,7 +33,7 @@ type HazelcastStore struct {
 }
 
 func (s *HazelcastStore) Initialize() {
-	var hazelcastConfig = hazelcast.NewConfig()
+	hazelcastConfig := hazelcast.NewConfig()
 	var err error
 
 	instanceName, ok := os.LookupEnv("POD_NAME")
@@ -58,8 +58,12 @@ func (s *HazelcastStore) Initialize() {
 	// Reconnect-Strategy
 	hazelcastConfig.Cluster.ConnectionStrategy.ReconnectMode = cluster.ReconnectModeOn
 	hazelcastConfig.Cluster.ConnectionStrategy.Timeout = types.Duration(config.Current.Store.Hazelcast.ConnectionStrategy.Timeout)
-	hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff = types.Duration(config.Current.Store.Hazelcast.ConnectionStrategy.Retry.InitialBackoff)
-	hazelcastConfig.Cluster.ConnectionStrategy.Retry.MaxBackoff = types.Duration(config.Current.Store.Hazelcast.ConnectionStrategy.Retry.MaxBackoff)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.InitialBackoff = types.Duration(
+		config.Current.Store.Hazelcast.ConnectionStrategy.Retry.InitialBackoff,
+	)
+	hazelcastConfig.Cluster.ConnectionStrategy.Retry.MaxBackoff = types.Duration(
+		config.Current.Store.Hazelcast.ConnectionStrategy.Retry.MaxBackoff,
+	)
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Multiplier = config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Multiplier
 	hazelcastConfig.Cluster.ConnectionStrategy.Retry.Jitter = config.Current.Store.Hazelcast.ConnectionStrategy.Retry.Jitter
 
@@ -84,7 +88,7 @@ func (s *HazelcastStore) Initialize() {
 }
 
 func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, resourceConfig *config.Resource) {
-	var mapName = resourceConfig.GetGroupVersionName()
+	mapName := resourceConfig.GetGroupVersionName()
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {
 		log.Panic().Fields(map[string]any{
@@ -93,7 +97,7 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 	}
 
 	for _, index := range resourceConfig.HazelcastIndexes {
-		var hazelcastIndex = index.ToIndexConfig()
+		hazelcastIndex := index.ToIndexConfig()
 		if err := cacheMap.AddIndex(s.ctx, hazelcastIndex); err != nil {
 			log.Panic().Fields(map[string]any{
 				"indexName": hazelcastIndex.Name,
@@ -123,7 +127,6 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 			recon.SafeReconcile(s)
 		}
 	})
-
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
 			"cache": resourceConfig.GetGroupVersionName(),
@@ -134,7 +137,7 @@ func (s *HazelcastStore) InitializeResource(dataSource reconciler.DataSource, re
 }
 
 func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {
-	var cacheMap = s.getMap(obj)
+	cacheMap := s.getMap(obj)
 
 	json, err := obj.MarshalJSON()
 	if err != nil {
@@ -143,16 +146,21 @@ func (s *HazelcastStore) Create(obj *unstructured.Unstructured) error {
 	}
 
 	if err := cacheMap.Set(s.ctx, obj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).Err(err).Msg("Could not write resource to store!")
+		log.Error().
+			Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).
+			Err(err).
+			Msg("Could not write resource to store!")
 		return err
 	}
 
-	log.Debug().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).Msg("Resource created or updated in Hazelcast")
+	log.Debug().
+		Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "create", obj)).
+		Msg("Resource created or updated in Hazelcast")
 	return nil
 }
 
 func (s *HazelcastStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
-	var cacheMap = s.getMap(oldObj)
+	cacheMap := s.getMap(oldObj)
 
 	json, err := newObj.MarshalJSON()
 	if err != nil {
@@ -161,7 +169,10 @@ func (s *HazelcastStore) Update(oldObj *unstructured.Unstructured, newObj *unstr
 	}
 
 	if err := cacheMap.Set(s.ctx, newObj.GetName(), serialization.JSON(json)); err != nil {
-		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "update", newObj)).Err(err).Msg("Could not update resource in store!")
+		log.Error().
+			Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(newObj), "update", newObj)).
+			Err(err).
+			Msg("Could not update resource in store!")
 		return err
 	}
 
@@ -170,10 +181,13 @@ func (s *HazelcastStore) Update(oldObj *unstructured.Unstructured, newObj *unstr
 }
 
 func (s *HazelcastStore) Delete(obj *unstructured.Unstructured) error {
-	var cacheMap = s.getMap(obj)
+	cacheMap := s.getMap(obj)
 
 	if err := cacheMap.Delete(s.ctx, obj.GetName()); err != nil {
-		log.Error().Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).Err(err).Msg("Could not delete resource from store!")
+		log.Error().
+			Fields(utils.CreateFieldsForCacheMap(utils.GetGroupVersionId(obj), "delete", obj)).
+			Err(err).
+			Msg("Could not delete resource from store!")
 		return err
 	}
 
@@ -271,7 +285,7 @@ func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
 		return nil, err
 	}
 
-	var keys = make([]string, 0)
+	keys := make([]string, 0)
 	for _, key := range keySet {
 		key, err := key.(string)
 		if !err {
@@ -290,7 +304,7 @@ func (s *HazelcastStore) Shutdown() {
 }
 
 func (s *HazelcastStore) getMap(obj *unstructured.Unstructured) *hazelcast.Map {
-	var mapName = utils.GetGroupVersionId(obj)
+	mapName := utils.GetGroupVersionId(obj)
 
 	cacheMap, err := s.client.GetMap(s.ctx, mapName)
 	if err != nil {

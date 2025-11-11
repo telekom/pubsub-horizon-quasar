@@ -176,14 +176,14 @@ func createTestResource(name, kind, apiVersion string) *unstructured.Unstructure
 }
 
 func createTestResourceBody(name, kind, apiVersion string) string {
-	resource := map[string]interface{}{
+	resource := map[string]any{
 		"apiVersion": apiVersion,
 		"kind":       kind,
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":      name,
 			"namespace": "default",
 		},
-		"spec": map[string]interface{}{
+		"spec": map[string]any{
 			"test": "data",
 		},
 	}
@@ -200,7 +200,7 @@ func createTestResourceBody(name, kind, apiVersion string) string {
 
 // TestGetResource_Success verifies getResource returns 200 with resource JSON when resource exists
 func TestGetResource_Success(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -228,7 +228,7 @@ func TestGetResource_Success(t *testing.T) {
 
 // TestGetResource_NotFound verifies getResource returns 404 when resource does not exist
 func TestGetResource_NotFound(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -247,7 +247,7 @@ func TestGetResource_NotFound(t *testing.T) {
 
 // TestGetResource_StoreError verifies getResource returns 500 when store operation fails
 func TestGetResource_StoreError(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -269,7 +269,7 @@ func TestGetResource_StoreError(t *testing.T) {
 
 // TestListResources_Success verifies listResources returns all resources with count
 func TestListResources_Success(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -298,7 +298,7 @@ func TestListResources_Success(t *testing.T) {
 
 // TestListResources_WithLimit verifies limit query parameter correctly restricts result count
 func TestListResources_WithLimit(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -328,7 +328,7 @@ func TestListResources_WithLimit(t *testing.T) {
 
 // TestListResources_WithInvalidLimit verifies invalid limit parameter is handled gracefully (defaults to 0)
 func TestListResources_WithInvalidLimit(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -354,7 +354,7 @@ func TestListResources_WithInvalidLimit(t *testing.T) {
 
 // TestListResources_WithFieldSelector verifies fieldSelector query parameter is passed to store
 func TestListResources_WithFieldSelector(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -365,7 +365,11 @@ func TestListResources_WithFieldSelector(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?fieldSelector=status.phase=Running", nil)
+	req := httptest.NewRequest(
+		"GET",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?fieldSelector=status.phase=Running",
+		nil,
+	)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -374,7 +378,7 @@ func TestListResources_WithFieldSelector(t *testing.T) {
 
 // TestListResources_StoreError verifies listResources returns 500 when store operation fails
 func TestListResources_StoreError(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -400,7 +404,7 @@ func TestListResources_StoreError(t *testing.T) {
 
 // TestPutResource_Success verifies putResource creates/updates resource and returns 200
 func TestPutResource_Success(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -410,7 +414,11 @@ func TestPutResource_Success(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
-	req := httptest.NewRequest("PUT", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", strings.NewReader(body))
+	req := httptest.NewRequest(
+		"PUT",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
+		strings.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -423,7 +431,7 @@ func TestPutResource_Success(t *testing.T) {
 
 // TestPutResource_StoreError verifies putResource returns 500 when store operation fails
 func TestPutResource_StoreError(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -434,7 +442,11 @@ func TestPutResource_StoreError(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
-	req := httptest.NewRequest("PUT", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", strings.NewReader(body))
+	req := httptest.NewRequest(
+		"PUT",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
+		strings.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -445,7 +457,7 @@ func TestPutResource_StoreError(t *testing.T) {
 
 // TestPutResource_InvalidJSON verifies putResource returns 400 when JSON body is invalid
 func TestPutResource_InvalidJSON(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -454,7 +466,11 @@ func TestPutResource_InvalidJSON(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("PUT", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", strings.NewReader("invalid json"))
+	req := httptest.NewRequest(
+		"PUT",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
+		strings.NewReader("invalid json"),
+	)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -468,7 +484,7 @@ func TestPutResource_InvalidJSON(t *testing.T) {
 
 // TestDeleteResource_Success verifies deleteResource removes resource and returns 204
 func TestDeleteResource_Success(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -481,7 +497,11 @@ func TestDeleteResource_Success(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
-	req := httptest.NewRequest("DELETE", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", strings.NewReader(body))
+	req := httptest.NewRequest(
+		"DELETE",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
+		strings.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -493,7 +513,7 @@ func TestDeleteResource_Success(t *testing.T) {
 
 // TestDeleteResource_StoreError verifies deleteResource returns 500 when store operation fails
 func TestDeleteResource_StoreError(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -504,7 +524,11 @@ func TestDeleteResource_StoreError(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
-	req := httptest.NewRequest("DELETE", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", strings.NewReader(body))
+	req := httptest.NewRequest(
+		"DELETE",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
+		strings.NewReader(body),
+	)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -515,7 +539,7 @@ func TestDeleteResource_StoreError(t *testing.T) {
 
 // TestDeleteResource_InvalidJSON verifies deleteResource returns 400 when JSON body is invalid
 func TestDeleteResource_InvalidJSON(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -524,7 +548,11 @@ func TestDeleteResource_InvalidJSON(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("DELETE", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", strings.NewReader("invalid json"))
+	req := httptest.NewRequest(
+		"DELETE",
+		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
+		strings.NewReader("invalid json"),
+	)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
@@ -542,7 +570,7 @@ func TestDeleteResource_InvalidJSON(t *testing.T) {
 
 // TestListKeys_Success verifies listKeys returns array of resource keys
 func TestListKeys_Success(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -569,7 +597,7 @@ func TestListKeys_Success(t *testing.T) {
 
 // TestListKeys_StoreError verifies listKeys returns 500 when store operation fails
 func TestListKeys_StoreError(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -591,7 +619,7 @@ func TestListKeys_StoreError(t *testing.T) {
 
 // TestCountResources_Success verifies countResources returns correct count of resources
 func TestCountResources_Success(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -619,7 +647,7 @@ func TestCountResources_Success(t *testing.T) {
 
 // TestCountResources_EmptyStore verifies countResources returns 0 when no resources exist
 func TestCountResources_EmptyStore(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()
@@ -643,7 +671,7 @@ func TestCountResources_EmptyStore(t *testing.T) {
 
 // TestCountResources_StoreError verifies countResources returns 500 when store operation fails
 func TestCountResources_StoreError(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := setupCrudTestApp()

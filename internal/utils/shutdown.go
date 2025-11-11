@@ -32,7 +32,7 @@ func RegisterShutdownHook(shutdownFunc ShutdownFunc, priority int) {
 }
 
 func GracefulShutdown() {
-	var sig = make(chan os.Signal, 1)
+	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	<-sig
 

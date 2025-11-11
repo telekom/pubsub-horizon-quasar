@@ -81,8 +81,8 @@ func buildTestConfig() *config.Configuration {
 
 // createFakeDynamicClient creates a fake Kubernetes dynamic client for testing.
 func createFakeDynamicClient() dynamic.Interface {
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
-	var scheme = runtime.NewScheme()
+	subscriptions := test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	scheme := runtime.NewScheme()
 
 	// Create a mapping for list kinds to support reconciliation List() operations
 	listKinds := map[schema.GroupVersionResource]string{

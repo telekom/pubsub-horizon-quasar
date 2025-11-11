@@ -61,7 +61,6 @@ func AddTestResourceWithIndexes(
 	mongoIndexes []config.MongoResourceIndex,
 	hazelcastIndexes []config.HazelcastResourceIndex,
 ) {
-
 	resourceConfig := config.Resource{}
 	resourceConfig.Kubernetes.Group = group
 	resourceConfig.Kubernetes.Version = version

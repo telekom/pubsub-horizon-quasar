@@ -20,7 +20,7 @@ import (
 )
 
 func TestWithGvr(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Add test resources for the middleware tests
@@ -101,7 +101,7 @@ func TestWithGvr(t *testing.T) {
 }
 
 func TestWithResourceId(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	t.Run("valid resource ID parameter", func(t *testing.T) {
@@ -162,7 +162,7 @@ func TestWithResourceId(t *testing.T) {
 }
 
 func TestWithTrustedClients(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	t.Run("trusted client allowed", func(t *testing.T) {

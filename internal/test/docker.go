@@ -123,7 +123,7 @@ func TeardownDocker() {
 }
 
 func pingMongoDb() error {
-	var ctx = context.Background()
+	ctx := context.Background()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)))
 	if err != nil {
 		log.Printf("Could not reach mongodb: %s\n", err)
@@ -165,7 +165,7 @@ func setupHazelcast() error {
 }
 
 func pingHazelcast() error {
-	var ctx = context.Background()
+	ctx := context.Background()
 	config := hazelcast.NewConfig()
 
 	config.Cluster.Name = "horizon"

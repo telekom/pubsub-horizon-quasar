@@ -6,9 +6,8 @@ package provisioning
 
 import (
 	"fmt"
-	"time"
-
 	"os"
+	"time"
 
 	"github.com/gofiber/contrib/fiberzerolog"
 	jwtware "github.com/gofiber/contrib/jwt"
@@ -76,9 +75,9 @@ func createLogger() *zerolog.Logger {
 }
 
 func setupApiProvisioningStore() {
-	var provisioningConfig = config.Current.Provisioning.Store
-	var primaryStoreType = provisioningConfig.Primary.Type
-	var secondaryStoreType = provisioningConfig.Secondary.Type
+	provisioningConfig := config.Current.Provisioning.Store
+	primaryStoreType := provisioningConfig.Primary.Type
+	secondaryStoreType := provisioningConfig.Secondary.Type
 
 	var err error
 	provisioningApiStore, err = store.SetupDualStoreManager("ProvisioningAPIStore", primaryStoreType, secondaryStoreType)

@@ -18,7 +18,7 @@ var Current = LoadConfiguration()
 
 func LoadConfiguration() *Configuration {
 	setDefaults()
-	var config = readConfig()
+	config := readConfig()
 	applyLogLevel(config.LogLevel)
 	return config
 }

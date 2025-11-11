@@ -68,24 +68,23 @@ func NewResourceWatcher(
 	resourceConfig *config.Resource,
 	reSyncPeriod time.Duration,
 ) (*ResourceWatcher, error) {
-
-	var resource = resourceConfig.GetGroupVersionResource()
-	var namespace = resourceConfig.Kubernetes.Namespace
-	var informer = createInformer(client, resource, namespace, reSyncPeriod)
-	var watcher = ResourceWatcher{
+	resource := resourceConfig.GetGroupVersionResource()
+	namespace := resourceConfig.Kubernetes.Namespace
+	informer := createInformer(client, resource, namespace, reSyncPeriod)
+	watcher := ResourceWatcher{
 		client:         client,
 		resourceConfig: resourceConfig,
 		informer:       informer,
 		stopChan:       make(chan struct{}),
 	}
 
-	var performReplay = true
+	performReplay := true
 	err := informer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
 		if !informer.HasSynced() && performReplay {
 			performReplay = false
 			log.Info().Msg("The informer encountered an error before being in sync. Falling back to MongoDB...")
 
-			var resource = resourceConfig.GetGroupVersionResource()
+			resource := resourceConfig.GetGroupVersionResource()
 
 			replayedDocuments, err := fallback.CurrentFallback.ReplayResource(&resource, WatcherStore.Create)
 			if err != nil {
@@ -123,7 +122,7 @@ func (w *ResourceWatcher) add(obj any) {
 		}
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
-			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
+			labels := utils.GetLabelsForResource(uObj, w.resourceConfig)
 			metrics.GetOrCreate(w.resourceConfig).With(labels).Inc()
 		}
 
@@ -169,7 +168,7 @@ func (w *ResourceWatcher) delete(obj any) {
 		log.Debug().Fields(utils.CreateFieldsForOp("delete", uObj)).Msg("Deleted dataset")
 
 		if config.Current.Metrics.Enabled && w.resourceConfig.Prometheus.Enabled {
-			var labels = utils.GetLabelsForResource(uObj, w.resourceConfig)
+			labels := utils.GetLabelsForResource(uObj, w.resourceConfig)
 			metrics.GetOrCreate(w.resourceConfig).With(labels).Dec()
 		}
 	} else {
@@ -193,7 +192,7 @@ func (w *ResourceWatcher) Start() {
 	}()
 	w.informer.Run(w.stopChan)
 
-	var resource = w.resourceConfig.GetGroupVersionResource()
+	resource := w.resourceConfig.GetGroupVersionResource()
 	log.Info().Fields(utils.CreateFieldForResource(&resource)).Msg("Resource watcher stopped!")
 }
 
@@ -212,7 +211,6 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 		list, err := client.Resource(resourceConfig.GetGroupVersionResource()).
 			Namespace(resourceConfig.Kubernetes.Namespace).
 			List(context.Background(), v1.ListOptions{})
-
 		if err != nil {
 			log.Error().Err(err).Fields(map[string]any{
 				"resource": resourceConfig.GetGroupVersionName(),
@@ -222,15 +220,15 @@ func (w *ResourceWatcher) collectMetrics(client dynamic.Interface, resourceConfi
 			continue
 		}
 
-		var gaugeName = resourceConfig.GetGroupVersionName() + "_kubernetes_count"
+		gaugeName := resourceConfig.GetGroupVersionName() + "_kubernetes_count"
 		metrics.GetOrCreateCustom(gaugeName).WithLabelValues().Set(float64(len(list.Items)))
 		time.Sleep(15 * time.Second)
 	}
 }
 
 func SetupWatcherStore() {
-	var primaryType = config.Current.Watcher.Store.Primary.Type
-	var secondaryType = config.Current.Watcher.Store.Secondary.Type
+	primaryType := config.Current.Watcher.Store.Primary.Type
+	secondaryType := config.Current.Watcher.Store.Secondary.Type
 
 	var err error
 	WatcherStore, err = store.SetupDualStoreManager("WatcherStore", primaryType, secondaryType)

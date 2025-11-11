@@ -27,8 +27,6 @@ linters:
     - forbidigo
     - funlen
     - gocheckcompilerdirectives
-    - gochecknoglobals
-    - gochecknoinits
     - gochecksumtype
     - gocognit
     - goconst
@@ -70,7 +68,7 @@ linters:
       tab-width: 1
     whitespace:
       multi-if: true
-      multi-func: true
+      multi-func: false
 
   exclusions:
     generated: lax
@@ -102,6 +100,12 @@ issues:
   max-same-issues: 50
 
 formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
   settings:
     gci:
       no-inline-comments: true
@@ -114,4 +118,6 @@ formatters:
           replacement: 'a[b:]'
     gofumpt: {}
     goimports: {}
-    golines: {}
+    golines:
+      max-len: 140
+      tab-len: 1

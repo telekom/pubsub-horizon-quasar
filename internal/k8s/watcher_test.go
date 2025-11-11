@@ -44,10 +44,10 @@ func TestMain(m *testing.M) {
 }
 
 func buildTestConfig() *config.Configuration {
-	var testConfig = new(config.Configuration)
+	testConfig := new(config.Configuration)
 	testConfig.Watcher.Store.Primary.Type = "dummy"
 
-	var testResourceConfig = config.Resource{}
+	testResourceConfig := config.Resource{}
 	testResourceConfig.Kubernetes.Group = "subscriber.horizon.telekom.de"
 	testResourceConfig.Kubernetes.Version = "v1"
 	testResourceConfig.Kubernetes.Resource = "subscriptions"
@@ -59,14 +59,14 @@ func buildTestConfig() *config.Configuration {
 }
 
 func createFakeClient() *fake.FakeDynamicClient {
-	var scheme = runtime.NewScheme()
+	scheme := runtime.NewScheme()
 	return fake.NewSimpleDynamicClient(scheme, subscriptions[0], subscriptions[1])
 }
 
 func processSubscriptions(action string) {
-	var ctx = context.Background()
-	var gvr = config.Current.Resources[0].GetGroupVersionResource()
-	var resource = fakeClient.Resource(gvr).Namespace("playground")
+	ctx := context.Background()
+	gvr := config.Current.Resources[0].GetGroupVersionResource()
+	resource := fakeClient.Resource(gvr).Namespace("playground")
 
 	for _, subscription := range subscriptions {
 		switch strings.ToLower(action) {
@@ -87,14 +87,14 @@ func processSubscriptions(action string) {
 }
 
 func TestNewResourceWatcher(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	var err error
 	watcher, err = NewResourceWatcher(fakeClient, &config.Current.Resources[0], 30*time.Second)
 	assertions.Nil(err, "unexpected error when creating new resource watcher")
 }
 
 func TestResourceWatcher_Start(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	dummyStore, err := WatcherStore.(*test.DummyStore)
 	if !err {
 		t.Fatal("Watcher Store could not be created")
@@ -119,13 +119,21 @@ func TestResourceWatcher_Start(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	assertions.Equal(len(subscriptions), dummyStore.DeleteCalls, "unexpected amount of delete calls in the store")
 
-	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel, zerolog.PanicLevel), "found unexpected errors and/or panics in the logs")
+	assertions.Equal(
+		0,
+		test.LogRecorder.GetRecordCount(zerolog.ErrorLevel, zerolog.PanicLevel),
+		"found unexpected errors and/or panics in the logs",
+	)
 }
 
 func TestResourceWatcher_Stop(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 	watcher.Stop()
 	time.Sleep(3 * time.Second)
-	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.WarnLevel, zerolog.ErrorLevel, zerolog.PanicLevel), "found unexpected warnings, errors and/or panics in the logs")
+	assertions.Equal(
+		0,
+		test.LogRecorder.GetRecordCount(zerolog.WarnLevel, zerolog.ErrorLevel, zerolog.PanicLevel),
+		"found unexpected warnings, errors and/or panics in the logs",
+	)
 }

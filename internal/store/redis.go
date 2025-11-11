@@ -45,7 +45,7 @@ func (s *RedisStore) InitializeResource(dataSource reconciliation.DataSource, re
 }
 
 func (s *RedisStore) Create(obj *unstructured.Unstructured) error {
-	var status = s.client.JSONSet(s.ctx, obj.GetName(), ".", obj.Object)
+	status := s.client.JSONSet(s.ctx, obj.GetName(), ".", obj.Object)
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not write resource to store!")
 		return err
@@ -54,7 +54,7 @@ func (s *RedisStore) Create(obj *unstructured.Unstructured) error {
 }
 
 func (s *RedisStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
-	var status = s.client.JSONSet(s.ctx, oldObj.GetName(), ".", newObj)
+	status := s.client.JSONSet(s.ctx, oldObj.GetName(), ".", newObj)
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(newObj)).Err(err).Msg("Could not update resource in store!")
 		return err
@@ -63,7 +63,7 @@ func (s *RedisStore) Update(oldObj *unstructured.Unstructured, newObj *unstructu
 }
 
 func (s *RedisStore) Delete(obj *unstructured.Unstructured) error {
-	var status = s.client.JSONDel(s.ctx, obj.GetName(), ".")
+	status := s.client.JSONDel(s.ctx, obj.GetName(), ".")
 	if err := status.Err(); err != nil {
 		log.Error().Fields(utils.GetFieldsOfObject(obj)).Err(err).Msg("Could not delete resource from store!")
 		return err
@@ -72,7 +72,6 @@ func (s *RedisStore) Delete(obj *unstructured.Unstructured) error {
 }
 
 func (s *RedisStore) Shutdown() {
-
 }
 
 func (s *RedisStore) Count(dataset string) (int, error) {

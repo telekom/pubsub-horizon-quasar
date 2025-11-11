@@ -79,7 +79,7 @@ func cleanupMongoCollection() {
 
 // TestMongoStore_CreateFilter tests the createFilter method functionality
 func TestMongoStore_CreateFilter(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -101,7 +101,7 @@ func TestMongoStore_CreateFilter(t *testing.T) {
 
 // TestMongoStore_Create tests the Create method functionality
 func TestMongoStore_Create(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -147,7 +147,7 @@ func TestMongoStore_Create(t *testing.T) {
 
 // TestMongoStore_Update tests the Update method functionality
 func TestMongoStore_Update(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -159,7 +159,7 @@ func TestMongoStore_Update(t *testing.T) {
 	assertions.NoError(err)
 
 	newResource := test.CreateTestResource("test-resource", "default", map[string]string{"app": "updated"})
-	newResource.Object["spec"] = map[string]interface{}{
+	newResource.Object["spec"] = map[string]any{
 		"replicas": 3,
 	}
 
@@ -187,7 +187,7 @@ func TestMongoStore_Update(t *testing.T) {
 
 // TestMongoStore_Delete tests the Delete method functionality
 func TestMongoStore_Delete(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -212,7 +212,7 @@ func TestMongoStore_Delete(t *testing.T) {
 
 // TestMongoStore_Count tests the Count method functionality
 func TestMongoStore_Count(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -237,7 +237,7 @@ func TestMongoStore_Count(t *testing.T) {
 
 // TestMongoStore_Keys tests the Keys method functionality
 func TestMongoStore_Keys(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -268,14 +268,14 @@ func TestMongoStore_Keys(t *testing.T) {
 
 // TestMongoStore_Read tests the Read method functionality
 func TestMongoStore_Read(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
 	cleanupMongoCollection()
 
 	resource := test.CreateTestResource("test-resource", "default", map[string]string{"app": "test"})
-	resource.Object["spec"] = map[string]interface{}{
+	resource.Object["spec"] = map[string]any{
 		"replicas": 2,
 	}
 
@@ -298,7 +298,7 @@ func TestMongoStore_Read(t *testing.T) {
 
 // TestMongoStore_List tests the List method functionality
 func TestMongoStore_List(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -380,7 +380,7 @@ func TestMongoStore_ParseFieldSelector(t *testing.T) {
 
 // TestMongoStore_InitializeShutdown tests Initialize and Shutdown methods
 func TestMongoStore_InitializeShutdown(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := new(MongoStore)
@@ -401,7 +401,7 @@ func TestMongoStore_InitializeShutdown(t *testing.T) {
 
 // TestMongoStore_InitializeResource tests the InitializeResource method functionality
 func TestMongoStore_InitializeResource(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -469,7 +469,7 @@ func TestMongoStore_ParseFieldSelectorEdgeCases(t *testing.T) {
 
 // TestMongoStore_OperationWithBadObject tests error handling with operations on invalid objects
 func TestMongoStore_OperationWithBadObject(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	if testing.Short() {
@@ -483,9 +483,9 @@ func TestMongoStore_OperationWithBadObject(t *testing.T) {
 	// Note: GetMongoId() uses GetUID(), which always has a value (even if empty)
 	// Therefore operations will not fail, but execute successfully
 	badObject := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			// No metadata like name or namespace
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": 3,
 			},
 		},
@@ -505,7 +505,7 @@ func TestMongoStore_OperationWithBadObject(t *testing.T) {
 
 // TestMongoStore_ErrorHandling tests how store implementation handles database errors
 func TestMongoStore_ErrorHandling(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()

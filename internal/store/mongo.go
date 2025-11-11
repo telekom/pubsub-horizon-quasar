@@ -50,11 +50,11 @@ func (m *MongoStore) Initialize() {
 func (m *MongoStore) InitializeResource(dataSource reconciliation.DataSource, resourceConfig *config.Resource) {
 	_ = dataSource
 	for _, index := range resourceConfig.MongoIndexes {
-		var model = index.ToIndexModel()
-		var collection = m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetGroupVersionName())
+		model := index.ToIndexModel()
+		collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceConfig.GetGroupVersionName())
 		_, err := collection.Indexes().CreateOne(m.ctx, model)
 		if err != nil {
-			var resource = resourceConfig.GetGroupVersionResource()
+			resource := resourceConfig.GetGroupVersionResource()
 			log.Warn().Fields(utils.CreateFieldForResource(&resource)).Err(err).Msg("Could not create index in MongoDB")
 		}
 	}
@@ -71,7 +71,7 @@ func (m *MongoStore) Create(obj *unstructured.Unstructured) error {
 		return err
 	}
 
-	var opts = options.Replace().SetUpsert(true)
+	opts := options.Replace().SetUpsert(true)
 	_, err = m.getCollection(obj).ReplaceOne(m.ctx, filter, obj.Object, opts)
 	if err != nil {
 		log.Error().Err(err).
@@ -97,7 +97,7 @@ func (m *MongoStore) Update(oldObj *unstructured.Unstructured, newObj *unstructu
 		return err
 	}
 
-	var opts = options.Replace().SetUpsert(true)
+	opts := options.Replace().SetUpsert(true)
 	_, err = m.getCollection(oldObj).ReplaceOne(m.ctx, filter, newObj.Object, opts)
 	if err != nil {
 		log.Error().Err(err).
@@ -167,7 +167,7 @@ func (m *MongoStore) Keys(collectionName string) ([]string, error) {
 	}
 
 	// Convert interface{} slice to string slice
-	var stringKeys = make([]string, 0, len(keys))
+	stringKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if strKey, ok := key.(string); ok {
 			stringKeys = append(stringKeys, strKey)

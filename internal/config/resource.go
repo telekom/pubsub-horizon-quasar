@@ -45,15 +45,15 @@ func (c *Resource) GetGroupVersionKind() schema.GroupVersionKind {
 }
 
 func (c *Resource) GetGroupVersionName() string {
-	var gvr = c.GetGroupVersionResource()
-	var name = fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
+	gvr := c.GetGroupVersionResource()
+	name := fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version)
 	return strings.ToLower(name)
 }
 
 type MongoResourceIndex map[string]int
 
 func (i MongoResourceIndex) ToIndexModel() mongo.IndexModel {
-	var keys = make(bson.D, 0)
+	keys := make(bson.D, 0)
 	for key, value := range i {
 		keys = append(keys, bson.E{Key: key, Value: value})
 	}
