@@ -19,15 +19,10 @@ import (
 func withTrustedClients(trustedClients []string) fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		if len(trustedClients) > 0 {
-			if userLocal := ctx.Locals("user"); userLocal == nil {
-				return &fiber.Error{Code: fiber.StatusUnauthorized, Message: "No user token found"}
-			} else if user, err := userLocal.(*jwt.Token); !err {
-				return &fiber.Error{Code: fiber.StatusUnauthorized, Message: "Invalid user token"}
-			} else if claims, err := user.Claims.(jwt.MapClaims); !err {
-				return &fiber.Error{Code: fiber.StatusUnauthorized, Message: "Invalid token claims"}
-			} else if clientId, err := claims["clientId"].(string); !err {
-				return &fiber.Error{Code: fiber.StatusUnauthorized, Message: "Missing or invalid clientId"}
-			} else if !slices.Contains(trustedClients, clientId) {
+			user := ctx.Locals("user").(*jwt.Token)
+			claims := user.Claims.(jwt.MapClaims)
+			clientId := claims["clientId"].(string)
+			if !slices.Contains(trustedClients, clientId) {
 				return &fiber.Error{Code: fiber.StatusUnauthorized, Message: "Unauthorized client"}
 			}
 		}

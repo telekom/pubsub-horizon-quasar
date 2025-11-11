@@ -36,6 +36,11 @@ linters:
     - ineffassign
     - intrange
     - lll
+    - makezero
+    - mirror
+    - musttag
+    - nakedret
+    - nestif
     - staticcheck
     - unused
     - zerologlint
@@ -46,8 +51,7 @@ linters:
     cyclop:
       max-complexity: 30
       package-average: 10
-    errcheck:
-      check-type-assertions: true
+    errcheck: {}
     exhaustive:
       check:
         - switch
