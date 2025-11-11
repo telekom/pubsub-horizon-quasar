@@ -95,7 +95,10 @@ func TestNewResourceWatcher(t *testing.T) {
 
 func TestResourceWatcher_Start(t *testing.T) {
 	var assertions = assert.New(t)
-	var dummyStore = WatcherStore.(*test.DummyStore)
+	dummyStore, err := WatcherStore.(*test.DummyStore)
+	if !err {
+		t.Fatal("Watcher Store could not be created")
+	}
 	defer test.LogRecorder.Reset()
 
 	go watcher.Start()

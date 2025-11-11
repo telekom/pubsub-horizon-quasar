@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -272,7 +273,11 @@ func (s *HazelcastStore) Keys(mapName string) ([]string, error) {
 
 	var keys = make([]string, 0)
 	for _, key := range keySet {
-		keys = append(keys, key.(string))
+		key, err := key.(string)
+		if !err {
+			return nil, fmt.Errorf("expected string key but got %T", key)
+		}
+		keys = append(keys, key)
 	}
 
 	return keys, nil
@@ -358,7 +363,7 @@ func (s *HazelcastStore) onConnected() {
 	}
 
 	s.reconciliations.Range(func(key, value any) bool {
-		cacheName := key.(string)
+		cacheName, _ := key.(string)
 		recon, ok := value.(*reconciler.Reconciliation)
 		if !ok {
 			log.Error().

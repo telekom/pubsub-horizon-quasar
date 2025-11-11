@@ -15,22 +15,50 @@ linters:
     - bidichk
     - bodyclose
     - canonicalheader
-    - cyclop
     - copyloopvar
+    - cyclop
+    - dupl
+    - durationcheck
     - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forbidigo
+    - funlen
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
     - govet
+    - gocyclo
+    - godot
     - ineffassign
     - staticcheck
     - unused
     - zerologlint
     - godoclint
     - whitespace
-    - dupl
 
   settings:
     cyclop:
       max-complexity: 30
       package-average: 10
+    errcheck:
+      check-type-assertions: true
+    exhaustive:
+      check:
+        - switch
+        - map
+    funlen:
+      lines: 100
+      statements: 50
+      ignore-comments: true
+    gocognit:
+      min-complexity: 20
     godoclint:
       enable:
         - start-with-name
