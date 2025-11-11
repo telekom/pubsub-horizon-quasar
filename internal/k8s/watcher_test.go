@@ -104,17 +104,17 @@ func TestResourceWatcher_Start(t *testing.T) {
 	go watcher.Start()
 	time.Sleep(3 * time.Second)
 
-	fmt.Println("Adding subscriptions...")
+	t.Log("Adding subscriptions...")
 	processSubscriptions("add")
 	time.Sleep(1 * time.Second)
 	assertions.Equal(len(subscriptions), dummyStore.AddCalls, "unexpected amount of add calls in the store")
 
-	fmt.Println("Updating subscriptions...")
+	t.Log("Updating subscriptions...")
 	processSubscriptions("update")
 	time.Sleep(1 * time.Second)
 	assertions.Equal(len(subscriptions), dummyStore.UpdateCalls, "unexpected amount of update calls in the store")
 
-	fmt.Println("Deleting subscriptions...")
+	t.Log("Deleting subscriptions...")
 	processSubscriptions("delete")
 	time.Sleep(1 * time.Second)
 	assertions.Equal(len(subscriptions), dummyStore.DeleteCalls, "unexpected amount of delete calls in the store")

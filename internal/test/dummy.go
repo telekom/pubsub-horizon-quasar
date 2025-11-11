@@ -7,8 +7,6 @@
 package test
 
 import (
-	"fmt"
-
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/reconciliation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,21 +29,18 @@ func (s *DummyStore) InitializeResource(reconciliation.DataSource, *config.Resou
 	s.HasInitializedResource = true
 }
 
-func (s *DummyStore) Create(obj *unstructured.Unstructured) error {
-	fmt.Printf("Add: %+v\n", obj.GetName())
+func (s *DummyStore) Create(*unstructured.Unstructured) error {
 	s.AddCalls++
 	return nil
 }
 
 func (s *DummyStore) Update(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) error {
-	_ = newObj
-	fmt.Printf("Updated: %+v\n", oldObj.GetName())
+	_, _ = oldObj, newObj
 	s.UpdateCalls++
 	return nil
 }
 
-func (s *DummyStore) Delete(obj *unstructured.Unstructured) error {
-	fmt.Printf("Deleted: %+v\n", obj.GetName())
+func (s *DummyStore) Delete(*unstructured.Unstructured) error {
 	s.DeleteCalls++
 	return nil
 }

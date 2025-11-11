@@ -52,6 +52,7 @@ linters:
       check:
         - switch
         - map
+      default-signifies-exhaustive: true
     funlen:
       lines: 100
       statements: 50
