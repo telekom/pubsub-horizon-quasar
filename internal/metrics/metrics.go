@@ -30,7 +30,7 @@ func init() {
 }
 
 func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
-	var gaugeName = resourceConfig.GetGroupVersionName()
+	gaugeName := resourceConfig.GetGroupVersionName()
 
 	gauge, ok := gauges[gaugeName]
 	if !ok {
@@ -41,7 +41,7 @@ func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
 
 		gauges[gaugeName] = gauge
 		if err := registry.Register(gauge); err != nil {
-			var gvr = resourceConfig.GetGroupVersionResource()
+			gvr := resourceConfig.GetGroupVersionResource()
 			log.Error().Err(err).
 				Fields(utils.CreateFieldForResource(&gvr)).
 				Msg("Could not create metric")
@@ -52,7 +52,7 @@ func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
 }
 
 func GetOrCreateCustom(name string) *prometheus.GaugeVec {
-	var gaugeName = strings.ReplaceAll(name, ".", "_")
+	gaugeName := strings.ReplaceAll(name, ".", "_")
 
 	gauge, ok := gauges[gaugeName]
 	if !ok {

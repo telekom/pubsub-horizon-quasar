@@ -18,7 +18,7 @@ import (
 )
 
 func TestHazelcastStore_Initialize(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	assertions.NotPanics(func() {
@@ -30,22 +30,22 @@ func TestHazelcastStore_Initialize(t *testing.T) {
 }
 
 func TestHazelcastStore_InitializeResource(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
-	var testResource = config.Current.Resources[0]
-	var kubernetesDataSource = reconciliation.NewDataSourceFromKubernetesClient(createFakeDynamicClient(), &testResource)
+	testResource := config.Current.Resources[0]
+	kubernetesDataSource := reconciliation.NewDataSourceFromKubernetesClient(createFakeDynamicClient(), &testResource)
 	hazelcastStore.InitializeResource(kubernetesDataSource, &testResource)
 
-	var errorCount = test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
+	errorCount := test.LogRecorder.GetRecordCount(zerolog.ErrorLevel)
 	assertions.Equal(0, errorCount, "unexpected errors have been logged")
 }
 
 func TestHazelcastStore_OnAdd(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	subscriptions := test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
 		if err := hazelcastStore.Create(subscription); err != nil {
 			return
@@ -61,10 +61,10 @@ func TestHazelcastStore_OnAdd(t *testing.T) {
 }
 
 func TestHazelcastStore_OnUpdate(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	subscriptions := test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
 		updatedSubscription := subscription.DeepCopy()
 		labels := make(map[string]string)
@@ -88,10 +88,10 @@ func TestHazelcastStore_OnUpdate(t *testing.T) {
 }
 
 func TestHazelcastStore_OnDelete(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	subscriptions := test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	for _, subscription := range subscriptions {
 		if err := hazelcastStore.Delete(subscription); err != nil {
 			return
@@ -101,7 +101,7 @@ func TestHazelcastStore_OnDelete(t *testing.T) {
 }
 
 func TestHazelcastStore_Shutdown(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	hazelcastStore.Shutdown()
@@ -109,7 +109,7 @@ func TestHazelcastStore_Shutdown(t *testing.T) {
 }
 
 func TestHazelcastStore_HandleClientEvents(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Reset state
@@ -131,7 +131,7 @@ func TestHazelcastStore_HandleClientEvents(t *testing.T) {
 
 // Test to cover reconciliation iteration in onConnected
 func TestHazelcastStore_OnConnected(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Reset state
@@ -163,7 +163,7 @@ func TestHazelcastStore_OnConnected(t *testing.T) {
 
 // Test to cover the reset of reconOnce in onDisconnected
 func TestHazelcastStore_OnDisconnected(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Reset state
@@ -186,7 +186,7 @@ func TestHazelcastStore_OnDisconnected(t *testing.T) {
 
 // TestHazelcastStore_Connected tests the Connected method
 func TestHazelcastStore_Connected(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 
 	// Test: connected flag is true
 	hazelcastStore.connected.Store(true)
@@ -202,11 +202,11 @@ func TestHazelcastStore_Connected(t *testing.T) {
 
 // TestHazelcastStore_Count tests the Count method
 func TestHazelcastStore_Count(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Get a test resource map
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	subscriptions := test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	if len(subscriptions) == 0 {
 		t.Skip("No test subscriptions available")
 	}
@@ -231,11 +231,11 @@ func TestHazelcastStore_Count(t *testing.T) {
 
 // TestHazelcastStore_Keys tests the Keys method
 func TestHazelcastStore_Keys(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Get a test resource map
-	var subscriptions = test.ReadTestSubscriptions("../../testdata/subscriptions.json")
+	subscriptions := test.ReadTestSubscriptions("../../testdata/subscriptions.json")
 	if len(subscriptions) == 0 {
 		t.Skip("No test subscriptions available")
 	}

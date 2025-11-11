@@ -25,9 +25,9 @@ type MongoFallback struct {
 }
 
 func (m *MongoFallback) Initialize() {
-	var ctx = context.Background()
+	ctx := context.Background()
 
-	var client, err = mongo.Connect(ctx, options.Client().ApplyURI(config.Current.Fallback.Mongo.Uri))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.Current.Fallback.Mongo.Uri))
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not connect to MongoDB")
 	}
@@ -38,15 +38,15 @@ func (m *MongoFallback) Initialize() {
 }
 
 func (m *MongoFallback) ReplayResource(gvr *schema.GroupVersionResource, replayFunc ReplayFunc) (int64, error) {
-	var ctx = context.Background()
+	ctx := context.Background()
 
-	var col = m.getCollection(gvr)
+	col := m.getCollection(gvr)
 	count, err := col.EstimatedDocumentCount(ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	var fields = utils.CreateFieldForResource(gvr)
+	fields := utils.CreateFieldForResource(gvr)
 	fields["estDocumentCount"] = count
 	log.Debug().Fields(fields).Msg("Starting replay of resource")
 
@@ -80,6 +80,6 @@ func (m *MongoFallback) ReplayResource(gvr *schema.GroupVersionResource, replayF
 }
 
 func (m *MongoFallback) getCollection(gvr *schema.GroupVersionResource) *mongo.Collection {
-	var collectionName = strings.ToLower(fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version))
+	collectionName := strings.ToLower(fmt.Sprintf("%s.%s.%s", gvr.Resource, gvr.Group, gvr.Version))
 	return m.client.Database(config.Current.Fallback.Mongo.Database).Collection(collectionName)
 }

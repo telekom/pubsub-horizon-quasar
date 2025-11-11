@@ -27,7 +27,7 @@ func createTestFiberApp() *fiber.App {
 }
 
 func TestValidateResourceId(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -59,7 +59,7 @@ func TestValidateResourceId(t *testing.T) {
 }
 
 func TestValidateResourceGVR(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -108,7 +108,7 @@ func TestValidateResourceGVR(t *testing.T) {
 }
 
 func TestValidateResourceKind(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	config.Current = test.CreateTestResourceConfig()
@@ -159,7 +159,7 @@ func TestValidateResourceKind(t *testing.T) {
 }
 
 func TestValidateContextWithGvr(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -217,7 +217,7 @@ func TestValidateContextWithGvr(t *testing.T) {
 }
 
 func TestValidateContextWithGvrAndId(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -263,7 +263,7 @@ func TestValidateContextWithGvrAndId(t *testing.T) {
 }
 
 func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -379,7 +379,7 @@ func TestValidateContextWithGvrAndIdAndResource(t *testing.T) {
 }
 
 func TestGetGvrFromContext(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -416,7 +416,7 @@ func TestGetGvrFromContext(t *testing.T) {
 }
 
 func TestGetResourceIdFromContext(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -464,7 +464,7 @@ func TestGetResourceIdFromContext(t *testing.T) {
 }
 
 func TestGetResourceFromContext(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	app := createTestFiberApp()
@@ -498,10 +498,10 @@ func TestGetResourceFromContext(t *testing.T) {
 }
 
 func createTestResourceJSON(name, kind, apiVersion string) []byte {
-	resource := map[string]interface{}{
+	resource := map[string]any{
 		"apiVersion": apiVersion,
 		"kind":       kind,
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name": name,
 		},
 	}
@@ -510,7 +510,7 @@ func createTestResourceJSON(name, kind, apiVersion string) []byte {
 }
 
 func TestWithKubernetesResource(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	t.Run("valid JSON resource", func(t *testing.T) {

@@ -21,7 +21,7 @@ import (
 
 // TestSetupDualStoreManager tests the SetupDualStoreManager function
 func TestSetupDualStoreManager(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Test with valid primary and secondary store types
@@ -41,7 +41,7 @@ func TestSetupDualStoreManager(t *testing.T) {
 
 // TestSetupDualStoreManagerPrimaryOnly tests setup with only primary store
 func TestSetupDualStoreManagerPrimaryOnly(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Test with only primary store (no secondary)
@@ -60,7 +60,7 @@ func TestSetupDualStoreManagerPrimaryOnly(t *testing.T) {
 
 // TestSetupDualStoreManagerSameStore tests setup with same primary and secondary
 func TestSetupDualStoreManagerSameStore(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Test with same store type for both primary and secondary
@@ -79,7 +79,7 @@ func TestSetupDualStoreManagerSameStore(t *testing.T) {
 
 // TestSetupDualStoreManagerEmptyPrimary tests error when primary store type is empty
 func TestSetupDualStoreManagerEmptyPrimary(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Test with empty primary store type - should return error
@@ -95,7 +95,7 @@ func TestSetupDualStoreManagerEmptyPrimary(t *testing.T) {
 
 // TestDualStoreManagerInitialize tests the Initialize method
 func TestDualStoreManagerInitialize(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -114,7 +114,7 @@ func TestDualStoreManagerInitialize(t *testing.T) {
 
 // TestDualStoreManagerInitializeResource tests resource initialization
 func TestDualStoreManagerInitializeResource(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -143,7 +143,7 @@ func TestDualStoreManagerInitializeResource(t *testing.T) {
 
 // TestDualStoreManagerCreate tests the Create method delegates to primary store
 func TestDualStoreManagerCreate(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -164,7 +164,7 @@ func TestDualStoreManagerCreate(t *testing.T) {
 
 // TestDualStoreManagerUpdate tests the Update method delegates to primary store
 func TestDualStoreManagerUpdate(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -186,7 +186,7 @@ func TestDualStoreManagerUpdate(t *testing.T) {
 
 // TestDualStoreManagerDelete tests the Delete method delegates to primary store
 func TestDualStoreManagerDelete(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -207,7 +207,7 @@ func TestDualStoreManagerDelete(t *testing.T) {
 
 // TestDualStoreManagerCount tests the Count method reads from primary store
 func TestDualStoreManagerCount(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	// Count should read from primary store
@@ -226,7 +226,7 @@ func TestDualStoreManagerCount(t *testing.T) {
 
 // TestDualStoreManagerKeys tests the Keys method reads from primary store
 func TestDualStoreManagerKeys(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -246,7 +246,7 @@ func TestDualStoreManagerKeys(t *testing.T) {
 
 // TestDualStoreManagerRead tests the Read method reads from primary store
 func TestDualStoreManagerRead(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -266,7 +266,7 @@ func TestDualStoreManagerRead(t *testing.T) {
 
 // TestDualStoreManagerList tests the List method reads from primary store
 func TestDualStoreManagerList(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -286,7 +286,7 @@ func TestDualStoreManagerList(t *testing.T) {
 
 // TestDualStoreManagerShutdown tests the Shutdown method
 func TestDualStoreManagerShutdown(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -305,7 +305,7 @@ func TestDualStoreManagerShutdown(t *testing.T) {
 
 // TestDualStoreManagerConnected tests the Connected method
 func TestDualStoreManagerConnected(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -325,7 +325,7 @@ func TestDualStoreManagerConnected(t *testing.T) {
 
 // TestDualStoreManagerGetPrimary tests getting the primary store
 func TestDualStoreManagerGetPrimary(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -343,7 +343,7 @@ func TestDualStoreManagerGetPrimary(t *testing.T) {
 
 // TestDualStoreManagerGetSecondary tests getting the secondary store
 func TestDualStoreManagerGetSecondary(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -361,7 +361,7 @@ func TestDualStoreManagerGetSecondary(t *testing.T) {
 
 // TestDualStoreManagerGetSecondaryNil tests getting nil secondary store
 func TestDualStoreManagerGetSecondaryNil(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -378,7 +378,7 @@ func TestDualStoreManagerGetSecondaryNil(t *testing.T) {
 
 // TestDualStoreManagerInterface tests that DualStoreManager implements DualStore interface
 func TestDualStoreManagerInterface(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 
 	// Compile-time check that DualStoreManager implements DualStore
 	var _ DualStore = (*DualStoreManager)(nil)
@@ -387,7 +387,7 @@ func TestDualStoreManagerInterface(t *testing.T) {
 
 // TestDualStoreManagerAsyncSecondaryWrite tests that secondary writes are async
 func TestDualStoreManagerAsyncSecondaryWrite(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -420,7 +420,7 @@ func TestDualStoreManagerAsyncSecondaryWrite(t *testing.T) {
 
 // TestDualStoreManagerLogging tests that operations are properly logged
 func TestDualStoreManagerLogging(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -441,7 +441,7 @@ func TestDualStoreManagerLogging(t *testing.T) {
 
 // TestDualStoreManagerConcurrency tests concurrent access to the store
 func TestDualStoreManagerConcurrency(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	manager, err := SetupDualStoreManager(
@@ -455,7 +455,7 @@ func TestDualStoreManagerConcurrency(t *testing.T) {
 	// Run concurrent reads
 	done := make(chan error, 10)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(index int) {
 			_, err := manager.Read(
 				fmt.Sprintf("collection-%d", index),
@@ -466,7 +466,7 @@ func TestDualStoreManagerConcurrency(t *testing.T) {
 	}
 
 	// Collect results - should handle concurrent access safely
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 

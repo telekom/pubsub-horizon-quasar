@@ -21,65 +21,58 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Global MongoDB instance for tests
 var mongoStore *MongoStore
 
-// setupMongoStore initializes the MongoDB store for tests
+const testCollectionName = "testresources..v1"
+
 func setupMongoStore() *MongoStore {
-	if mongoStore == nil || !mongoStore.Connected() {
-		if config.Current.Store.Mongo.Uri == "" {
-			mongoHost := test.EnvOrDefault("MONGO_HOST", "localhost")
-			mongoPort := test.EnvOrDefault("MONGO_PORT", "27017")
-			config.Current.Store.Mongo.Uri = fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)
-			config.Current.Store.Mongo.Database = config.Current.Fallback.Mongo.Database
-			if config.Current.Store.Mongo.Database == "" {
-				config.Current.Store.Mongo.Database = "test_db"
-			}
-		}
-
-		// Add configuration for TestResource
-		var foundTestResourceConfig bool
-		for _, res := range config.Current.Resources {
-			if res.Kubernetes.Kind == "TestResource" && res.Kubernetes.Version == "v1" {
-				foundTestResourceConfig = true
-				break
-			}
-		}
-
-		if !foundTestResourceConfig {
-			testResourceConfig := config.Resource{}
-			testResourceConfig.Kubernetes.Group = "" // Empty group for core v1
-			testResourceConfig.Kubernetes.Version = "v1"
-			testResourceConfig.Kubernetes.Resource = "testresources"
-			testResourceConfig.Kubernetes.Kind = "TestResource"
-			// No MongoId field configured to use UID as ID
-			config.Current.Resources = append(config.Current.Resources, testResourceConfig)
-		}
-
-		mongoStore = new(MongoStore)
-		mongoStore.Initialize()
+	if mongoStore != nil && mongoStore.Connected() {
+		return mongoStore
 	}
+
+	if config.Current.Store.Mongo.Uri == "" {
+		mongoHost := test.EnvOrDefault("MONGO_HOST", "localhost")
+		mongoPort := test.EnvOrDefault("MONGO_PORT", "27017")
+		config.Current.Store.Mongo.Uri = fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)
+		config.Current.Store.Mongo.Database = config.Current.Fallback.Mongo.Database
+		if config.Current.Store.Mongo.Database == "" {
+			config.Current.Store.Mongo.Database = "test_db"
+		}
+	}
+
+	var foundTestResourceConfig bool
+	for _, res := range config.Current.Resources {
+		if res.Kubernetes.Kind == "TestResource" && res.Kubernetes.Version == "v1" {
+			foundTestResourceConfig = true
+			break
+		}
+	}
+
+	if !foundTestResourceConfig {
+		testResourceConfig := config.Resource{}
+		testResourceConfig.Kubernetes.Group = ""
+		testResourceConfig.Kubernetes.Version = "v1"
+		testResourceConfig.Kubernetes.Resource = "testresources"
+		testResourceConfig.Kubernetes.Kind = "TestResource"
+		config.Current.Resources = append(config.Current.Resources, testResourceConfig)
+	}
+
+	mongoStore = new(MongoStore)
+	mongoStore.Initialize()
 	return mongoStore
 }
 
-// getTestCollectionName returns the name of the collection for test resources
-func getTestCollectionName() string {
-	return "testresources..v1"
-}
-
-// cleanupMongoCollection deletes test data from the collection
 func cleanupMongoCollection() {
 	if mongoStore != nil && mongoStore.Connected() {
-		err := mongoStore.client.Database(config.Current.Store.Mongo.Database).Collection(getTestCollectionName()).Drop(context.Background())
+		err := mongoStore.client.Database(config.Current.Store.Mongo.Database).Collection(testCollectionName).Drop(context.Background())
 		if err != nil {
 			return
 		}
 	}
 }
 
-// TestMongoStore_CreateFilter tests the createFilter method functionality
 func TestMongoStore_CreateFilter(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -100,8 +93,10 @@ func TestMongoStore_CreateFilter(t *testing.T) {
 }
 
 // TestMongoStore_Create tests the Create method functionality
+//
+//goland:noinspection DuplicatedCode
 func TestMongoStore_Create(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -113,16 +108,21 @@ func TestMongoStore_Create(t *testing.T) {
 	assertions.NoError(err)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 
-	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(getTestCollectionName())
+	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(testCollectionName)
 	filter := bson.M{"_id": "default/test-resource"}
 
 	var result bson.M
 	err = collection.FindOne(context.Background(), filter).Decode(&result)
 	assertions.NoError(err)
 
-	assertions.Equal("test-resource", result["metadata"].(bson.M)["name"])
-	assertions.Equal("default", result["metadata"].(bson.M)["namespace"])
-	assertions.Equal("test", result["metadata"].(bson.M)["labels"].(bson.M)["app"])
+	metadata, ok := result["metadata"].(bson.M)
+	assertions.True(ok, "metadata should be a bson.M")
+	assertions.Equal("test-resource", metadata["name"])
+	assertions.Equal("default", metadata["namespace"])
+
+	labels, ok := metadata["labels"].(bson.M)
+	assertions.True(ok, "labels should be a bson.M")
+	assertions.Equal("test", labels["app"])
 
 	resource.SetLabels(map[string]string{"app": "updated"})
 	err = store.Create(resource)
@@ -130,14 +130,19 @@ func TestMongoStore_Create(t *testing.T) {
 
 	err = collection.FindOne(context.Background(), filter).Decode(&result)
 	assertions.NoError(err)
-	assertions.Equal("updated", result["metadata"].(bson.M)["labels"].(bson.M)["app"])
+
+	metadata, ok = result["metadata"].(bson.M)
+	assertions.True(ok, "metadata should be a bson.M")
+	labels, ok = metadata["labels"].(bson.M)
+	assertions.True(ok, "labels should be a bson.M")
+	assertions.Equal("updated", labels["app"])
 
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_Update tests the Update method functionality
+//goland:noinspection DuplicatedCode
 func TestMongoStore_Update(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -149,7 +154,7 @@ func TestMongoStore_Update(t *testing.T) {
 	assertions.NoError(err)
 
 	newResource := test.CreateTestResource("test-resource", "default", map[string]string{"app": "updated"})
-	newResource.Object["spec"] = map[string]interface{}{
+	newResource.Object["spec"] = map[string]any{
 		"replicas": 3,
 	}
 
@@ -157,20 +162,26 @@ func TestMongoStore_Update(t *testing.T) {
 	assertions.NoError(err)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 
-	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(getTestCollectionName())
+	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(testCollectionName)
 	filter := bson.M{"_id": "default/test-resource"}
 
 	var result bson.M
 	err = collection.FindOne(context.Background(), filter).Decode(&result)
 	assertions.NoError(err)
 
-	assertions.Equal("updated", result["metadata"].(bson.M)["labels"].(bson.M)["app"])
-	assertions.Equal(int32(3), result["spec"].(bson.M)["replicas"])
+	metadata, ok := result["metadata"].(bson.M)
+	assertions.True(ok, "metadata should be a bson.M")
+	labels, ok := metadata["labels"].(bson.M)
+	assertions.True(ok, "labels should be a bson.M")
+	assertions.Equal("updated", labels["app"])
+
+	spec, ok := result["spec"].(bson.M)
+	assertions.True(ok, "spec should be a bson.M")
+	assertions.Equal(int32(3), spec["replicas"])
 }
 
-// TestMongoStore_Delete tests the Delete method functionality
 func TestMongoStore_Delete(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -185,7 +196,7 @@ func TestMongoStore_Delete(t *testing.T) {
 	assertions.NoError(err)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 
-	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(getTestCollectionName())
+	collection := store.client.Database(config.Current.Store.Mongo.Database).Collection(testCollectionName)
 	filter := bson.M{"_id": "default/test-resource"}
 
 	var result bson.M
@@ -193,44 +204,40 @@ func TestMongoStore_Delete(t *testing.T) {
 	assertions.Equal(mongo.ErrNoDocuments, err, "document should no longer exist")
 }
 
-// TestMongoStore_Count tests the Count method functionality
 func TestMongoStore_Count(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
 	cleanupMongoCollection()
 
-	count, err := store.Count(getTestCollectionName())
+	count, err := store.Count(testCollectionName)
 	assertions.NoError(err)
 	assertions.Equal(0, count)
 
-	// Add three resources
 	for i := 1; i <= 3; i++ {
 		resource := test.CreateTestResource(fmt.Sprintf("test-resource-%d", i), "default", nil)
 		err = store.Create(resource)
 		assertions.NoError(err)
 	}
 
-	count, err = store.Count(getTestCollectionName())
+	count, err = store.Count(testCollectionName)
 	assertions.NoError(err)
 	assertions.Equal(3, count)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_Keys tests the Keys method functionality
 func TestMongoStore_Keys(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
 	cleanupMongoCollection()
 
-	keys, err := store.Keys(getTestCollectionName())
+	keys, err := store.Keys(testCollectionName)
 	assertions.NoError(err)
 	assertions.Empty(keys)
 
-	// Add three resources
 	expectedKeys := []string{
 		"default/test-resource-1",
 		"default/test-resource-2",
@@ -243,29 +250,28 @@ func TestMongoStore_Keys(t *testing.T) {
 		assertions.NoError(err)
 	}
 
-	keys, err = store.Keys(getTestCollectionName())
+	keys, err = store.Keys(testCollectionName)
 	assertions.NoError(err)
 	assertions.ElementsMatch(expectedKeys, keys)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_Read tests the Read method functionality
 func TestMongoStore_Read(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
 	cleanupMongoCollection()
 
 	resource := test.CreateTestResource("test-resource", "default", map[string]string{"app": "test"})
-	resource.Object["spec"] = map[string]interface{}{
+	resource.Object["spec"] = map[string]any{
 		"replicas": 2,
 	}
 
 	err := store.Create(resource)
 	assertions.NoError(err)
 
-	result, err := store.Read(getTestCollectionName(), "default/test-resource")
+	result, err := store.Read(testCollectionName, "default/test-resource")
 	assertions.NoError(err)
 	assertions.NotNil(result)
 
@@ -273,15 +279,14 @@ func TestMongoStore_Read(t *testing.T) {
 	assertions.Equal("default", result.GetNamespace())
 	assertions.Equal("test", result.GetLabels()["app"])
 
-	result, err = store.Read(getTestCollectionName(), "non-existent")
+	result, err = store.Read(testCollectionName, "non-existent")
 	assertions.NoError(err)
 	assertions.Nil(result)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_List tests the List method functionality
 func TestMongoStore_List(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
@@ -299,21 +304,20 @@ func TestMongoStore_List(t *testing.T) {
 		assertions.NoError(err)
 	}
 
-	results, err := store.List(getTestCollectionName(), "", 0)
+	results, err := store.List(testCollectionName, "", 0)
 	assertions.NoError(err)
 	assertions.Len(results, 3)
 
-	results, err = store.List(getTestCollectionName(), "metadata.labels.app=frontend", 0)
+	results, err = store.List(testCollectionName, "metadata.labels.app=frontend", 0)
 	assertions.NoError(err)
 	assertions.Len(results, 2)
 
-	results, err = store.List(getTestCollectionName(), "metadata.labels.env=prod", 1)
+	results, err = store.List(testCollectionName, "metadata.labels.env=prod", 1)
 	assertions.NoError(err)
 	assertions.Len(results, 1)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_ParseFieldSelector tests the parseFieldSelector method
 func TestMongoStore_ParseFieldSelector(t *testing.T) {
 	store := &MongoStore{}
 
@@ -361,9 +365,8 @@ func TestMongoStore_ParseFieldSelector(t *testing.T) {
 	}
 }
 
-// TestMongoStore_InitializeShutdown tests Initialize and Shutdown methods
 func TestMongoStore_InitializeShutdown(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := new(MongoStore)
@@ -382,20 +385,18 @@ func TestMongoStore_InitializeShutdown(t *testing.T) {
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_InitializeResource tests the InitializeResource method functionality
 func TestMongoStore_InitializeResource(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
 
 	resourceConfig := config.Resource{}
-	resourceConfig.Kubernetes.Group = "" // Empty group for core v1
+	resourceConfig.Kubernetes.Group = ""
 	resourceConfig.Kubernetes.Version = "v1"
 	resourceConfig.Kubernetes.Resource = "testresources"
 	resourceConfig.Kubernetes.Kind = "TestResource"
 
-	// Add a test index configuration (MongoResourceIndex is map[string]int where value is the index type)
 	// 1 = ascending, -1 = descending
 	indexConfig := config.MongoResourceIndex{
 		"metadata.name": 1, // Ascending index on metadata.name
@@ -420,11 +421,9 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_ParseFieldSelectorEdgeCases tests edge cases in parseFieldSelector method
 func TestMongoStore_ParseFieldSelectorEdgeCases(t *testing.T) {
 	store := &MongoStore{}
 
-	// Test selector with invalid format
 	filter, err := store.parseFieldSelector("invalid-format")
 	assert.NoError(t, err)
 	assert.Empty(t, filter)
@@ -434,25 +433,21 @@ func TestMongoStore_ParseFieldSelectorEdgeCases(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, bson.M{"metadata.name": ""}, filter)
 
-	// Test selector with multiple equals signs
 	filter, err = store.parseFieldSelector("metadata.name=value=with=equals")
 	assert.NoError(t, err)
 	assert.Equal(t, bson.M{"metadata.name": "value=with=equals"}, filter)
 
-	// Test selector with whitespace in values
 	filter, err = store.parseFieldSelector("metadata.name=name with spaces")
 	assert.NoError(t, err)
 	assert.Equal(t, bson.M{"metadata.name": "name with spaces"}, filter)
 
-	// Test selector with special characters
 	filter, err = store.parseFieldSelector("metadata.name=special@#$%^&*chars")
 	assert.NoError(t, err)
 	assert.Equal(t, bson.M{"metadata.name": "special@#$%^&*chars"}, filter)
 }
 
-// TestMongoStore_OperationWithBadObject tests error handling with operations on invalid objects
 func TestMongoStore_OperationWithBadObject(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	if testing.Short() {
@@ -462,13 +457,12 @@ func TestMongoStore_OperationWithBadObject(t *testing.T) {
 	store := setupMongoStore()
 	cleanupMongoCollection()
 
-	// Create incomplete object missing important metadata
 	// Note: GetMongoId() uses GetUID(), which always has a value (even if empty)
 	// Therefore operations will not fail, but execute successfully
 	badObject := &unstructured.Unstructured{
-		Object: map[string]interface{}{
+		Object: map[string]any{
 			// No metadata like name or namespace
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"replicas": 3,
 			},
 		},
@@ -486,29 +480,24 @@ func TestMongoStore_OperationWithBadObject(t *testing.T) {
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
 
-// TestMongoStore_ErrorHandling tests how store implementation handles database errors
 func TestMongoStore_ErrorHandling(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	store := setupMongoStore()
 
-	// Test non-existent collection (should not throw errors)
 	count, err := store.Count("non_existent_collection")
 	assertions.NoError(err)
 	assertions.Equal(0, count)
 
-	// Test Keys on non-existent collection
 	keys, err := store.Keys("non_existent_collection")
 	assertions.NoError(err)
 	assertions.Empty(keys)
 
-	// Test Read with invalid key format (should not throw errors)
-	result, err := store.Read(getTestCollectionName(), "")
+	result, err := store.Read(testCollectionName, "")
 	assertions.NoError(err)
 	assertions.Nil(result)
 
-	// Test List with non-existent collection
 	results, err := store.List("non_existent_collection", "", 0)
 	assertions.NoError(err)
 
@@ -517,8 +506,7 @@ func TestMongoStore_ErrorHandling(t *testing.T) {
 		assertions.Empty(results)
 	}
 
-	// Test List with invalid field selector
-	results, err = store.List(getTestCollectionName(), "invalid-selector", 0)
+	results, err = store.List(testCollectionName, "invalid-selector", 0)
 	assertions.NoError(err)
 
 	// Should return empty slice if selector is invalid and collection is empty

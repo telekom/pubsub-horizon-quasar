@@ -15,31 +15,101 @@ linters:
     - bidichk
     - bodyclose
     - canonicalheader
-    - cyclop
     - copyloopvar
+    - cyclop
+    - dupl
+    - durationcheck
     - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forbidigo
+    - funlen
+    - gocheckcompilerdirectives
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
     - govet
+    - gocyclo
     - ineffassign
+    - intrange
+    - lll
+    - makezero
+    - mirror
+    - musttag
+    - nakedret
+    - nestif
     - staticcheck
     - unused
     - zerologlint
     - godoclint
     - whitespace
-    - dupl
 
   settings:
     cyclop:
       max-complexity: 30
       package-average: 10
+    errcheck: {}
+    exhaustive:
+      check:
+        - switch
+        - map
+      default-signifies-exhaustive: true
+    funlen:
+      lines: 100
+      statements: 50
+      ignore-comments: true
+    gocognit:
+      min-complexity: 20
     godoclint:
       enable:
         - start-with-name
         - deprecated
+    lll:
+      line-length: 140
+      tab-width: 1
     whitespace:
       multi-if: true
-      multi-func: true
+      multi-func: false
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gocritic
+        source: //noinspection
+      - linters:
+          - bodyclose
+          - dupl
+          - funlen
+          - goconst
+          - gosec
+          - noctx
+          - wrapcheck
+          - errcheck
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-same-issues: 50
 
 formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
   settings:
     gci:
       no-inline-comments: true
@@ -52,6 +122,6 @@ formatters:
           replacement: 'a[b:]'
     gofumpt: {}
     goimports: {}
-    golines: {}
-
-
+    golines:
+      max-len: 140
+      tab-len: 1

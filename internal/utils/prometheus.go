@@ -14,15 +14,15 @@ import (
 )
 
 func GetLabelsForResource(obj *unstructured.Unstructured, resourceConfig *config.Resource) prometheus.Labels {
-	var labels = make(prometheus.Labels)
+	labels := make(prometheus.Labels)
 
 	for labelName, labelValue := range resourceConfig.Prometheus.Labels {
-		var val = labelValue
+		val := labelValue
 		if strings.HasPrefix(labelValue, "$") {
 			var ok bool
 			val, ok, _ = unstructured.NestedString(obj.Object, strings.Split(labelValue[1:], ".")...)
 			if !ok {
-				var gvr = resourceConfig.GetGroupVersionResource()
+				gvr := resourceConfig.GetGroupVersionResource()
 				log.Warn().
 					Fields(CreateFieldForResource(&gvr)).
 					Msgf("Could not resolve nested path '%s' for label %s", labelValue, labelName)

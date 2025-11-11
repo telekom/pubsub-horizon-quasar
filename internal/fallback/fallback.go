@@ -23,7 +23,7 @@ type Fallback interface {
 }
 
 func SetupFallback() {
-	var fallbackType = config.Current.Fallback.Type
+	fallbackType := config.Current.Fallback.Type
 	var err error
 	CurrentFallback, err = createFallback(fallbackType)
 	if err != nil {

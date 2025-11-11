@@ -37,7 +37,6 @@ func NewReconciliation(dataSource DataSource, resource *config.Resource) *Reconc
 
 func (r *Reconciliation) reconcile(reconcilable Reconcilable) {
 	resources, err := r.dataSource.ListResources()
-
 	if err != nil {
 		log.Error().Err(err).Fields(map[string]any{
 			"cache": r.resource.GetGroupVersionName(),
@@ -117,7 +116,7 @@ func (r *Reconciliation) fullyReconcile(reconcilable Reconcilable, resources []u
 }
 
 func (r *Reconciliation) generateDiff(resources []unstructured.Unstructured, storeKeys []string) []unstructured.Unstructured {
-	var diff = make([]unstructured.Unstructured, 0)
+	diff := make([]unstructured.Unstructured, 0)
 	for _, resource := range resources {
 		found := false
 		for _, storeKey := range storeKeys {

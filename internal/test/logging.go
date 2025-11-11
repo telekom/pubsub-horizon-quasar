@@ -37,7 +37,7 @@ func (h *LogRecorderHook) Reset() {
 }
 
 func (h *LogRecorderHook) GetRecordCount(levels ...zerolog.Level) int {
-	var count = 0
+	count := 0
 	for _, level := range levels {
 		count += h.records[level]
 	}

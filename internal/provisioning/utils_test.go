@@ -17,7 +17,7 @@ import (
 )
 
 func TestGetDatasetForGvr(t *testing.T) {
-	var assertions = assert.New(t)
+	assertions := assert.New(t)
 	defer test.LogRecorder.Reset()
 
 	config.Current = test.CreateTestResourceConfig()

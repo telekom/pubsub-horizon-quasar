@@ -53,9 +53,9 @@ func ReadTestSubscriptions(file string) []*unstructured.Unstructured {
 		panic(err)
 	}
 
-	var uSubscriptions = make([]*unstructured.Unstructured, 0)
+	uSubscriptions := make([]*unstructured.Unstructured, 0)
 	for _, subscription := range subscriptions {
-		var uSubscription = new(unstructured.Unstructured)
+		uSubscription := new(unstructured.Unstructured)
 		uSubscription.SetUnstructuredContent(subscription)
 		uSubscriptions = append(uSubscriptions, uSubscription)
 	}

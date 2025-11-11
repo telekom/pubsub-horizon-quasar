@@ -49,6 +49,14 @@ func SetupDocker(opts *Options) {
 
 	log.Println("Setting up docker (missing images will be pulled, which might take some time)...")
 
+	initializePool()
+	setupServices(opts)
+	waitForServicesReady(opts)
+
+	alreadySetUp = true
+}
+
+func initializePool() {
 	var err error
 	if pool == nil {
 		pool, err = dockertest.NewPool("")
@@ -60,40 +68,37 @@ func SetupDocker(opts *Options) {
 	if err := pool.Client.Ping(); err != nil {
 		log.Fatalf("Could not ping docker: %s", err)
 	}
+}
 
-	// MongoDB
+func setupServices(opts *Options) {
 	if opts.MongoDb {
 		if err := setupMongoDb(); err != nil {
 			log.Fatalf("Could not setup mongodb: %s", err)
 		}
 	}
 
-	// Hazelcast
 	if opts.Hazelcast {
 		if err := setupHazelcast(); err != nil {
 			log.Fatalf("Could not setup hazelcast: %s", err)
 		}
 	}
+}
 
-	// Wait no longer than 30 seconds
+func waitForServicesReady(opts *Options) {
 	pool.MaxWait = 30 * time.Second
 
-	err = pool.Retry(func() error {
-		// MongoDB readiness
+	err := pool.Retry(func() error {
 		if opts.MongoDb {
 			if err := pingMongoDb(); err != nil {
 				return err
 			}
 		}
-		log.Println("MongoDB is ready!")
 
-		// Hazelcast readiness
 		if opts.Hazelcast {
 			if err := pingHazelcast(); err != nil {
 				return err
 			}
 		}
-		log.Println("Hazelcast is ready!")
 
 		return nil
 	})
@@ -101,7 +106,12 @@ func SetupDocker(opts *Options) {
 		log.Fatalf("Readiness probe failed: %s", err)
 	}
 
-	alreadySetUp = true
+	if opts.MongoDb {
+		log.Println("MongoDB is ready!")
+	}
+	if opts.Hazelcast {
+		log.Println("Hazelcast is ready!")
+	}
 }
 
 func TeardownDocker() {
@@ -113,7 +123,7 @@ func TeardownDocker() {
 }
 
 func pingMongoDb() error {
-	var ctx = context.Background()
+	ctx := context.Background()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)))
 	if err != nil {
 		log.Printf("Could not reach mongodb: %s\n", err)
@@ -155,7 +165,7 @@ func setupHazelcast() error {
 }
 
 func pingHazelcast() error {
-	var ctx = context.Background()
+	ctx := context.Background()
 	config := hazelcast.NewConfig()
 
 	config.Cluster.Name = "horizon"

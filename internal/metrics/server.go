@@ -19,7 +19,7 @@ import (
 var server *http.Server
 
 func init() {
-	var mux = http.NewServeMux()
+	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{
 		Timeout: config.Current.Metrics.Timeout,
 	}))
