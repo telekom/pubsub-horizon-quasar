@@ -66,7 +66,7 @@ linters:
         - start-with-name
         - deprecated
     lll:
-      line-width: 140
+      line-length: 140
       tab-width: 1
     whitespace:
       multi-if: true
