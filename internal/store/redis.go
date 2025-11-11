@@ -77,19 +77,19 @@ func (s *RedisStore) Shutdown() {
 
 func (s *RedisStore) Count(dataset string) (int, error) {
 	_ = dataset
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (s *RedisStore) Keys(dataset string) ([]string, error) {
 	_ = dataset
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (s *RedisStore) Read(dataset string, key string) (*unstructured.Unstructured, error) {
 	_, _ = dataset, key
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

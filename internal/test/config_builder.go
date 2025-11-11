@@ -12,6 +12,8 @@ import (
 	"github.com/telekom/quasar/internal/config"
 )
 
+const defaultHorizonName = "horizon"
+
 // BuildBaseTestConfig creates a base test configuration with MongoDB and Hazelcast setup.
 // This configuration can be extended by individual test packages as needed.
 func BuildBaseTestConfig() *config.Configuration {
@@ -23,15 +25,15 @@ func BuildBaseTestConfig() *config.Configuration {
 	mongoUri := fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)
 
 	testConfig.Fallback.Mongo.Uri = mongoUri
-	testConfig.Fallback.Mongo.Database = "horizon"
+	testConfig.Fallback.Mongo.Database = defaultHorizonName
 
 	// MongoDB Store configuration
 	testConfig.Store.Mongo.Uri = mongoUri
-	testConfig.Store.Mongo.Database = "horizon"
+	testConfig.Store.Mongo.Database = defaultHorizonName
 
 	// Hazelcast configuration
 	testConfig.Store.Hazelcast = config.Hazelcast{
-		ClusterName: "horizon",
+		ClusterName: defaultHorizonName,
 		Addresses:   []string{EnvOrDefault("HAZELCAST_HOST", "localhost")},
 	}
 	testConfig.Store.Hazelcast.ReconcileMode = config.ReconcileModeIncremental
