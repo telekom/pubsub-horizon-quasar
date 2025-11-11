@@ -120,9 +120,14 @@ func TestMongoStore_Create(t *testing.T) {
 	err = collection.FindOne(context.Background(), filter).Decode(&result)
 	assertions.NoError(err)
 
-	assertions.Equal("test-resource", result["metadata"].(bson.M)["name"])
-	assertions.Equal("default", result["metadata"].(bson.M)["namespace"])
-	assertions.Equal("test", result["metadata"].(bson.M)["labels"].(bson.M)["app"])
+	metadata, ok := result["metadata"].(bson.M)
+	assertions.True(ok, "metadata should be a bson.M")
+	assertions.Equal("test-resource", metadata["name"])
+	assertions.Equal("default", metadata["namespace"])
+
+	labels, ok := metadata["labels"].(bson.M)
+	assertions.True(ok, "labels should be a bson.M")
+	assertions.Equal("test", labels["app"])
 
 	resource.SetLabels(map[string]string{"app": "updated"})
 	err = store.Create(resource)
@@ -130,7 +135,12 @@ func TestMongoStore_Create(t *testing.T) {
 
 	err = collection.FindOne(context.Background(), filter).Decode(&result)
 	assertions.NoError(err)
-	assertions.Equal("updated", result["metadata"].(bson.M)["labels"].(bson.M)["app"])
+
+	metadata, ok = result["metadata"].(bson.M)
+	assertions.True(ok, "metadata should be a bson.M")
+	labels, ok = metadata["labels"].(bson.M)
+	assertions.True(ok, "labels should be a bson.M")
+	assertions.Equal("updated", labels["app"])
 
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
@@ -164,8 +174,15 @@ func TestMongoStore_Update(t *testing.T) {
 	err = collection.FindOne(context.Background(), filter).Decode(&result)
 	assertions.NoError(err)
 
-	assertions.Equal("updated", result["metadata"].(bson.M)["labels"].(bson.M)["app"])
-	assertions.Equal(int32(3), result["spec"].(bson.M)["replicas"])
+	metadata, ok := result["metadata"].(bson.M)
+	assertions.True(ok, "metadata should be a bson.M")
+	labels, ok := metadata["labels"].(bson.M)
+	assertions.True(ok, "labels should be a bson.M")
+	assertions.Equal("updated", labels["app"])
+
+	spec, ok := result["spec"].(bson.M)
+	assertions.True(ok, "spec should be a bson.M")
+	assertions.Equal(int32(3), spec["replicas"])
 }
 
 // TestMongoStore_Delete tests the Delete method functionality

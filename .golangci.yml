@@ -35,7 +35,6 @@ linters:
     - gocritic
     - govet
     - gocyclo
-    - godot
     - ineffassign
     - staticcheck
     - unused

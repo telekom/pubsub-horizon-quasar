@@ -19,7 +19,6 @@ import (
 func withTrustedClients(trustedClients []string) fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		if len(trustedClients) > 0 {
-
 			if userLocal := ctx.Locals("user"); userLocal == nil {
 				return &fiber.Error{Code: fiber.StatusUnauthorized, Message: "No user token found"}
 			} else if user, err := userLocal.(*jwt.Token); !err {
