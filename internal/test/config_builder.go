@@ -7,7 +7,6 @@
 package test
 
 import (
-	"fmt"
 	"net"
 
 	"github.com/telekom/quasar/internal/config"
@@ -23,7 +22,7 @@ func BuildBaseTestConfig() *config.Configuration {
 	// MongoDB configuration
 	mongoHost := EnvOrDefault("MONGO_HOST", "localhost")
 	mongoPort := EnvOrDefault("MONGO_PORT", "27017")
-	mongoUri := fmt.Sprintf("mongodb://%s", net.JoinHostPort(mongoHost, mongoPort))
+	mongoUri := "mongodb://" + net.JoinHostPort(mongoHost, mongoPort)
 
 	testConfig.Fallback.Mongo.Uri = mongoUri
 	testConfig.Fallback.Mongo.Database = defaultHorizonName

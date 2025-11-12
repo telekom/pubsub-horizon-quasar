@@ -6,7 +6,6 @@ package k8s
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -77,7 +76,7 @@ func processSubscriptions(action string) {
 			resourceVersion, _ := strconv.Atoi(subscription.GetResourceVersion())
 			resourceVersion++
 
-			subscription.SetResourceVersion(fmt.Sprintf("%d", resourceVersion))
+			subscription.SetResourceVersion(strconv.Itoa(resourceVersion))
 			_, _ = resource.Update(ctx, subscription, v1.UpdateOptions{})
 
 		case "delete":

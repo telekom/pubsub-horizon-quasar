@@ -36,7 +36,7 @@ func GetOrCreate(resourceConfig *config.Resource) *prometheus.GaugeVec {
 	if !ok {
 		gauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
-			Name:      fmt.Sprintf("%s_count", strings.ReplaceAll(gaugeName, ".", "_")),
+			Name:      strings.ReplaceAll(gaugeName, ".", "_") + "_count",
 		}, maps.Keys(resourceConfig.Prometheus.Labels))
 
 		gauges[gaugeName] = gauge
@@ -82,7 +82,7 @@ func GetOrCreateCustomCounter(name string) *prometheus.CounterVec {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      key,
-		Help:      fmt.Sprintf("Custom counter %s", key),
+		Help:      "Custom counter " + key,
 	}, []string{})
 	if err := registry.Register(counter); err != nil {
 		log.Error().Err(err).

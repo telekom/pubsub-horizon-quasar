@@ -8,7 +8,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"time"
@@ -125,7 +124,7 @@ func TeardownDocker() {
 
 func pingMongoDb() error {
 	ctx := context.Background()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", net.JoinHostPort(mongoHost, mongoPort))))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://"+net.JoinHostPort(mongoHost, mongoPort)))
 	if err != nil {
 		log.Printf("Could not reach mongodb: %s\n", err)
 		return err

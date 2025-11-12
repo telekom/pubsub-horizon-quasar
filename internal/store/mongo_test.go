@@ -34,7 +34,7 @@ func setupMongoStore() *MongoStore {
 	if config.Current.Store.Mongo.Uri == "" {
 		mongoHost := test.EnvOrDefault("MONGO_HOST", "localhost")
 		mongoPort := test.EnvOrDefault("MONGO_PORT", "27017")
-		config.Current.Store.Mongo.Uri = fmt.Sprintf("mongodb://%s", net.JoinHostPort(mongoHost, mongoPort))
+		config.Current.Store.Mongo.Uri = "mongodb://" + net.JoinHostPort(mongoHost, mongoPort)
 		config.Current.Store.Mongo.Database = config.Current.Fallback.Mongo.Database
 		if config.Current.Store.Mongo.Database == "" {
 			config.Current.Store.Mongo.Database = "test_db"

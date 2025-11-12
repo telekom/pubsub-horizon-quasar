@@ -47,6 +47,9 @@ linters:
     - nolintlint
     - nonamedreturns
     - nosprintfhostport
+    - perfsprint
+    - predeclared
+    - promlinter
     - staticcheck
     - unused
     - zerologlint
