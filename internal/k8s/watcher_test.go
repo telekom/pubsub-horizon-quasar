@@ -89,7 +89,7 @@ func TestNewResourceWatcher(t *testing.T) {
 	assertions := assert.New(t)
 	var err error
 	watcher, err = NewResourceWatcher(fakeClient, &config.Current.Resources[0], 30*time.Second)
-	assertions.Nil(err, "unexpected error when creating new resource watcher")
+	assertions.NoError(err, "unexpected error when creating new resource watcher")
 }
 
 func TestResourceWatcher_Start(t *testing.T) {

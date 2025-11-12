@@ -50,7 +50,13 @@ linters:
     - perfsprint
     - predeclared
     - promlinter
+    - protogetter
+    - reassign
+    - rowserrcheck
+    - spancheck
+    - sqlclosecheck
     - staticcheck
+    - testifylint
     - unused
     - zerologlint
     - godoclint
