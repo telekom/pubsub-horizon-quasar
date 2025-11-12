@@ -25,12 +25,6 @@ go build
 ```bash
 # Run all tests with coverage
 go test -v ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./... -tags=testing -p=1
-
-# Run tests in a specific package
-go test -v ./internal/store -tags=testing -p=1
-
-# Run a specific test
-go test -v ./internal/store -run TestHazelcastStore_Create -tags=testing -p=1
 ```
 
 ### Run Application
@@ -313,4 +307,7 @@ Each resource in `config.yaml` defines:
 
 
 ---
-Use zerolog instead fmt
+
+## Additional Instructions
+- Use zerolog instead of fmt
+- Whenever you finish work, run the linter and the entire test suite. If issues arise, fix them.

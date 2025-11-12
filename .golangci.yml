@@ -31,6 +31,8 @@ linters:
     - gocognit
     - goconst
     - gocritic
+    - godoclint
+    - gomodguard
     - govet
     - gocyclo
     - ineffassign
@@ -60,8 +62,9 @@ linters:
     - unconvert
     - unparam
     - unused
+    - usestdlibvars
     - zerologlint
-    - godoclint
+    - wastedassign
     - whitespace
 
   settings:
@@ -84,6 +87,22 @@ linters:
       enable:
         - start-with-name
         - deprecated
+    gomodguard:
+      blocked:
+        modules:
+          - github.com/golang/protobuf:
+              recommendations:
+                - google.golang.org/protobuf
+              reason: see https://developers.google.com/protocol-buffers/docs/reference/go/faq#modules
+          - github.com/satori/go.uuid:
+              recommendations:
+                - github.com/google/uuid
+              reason: satori's package is not maintained
+          - github.com/gofrs/uuid:
+              recommendations:
+                - github.com/gofrs/uuid/v5
+              reason: gofrs' package was not go module before v5
+
     lll:
       line-length: 140
       tab-width: 1
@@ -139,8 +158,6 @@ formatters:
           replacement: 'any'
         - pattern: 'a[b:len(a)]'
           replacement: 'a[b:]'
-    gofumpt: {}
-    goimports: {}
     golines:
       max-len: 140
       tab-len: 1
