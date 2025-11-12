@@ -56,7 +56,9 @@ linters:
     - spancheck
     - sqlclosecheck
     - staticcheck
-    - testifylint
+    - tparallel
+    - unconvert
+    - unparam
     - unused
     - zerologlint
     - godoclint
@@ -99,7 +101,7 @@ linters:
     rules:
       - linters:
           - gocritic
-        source: //noinspection
+        source: // noinspection
       - linters:
           - bodyclose
           - dupl
@@ -110,6 +112,7 @@ linters:
           - wrapcheck
           - errcheck
           - nilnil
+          - unparam
         path: _test\.go
     paths:
       - third_party$

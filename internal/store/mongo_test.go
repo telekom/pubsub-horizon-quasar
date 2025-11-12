@@ -359,8 +359,7 @@ func TestMongoStore_ParseFieldSelector(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := store.parseFieldSelector(tt.fieldSelector)
-			assert.NoError(t, err)
+			result := store.parseFieldSelector(tt.fieldSelector)
 			assert.Equal(t, tt.expectedFilter, result)
 		})
 	}
@@ -425,25 +424,20 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 func TestMongoStore_ParseFieldSelectorEdgeCases(t *testing.T) {
 	store := &MongoStore{}
 
-	filter, err := store.parseFieldSelector("invalid-format")
-	assert.NoError(t, err)
+	filter := store.parseFieldSelector("invalid-format")
 	assert.Empty(t, filter)
 
 	// Test selector with empty right side
-	filter, err = store.parseFieldSelector("metadata.name=")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=")
 	assert.Equal(t, bson.M{"metadata.name": ""}, filter)
 
-	filter, err = store.parseFieldSelector("metadata.name=value=with=equals")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=value=with=equals")
 	assert.Equal(t, bson.M{"metadata.name": "value=with=equals"}, filter)
 
-	filter, err = store.parseFieldSelector("metadata.name=name with spaces")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=name with spaces")
 	assert.Equal(t, bson.M{"metadata.name": "name with spaces"}, filter)
 
-	filter, err = store.parseFieldSelector("metadata.name=special@#$%^&*chars")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=special@#$%^&*chars")
 	assert.Equal(t, bson.M{"metadata.name": "special@#$%^&*chars"}, filter)
 }
 

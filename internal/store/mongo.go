@@ -214,15 +214,9 @@ func (m *MongoStore) List(collectionName string, fieldSelector string, limit int
 
 	// Apply field selector filtering if provided
 	if fieldSelector != "" {
-		fieldFilter, err := m.parseFieldSelector(fieldSelector)
-		if err != nil {
-			log.Warn().Err(err).
-				Fields(utils.CreateFieldsForCollectionWithListOptions(collectionName, "list", nil, limit, fieldSelector)).
-				Msg("Failed to parse field selector, ignoring")
-		} else {
-			for k, v := range fieldFilter {
-				filter[k] = v
-			}
+		fieldFilter := m.parseFieldSelector(fieldSelector)
+		for k, v := range fieldFilter {
+			filter[k] = v
 		}
 	}
 
@@ -298,11 +292,11 @@ func (m *MongoStore) createFilter(obj *unstructured.Unstructured) (bson.M, error
 }
 
 // Simple field selector parsing - supports key=value format
-func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
+func (m *MongoStore) parseFieldSelector(fieldSelector string) bson.M {
 	filter := bson.M{}
 
 	if fieldSelector == "" {
-		return filter, nil
+		return filter
 	}
 
 	// Split by comma for multiple selectors
@@ -318,5 +312,5 @@ func (m *MongoStore) parseFieldSelector(fieldSelector string) (bson.M, error) {
 			}
 		}
 	}
-	return filter, nil
+	return filter
 }
