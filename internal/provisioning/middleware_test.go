@@ -7,6 +7,7 @@
 package provisioning
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -44,7 +45,7 @@ func TestWithGvr(t *testing.T) {
 			})
 		})
 
-		req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -63,7 +64,7 @@ func TestWithGvr(t *testing.T) {
 
 		// Request with missing parameters - should result in 404 (route not found)
 		// This is correct behavior - Fiber's router prevents invalid URLs from reaching middleware
-		req := httptest.NewRequest("GET", "/api/v1/resources/only-two-segments", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/only-two-segments", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -86,7 +87,7 @@ func TestWithGvr(t *testing.T) {
 			return c.SendStatus(fiber.StatusOK)
 		})
 
-		req := httptest.NewRequest("GET", "/api/v1/resources/apps/v1/deployments", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/apps/v1/deployments", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -115,7 +116,7 @@ func TestWithResourceId(t *testing.T) {
 			return c.JSON(fiber.Map{"resourceId": resourceId})
 		})
 
-		req := httptest.NewRequest("GET", "/api/v1/resources/test-subscription-123", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/test-subscription-123", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -131,7 +132,7 @@ func TestWithResourceId(t *testing.T) {
 
 		test.LogRecorder.Reset()
 
-		req := httptest.NewRequest("GET", "/api/v1/resources/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -150,7 +151,7 @@ func TestWithResourceId(t *testing.T) {
 		})
 
 		// Test with URL-encoded special characters
-		req := httptest.NewRequest("GET", "/api/v1/resources/test-resource-with-dashes", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/test-resource-with-dashes", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -187,7 +188,7 @@ func TestWithTrustedClients(t *testing.T) {
 			return c.JSON(fiber.Map{"message": "access granted"})
 		})
 
-		req := httptest.NewRequest("GET", "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -215,7 +216,7 @@ func TestWithTrustedClients(t *testing.T) {
 			return c.JSON(fiber.Map{"message": "access granted"})
 		})
 
-		req := httptest.NewRequest("GET", "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -243,7 +244,7 @@ func TestWithTrustedClients(t *testing.T) {
 			return c.JSON(fiber.Map{"message": "access granted"})
 		})
 
-		req := httptest.NewRequest("GET", "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -271,7 +272,7 @@ func TestWithTrustedClients(t *testing.T) {
 			return c.JSON(fiber.Map{"message": "access granted"})
 		})
 
-		req := httptest.NewRequest("GET", "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)
@@ -299,7 +300,7 @@ func TestWithTrustedClients(t *testing.T) {
 			return c.JSON(fiber.Map{"message": "access granted"})
 		})
 
-		req := httptest.NewRequest("GET", "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 		resp, err := app.Test(req)
 
 		assertions.NoError(err)

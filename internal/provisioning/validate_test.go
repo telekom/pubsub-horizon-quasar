@@ -9,6 +9,7 @@ package provisioning
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -527,7 +528,7 @@ func TestWithKubernetesResource(t *testing.T) {
 		})
 
 		resourceData := createTestResourceJSON("test-resource", "Subscription", "subscriber.horizon.telekom.de/v1")
-		req := httptest.NewRequest("POST", "/test", bytes.NewReader(resourceData))
+		req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader(resourceData))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)
@@ -554,7 +555,7 @@ func TestWithKubernetesResource(t *testing.T) {
 		// Reset log recorder for this test
 		test.LogRecorder.Reset()
 
-		req := httptest.NewRequest("POST", "/test", bytes.NewReader([]byte("invalid json")))
+		req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte("invalid json")))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)

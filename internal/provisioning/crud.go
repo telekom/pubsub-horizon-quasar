@@ -5,9 +5,11 @@
 package provisioning
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/telekom/quasar/internal/store"
 )
 
 // putResource handles PUT requests to create or replace a Kubernetes resource
@@ -46,17 +48,16 @@ func getResource(ctx *fiber.Ctx) error {
 
 	resource, err := provisioningApiStore.Read(getDataSetForGvr(gvr), id)
 	if err != nil {
+		if errors.Is(err, store.ErrResourceNotFound) {
+			return &fiber.Error{
+				Code:    fiber.StatusNotFound,
+				Message: "Resource not found",
+			}
+		}
 		logger.Error().Err(err).Fields(generateLogAttributes("Get", id, gvr)).Msg("Failed to get resource")
 		return &fiber.Error{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get resource",
-		}
-	}
-
-	if resource == nil {
-		return &fiber.Error{
-			Code:    fiber.StatusNotFound,
-			Message: "Resource not found",
 		}
 	}
 

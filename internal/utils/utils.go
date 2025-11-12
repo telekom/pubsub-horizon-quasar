@@ -6,6 +6,7 @@ package utils
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -52,7 +53,7 @@ func CreateFieldsForCollectionWithListOptions(
 	fieldSelector string,
 ) map[string]any {
 	objFields := CreateFieldsForCollection(collection, operation, obj)
-	objFields["limit"] = fmt.Sprintf("%d", limit)
+	objFields["limit"] = strconv.FormatInt(limit, 10)
 	objFields["fieldSelector"] = fieldSelector
 	return objFields
 }

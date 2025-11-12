@@ -9,6 +9,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -33,7 +34,7 @@ func setupMongoStore() *MongoStore {
 	if config.Current.Store.Mongo.Uri == "" {
 		mongoHost := test.EnvOrDefault("MONGO_HOST", "localhost")
 		mongoPort := test.EnvOrDefault("MONGO_PORT", "27017")
-		config.Current.Store.Mongo.Uri = fmt.Sprintf("mongodb://%s:%s", mongoHost, mongoPort)
+		config.Current.Store.Mongo.Uri = "mongodb://" + net.JoinHostPort(mongoHost, mongoPort)
 		config.Current.Store.Mongo.Database = config.Current.Fallback.Mongo.Database
 		if config.Current.Store.Mongo.Database == "" {
 			config.Current.Store.Mongo.Database = "test_db"
@@ -280,7 +281,7 @@ func TestMongoStore_Read(t *testing.T) {
 	assertions.Equal("test", result.GetLabels()["app"])
 
 	result, err = store.Read(testCollectionName, "non-existent")
-	assertions.NoError(err)
+	assertions.ErrorIs(err, ErrResourceNotFound)
 	assertions.Nil(result)
 	assertions.Equal(0, test.LogRecorder.GetRecordCount(zerolog.ErrorLevel), "no errors should be logged")
 }
@@ -358,8 +359,7 @@ func TestMongoStore_ParseFieldSelector(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := store.parseFieldSelector(tt.fieldSelector)
-			assert.NoError(t, err)
+			result := store.parseFieldSelector(tt.fieldSelector)
 			assert.Equal(t, tt.expectedFilter, result)
 		})
 	}
@@ -424,25 +424,20 @@ func TestMongoStore_InitializeResource(t *testing.T) {
 func TestMongoStore_ParseFieldSelectorEdgeCases(t *testing.T) {
 	store := &MongoStore{}
 
-	filter, err := store.parseFieldSelector("invalid-format")
-	assert.NoError(t, err)
+	filter := store.parseFieldSelector("invalid-format")
 	assert.Empty(t, filter)
 
 	// Test selector with empty right side
-	filter, err = store.parseFieldSelector("metadata.name=")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=")
 	assert.Equal(t, bson.M{"metadata.name": ""}, filter)
 
-	filter, err = store.parseFieldSelector("metadata.name=value=with=equals")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=value=with=equals")
 	assert.Equal(t, bson.M{"metadata.name": "value=with=equals"}, filter)
 
-	filter, err = store.parseFieldSelector("metadata.name=name with spaces")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=name with spaces")
 	assert.Equal(t, bson.M{"metadata.name": "name with spaces"}, filter)
 
-	filter, err = store.parseFieldSelector("metadata.name=special@#$%^&*chars")
-	assert.NoError(t, err)
+	filter = store.parseFieldSelector("metadata.name=special@#$%^&*chars")
 	assert.Equal(t, bson.M{"metadata.name": "special@#$%^&*chars"}, filter)
 }
 
@@ -495,7 +490,7 @@ func TestMongoStore_ErrorHandling(t *testing.T) {
 	assertions.Empty(keys)
 
 	result, err := store.Read(testCollectionName, "")
-	assertions.NoError(err)
+	assertions.ErrorIs(err, ErrResourceNotFound)
 	assertions.Nil(result)
 
 	results, err := store.List("non_existent_collection", "", 0)

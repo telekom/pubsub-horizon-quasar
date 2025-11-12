@@ -8,8 +8,10 @@ package provisioning
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -54,7 +56,7 @@ func (m *MockDualStoreWithErrors) InitializeResource(reconciliation.DataSource, 
 
 func (m *MockDualStoreWithErrors) Create(obj *unstructured.Unstructured) error {
 	if m.CreateError {
-		return fmt.Errorf("mock create error")
+		return errors.New("mock create error")
 	}
 	m.resources[obj.GetName()] = obj
 	return nil
@@ -67,7 +69,7 @@ func (m *MockDualStoreWithErrors) Update(oldObj *unstructured.Unstructured, newO
 
 func (m *MockDualStoreWithErrors) Delete(obj *unstructured.Unstructured) error {
 	if m.DeleteError {
-		return fmt.Errorf("mock delete error")
+		return errors.New("mock delete error")
 	}
 	delete(m.resources, obj.GetName())
 	return nil
@@ -76,7 +78,7 @@ func (m *MockDualStoreWithErrors) Delete(obj *unstructured.Unstructured) error {
 func (m *MockDualStoreWithErrors) Count(dataset string) (int, error) {
 	_ = dataset
 	if m.CountError {
-		return 0, fmt.Errorf("mock count error")
+		return 0, errors.New("mock count error")
 	}
 	return len(m.resources), nil
 }
@@ -84,7 +86,7 @@ func (m *MockDualStoreWithErrors) Count(dataset string) (int, error) {
 func (m *MockDualStoreWithErrors) Keys(dataset string) ([]string, error) {
 	_ = dataset
 	if m.KeysError {
-		return nil, fmt.Errorf("mock keys error")
+		return nil, errors.New("mock keys error")
 	}
 	keys := make([]string, 0, len(m.resources))
 	for k := range m.resources {
@@ -96,21 +98,21 @@ func (m *MockDualStoreWithErrors) Keys(dataset string) ([]string, error) {
 func (m *MockDualStoreWithErrors) Read(dataset string, key string) (*unstructured.Unstructured, error) {
 	_ = dataset
 	if m.ReadError {
-		return nil, fmt.Errorf("mock read error")
+		return nil, errors.New("mock read error")
 	}
 	if m.ReturnNil {
-		return nil, nil
+		return nil, store.ErrResourceNotFound
 	}
 	if resource, ok := m.resources[key]; ok {
 		return resource, nil
 	}
-	return nil, nil
+	return nil, store.ErrResourceNotFound
 }
 
 func (m *MockDualStoreWithErrors) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {
 	_, _ = dataset, fieldSelector
 	if m.ListError {
-		return nil, fmt.Errorf("mock list error")
+		return nil, errors.New("mock list error")
 	}
 	result := make([]unstructured.Unstructured, 0, len(m.resources))
 	count := int64(0)
@@ -212,7 +214,7 @@ func TestGetResource_Success(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -238,7 +240,7 @@ func TestGetResource_NotFound(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/nonexistent", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -257,7 +259,7 @@ func TestGetResource_StoreError(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -282,7 +284,7 @@ func TestListResources_Success(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -312,7 +314,7 @@ func TestListResources_WithLimit(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?limit=2", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?limit=2", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -339,7 +341,7 @@ func TestListResources_WithInvalidLimit(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?limit=invalid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?limit=invalid", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -366,7 +368,7 @@ func TestListResources_WithFieldSelector(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	req := httptest.NewRequest(
-		"GET",
+		http.MethodGet,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/?fieldSelector=status.phase=Running",
 		nil,
 	)
@@ -388,7 +390,7 @@ func TestListResources_StoreError(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -415,7 +417,7 @@ func TestPutResource_Success(t *testing.T) {
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
 	req := httptest.NewRequest(
-		"PUT",
+		http.MethodPut,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
 		strings.NewReader(body),
 	)
@@ -443,7 +445,7 @@ func TestPutResource_StoreError(t *testing.T) {
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
 	req := httptest.NewRequest(
-		"PUT",
+		http.MethodPut,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
 		strings.NewReader(body),
 	)
@@ -467,7 +469,7 @@ func TestPutResource_InvalidJSON(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	req := httptest.NewRequest(
-		"PUT",
+		http.MethodPut,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
 		strings.NewReader("invalid json"),
 	)
@@ -498,7 +500,7 @@ func TestDeleteResource_Success(t *testing.T) {
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
 	req := httptest.NewRequest(
-		"DELETE",
+		http.MethodDelete,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
 		strings.NewReader(body),
 	)
@@ -525,7 +527,7 @@ func TestDeleteResource_StoreError(t *testing.T) {
 
 	body := createTestResourceBody("test-subscription", "Subscription", "subscriber.horizon.telekom.de/v1")
 	req := httptest.NewRequest(
-		"DELETE",
+		http.MethodDelete,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
 		strings.NewReader(body),
 	)
@@ -549,7 +551,7 @@ func TestDeleteResource_InvalidJSON(t *testing.T) {
 	defer func() { provisioningApiStore = nil }()
 
 	req := httptest.NewRequest(
-		"DELETE",
+		http.MethodDelete,
 		"/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/test-subscription",
 		strings.NewReader("invalid json"),
 	)
@@ -582,7 +584,7 @@ func TestListKeys_Success(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/keys", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/keys", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -607,7 +609,7 @@ func TestListKeys_StoreError(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/keys", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/keys", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -632,7 +634,7 @@ func TestCountResources_Success(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/count", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/count", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -656,7 +658,7 @@ func TestCountResources_EmptyStore(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/count", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/count", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)
@@ -681,7 +683,7 @@ func TestCountResources_StoreError(t *testing.T) {
 	provisioningApiStore = mockStore
 	defer func() { provisioningApiStore = nil }()
 
-	req := httptest.NewRequest("GET", "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/count", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/subscriber.horizon.telekom.de/v1/subscriptions/count", nil)
 	resp, err := app.Test(req)
 
 	assertions.NoError(err)

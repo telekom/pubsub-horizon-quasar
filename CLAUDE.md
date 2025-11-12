@@ -25,12 +25,6 @@ go build
 ```bash
 # Run all tests with coverage
 go test -v ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./... -tags=testing -p=1
-
-# Run tests in a specific package
-go test -v ./internal/store -tags=testing -p=1
-
-# Run a specific test
-go test -v ./internal/store -run TestHazelcastStore_Create -tags=testing -p=1
 ```
 
 ### Run Application
@@ -310,3 +304,10 @@ Each resource in `config.yaml` defines:
 - `internal/k8s/watcher.go`: Kubernetes informer setup and event handlers
 - `internal/provisioning/service.go`: Fiber HTTP service setup and startup logic
 - `internal/reconciliation/reconciliation.go`: Periodic reconciliation logic
+
+
+---
+
+## Additional Instructions
+- Use zerolog instead of fmt
+- Whenever you finish work, run the linter and the entire test suite. If issues arise, fix them.

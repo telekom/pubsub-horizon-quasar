@@ -6,7 +6,6 @@ package k8s
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -77,7 +76,7 @@ func processSubscriptions(action string) {
 			resourceVersion, _ := strconv.Atoi(subscription.GetResourceVersion())
 			resourceVersion++
 
-			subscription.SetResourceVersion(fmt.Sprintf("%d", resourceVersion))
+			subscription.SetResourceVersion(strconv.Itoa(resourceVersion))
 			_, _ = resource.Update(ctx, subscription, v1.UpdateOptions{})
 
 		case "delete":
@@ -90,7 +89,7 @@ func TestNewResourceWatcher(t *testing.T) {
 	assertions := assert.New(t)
 	var err error
 	watcher, err = NewResourceWatcher(fakeClient, &config.Current.Resources[0], 30*time.Second)
-	assertions.Nil(err, "unexpected error when creating new resource watcher")
+	assertions.NoError(err, "unexpected error when creating new resource watcher")
 }
 
 func TestResourceWatcher_Start(t *testing.T) {
