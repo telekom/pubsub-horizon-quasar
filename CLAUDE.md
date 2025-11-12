@@ -310,3 +310,7 @@ Each resource in `config.yaml` defines:
 - `internal/k8s/watcher.go`: Kubernetes informer setup and event handlers
 - `internal/provisioning/service.go`: Fiber HTTP service setup and startup logic
 - `internal/reconciliation/reconciliation.go`: Periodic reconciliation logic
+
+
+---
+Use zerolog instead fmt

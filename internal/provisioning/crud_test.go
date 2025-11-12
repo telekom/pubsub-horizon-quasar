@@ -99,12 +99,12 @@ func (m *MockDualStoreWithErrors) Read(dataset string, key string) (*unstructure
 		return nil, fmt.Errorf("mock read error")
 	}
 	if m.ReturnNil {
-		return nil, nil
+		return nil, store.ErrResourceNotFound
 	}
 	if resource, ok := m.resources[key]; ok {
 		return resource, nil
 	}
-	return nil, nil
+	return nil, store.ErrResourceNotFound
 }
 
 func (m *MockDualStoreWithErrors) List(dataset string, fieldSelector string, limit int64) ([]unstructured.Unstructured, error) {

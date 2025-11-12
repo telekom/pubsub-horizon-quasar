@@ -206,9 +206,19 @@ func (s *HazelcastStore) Read(gvr string, name string) (*unstructured.Unstructur
 		return nil, err
 	}
 
+	if val == nil {
+		return nil, ErrResourceNotFound
+	}
+
 	jsonData, ok := val.(serialization.JSON)
 	if !ok {
-		return nil, nil
+		log.Error().Fields(map[string]any{
+			"gvr":          gvr,
+			"name":         name,
+			"expectedType": "serialization.JSON",
+			"actualType":   fmt.Sprintf("%T", val),
+		}).Msg("Unexpected type in hazelcast map")
+		return nil, fmt.Errorf("unexpected type in hazelcast map: expected serialization.JSON, got %T", val)
 	}
 
 	var obj unstructured.Unstructured

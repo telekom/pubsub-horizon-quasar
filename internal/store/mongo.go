@@ -191,7 +191,7 @@ func (m *MongoStore) Read(collectionName string, key string) (*unstructured.Unst
 	err := collection.FindOne(m.ctx, filter).Decode(&result.Object)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, nil
+			return nil, ErrResourceNotFound
 		}
 		log.Error().Err(err).
 			Fields(utils.CreateFieldsForCollection(collectionName, "read", nil)).

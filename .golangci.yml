@@ -41,6 +41,12 @@ linters:
     - musttag
     - nakedret
     - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
     - staticcheck
     - unused
     - zerologlint
@@ -94,6 +100,7 @@ linters:
           - noctx
           - wrapcheck
           - errcheck
+          - nilnil
         path: _test\.go
     paths:
       - third_party$
