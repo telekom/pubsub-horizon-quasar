@@ -9,7 +9,10 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/store"
+	"github.com/telekom/quasar/internal/utils"
 )
 
 // putResource handles PUT requests to create or replace a Kubernetes resource
@@ -174,6 +177,17 @@ func deleteResource(ctx *fiber.Ctx) error {
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete resource",
 		}
+	}
+
+	if config.Current.Metrics.Enabled {
+		go func() {
+			resourceConfig, ok := config.Current.GetResourceConfiguration(&resource)
+			if !ok {
+				return
+			}
+
+			metrics.GetOrCreate(resourceConfig).With(utils.GetLabelsForResource(&resource, resourceConfig)).Dec()
+		}()
 	}
 
 	logger.Debug().Fields(generateLogAttributes("Delete", id, gvr)).Msg("Request successfully")
