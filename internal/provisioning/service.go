@@ -103,6 +103,7 @@ func Listen(port int) {
 	for _, resourceConfig := range config.Current.Resources {
 		reconciliationSource := reconciliation.NewDataSourceFromStore(provisioningApiStore, resourceConfig)
 		provisioningApiStore.InitializeResource(reconciliationSource, &resourceConfig)
+		scheduleMetricGeneration(provisioningApiStore, &resourceConfig)
 	}
 
 	setupService(logger)
