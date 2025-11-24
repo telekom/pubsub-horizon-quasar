@@ -223,8 +223,6 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Use guard clauses (reverse ifs)**: Check for error/invalid conditions first and return early to avoid deeply nested code
 - **Reduce nesting**: Handle errors/special cases first and return early
 - **Unnecessary else**: Eliminate else blocks when variable can be set with single if
-- **Reduce nesting**: Handle errors/special cases first and return early
-- **Unnecessary else**: Eliminate else blocks when variable can be set with single if
 - **Function grouping**: Sort functions by receiver; place utility functions at end
 - **Import groups**: Standard library, then everything else (blank line between)
 - **Group similar declarations**: Use `const ()`, `var ()`, `type ()` blocks for related declarations
