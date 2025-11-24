@@ -155,7 +155,7 @@ This project follows the Uber Go Style Guide with additional project-specific co
 - **Interface names**: One-method interfaces use method name + "-er" suffix (Reader, Writer, Formatter)
 - **MixedCaps**: Use MixedCaps or mixedCaps rather than underscores for multiword names
 - **Functions/Variables**: Exported start with uppercase, unexported with lowercase (camel case)
-- **Constants**: Use all capital letters with underscores, e.g., `MAX_RETRY_COUNT`
+- **Constants**: Use MixedCaps (exported) or mixedCaps (unexported), e.g., `MaxRetryCount` or `maxRetryCount`
 - **Boolean variables**: Prefix with Has, Is, Can, or Allow, e.g., `isConnected`, `hasPermission`
 - **Getters**: Avoid "Get" prefix; use `user.Name()` instead of `user.GetName()`
 - **File names**: Single lowercase words; compound names use underscores; test files use `_test.go` suffix
