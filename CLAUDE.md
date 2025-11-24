@@ -184,6 +184,12 @@ This project follows the Uber Go Style Guide with additional project-specific co
 
 ### Structs
 - **Constructors required**: Always use constructors to instantiate structs (except parameter structs)
+    - **A constructor is a function**, and it must start with the prefix New or Make followed by the name of the structure.
+
+        - The New prefix should mimic the behavior of the built-in new function and must always return a pointer.
+        - The Make prefix should mimic the behavior of the built-in make function and must always return the concrete type.
+
+        - Example for a Builder structure: `func NewBuilder(...) *Builder {}` or `func MakeBuilder(...) Builder {}`
 - **Field names in initialization**: Always specify field names when initializing structs (enforced by `go vet`)
 - **Omit zero values**: Don't specify zero-value fields unless they provide meaningful context
 - **Use `var` for zero-value structs**: `var user User` instead of `user := User{}`
