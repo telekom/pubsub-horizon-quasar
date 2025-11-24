@@ -140,6 +140,13 @@ golangci-lint run --fix
 This project follows the Uber Go Style Guide with additional project-specific conventions. Key principles include:
 
 ### Naming Conventions
+
+- **Names** should follow a pattern from general to specific, e.g., http.StatusGatewayTimeout.
+
+    This pattern helps with grouping and makes names easier to use with IDE autocomplete tools.
+
+    **Exception**: Standard function prefixes such as has, get, and set do not need to follow this pattern.
+
 - **Meaningful names** for all variables, functions, structs
 - **Error variables**: Named after the function that returns them, e.g., `errValidateCustomerFeedback := validateCustomerFeedback(...)`
 - **Error types**: Prefix with `Err` or `err` for exported/unexported error variables; suffix with `Error` for custom error types
