@@ -24,8 +24,11 @@ func scheduleMetricGeneration(store store.Store, resourceConfig *config.Resource
 				continue
 			}
 
+			gauge := metrics.GetOrCreate(resourceConfig)
+			gauge.Reset()
+
 			for _, resource := range resources {
-				metrics.GetOrCreate(resourceConfig).With(utils.GetLabelsForResource(&resource, resourceConfig)).Set(1)
+				gauge.With(utils.GetLabelsForResource(&resource, resourceConfig)).Set(1)
 			}
 
 			time.Sleep(config.Current.Metrics.Timeout)
