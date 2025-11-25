@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/telekom/quasar/internal/config"
+	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/reconciliation"
 	"github.com/telekom/quasar/internal/utils"
 	"go.mongodb.org/mongo-driver/bson"
@@ -57,6 +59,33 @@ func (m *MongoStore) InitializeResource(dataSource reconciliation.DataSource, re
 			resource := resourceConfig.GetGroupVersionResource()
 			log.Warn().Fields(utils.CreateFieldForResource(&resource)).Err(err).Msg("Could not create index in MongoDB")
 		}
+	}
+
+	go m.collectMetrics(resourceConfig.GetGroupVersionName())
+}
+
+func (m *MongoStore) collectMetrics(resourceName string) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error().Msgf("Recovered from %v during mongo metric collection", err)
+		}
+	}()
+
+	for {
+		collection := m.client.Database(config.Current.Store.Mongo.Database).Collection(resourceName)
+
+		count, err := collection.CountDocuments(m.ctx, bson.M{})
+		if err != nil {
+			log.Error().Err(err).Fields(map[string]any{
+				"collection": resourceName,
+			}).Msg("Could not count documents in MongoDB")
+
+			time.Sleep(15 * time.Second)
+			continue
+		}
+
+		metrics.GetOrCreateCustom(resourceName + "_mongo_count").WithLabelValues().Set(float64(count))
+		time.Sleep(15 * time.Second)
 	}
 }
 
