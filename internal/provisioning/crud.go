@@ -179,17 +179,6 @@ func deleteResource(ctx *fiber.Ctx) error {
 		}
 	}
 
-	if config.Current.Metrics.Enabled {
-		go func() {
-			resourceConfig, ok := config.Current.GetResourceConfiguration(&resource)
-			if !ok {
-				return
-			}
-
-			metrics.GetOrCreate(resourceConfig).With(utils.GetLabelsForResource(&resource, resourceConfig)).Dec()
-		}()
-	}
-
 	logger.Debug().Fields(generateLogAttributes("Delete", id, gvr)).Msg("Request successfully")
 	return ctx.Status(fiber.StatusNoContent).Send(nil)
 }
