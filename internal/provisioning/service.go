@@ -35,6 +35,11 @@ func setupService(logger *zerolog.Logger) {
 
 	service.Use(fiberzerolog.New(fiberzerolog.Config{
 		Logger: logger,
+		// Skip logging for health check endpoints
+		Next: func(c *fiber.Ctx) bool {
+			path := c.Path()
+			return path == "/livez" || path == "/readyz"
+		},
 	}))
 
 	service.Use(healthcheck.New())

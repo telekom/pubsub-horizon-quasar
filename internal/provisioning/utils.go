@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func generateLogAttributes(operation string, id string, gvr schema.GroupVersionResource) map[string]string {
-	result := make(map[string]string)
+func generateLogAttributes(operation string, id string, gvr schema.GroupVersionResource) map[string]interface{} {
+	result := make(map[string]interface{})
 
 	if operation != "" {
 		result["operation"] = operation
