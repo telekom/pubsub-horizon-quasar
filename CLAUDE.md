@@ -32,10 +32,10 @@ go test -v ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./... -ta
 # Generate default config file
 ./quasar init
 
-# Run in watcher mode (watches Kubernetes resources)
+# Run in provisiosining mode
 ./quasar run
 
-# Run with custom kubeconfig
+# Run in watcher mode (watches kubernetes resources)
 ./quasar run --kubeconfig /path/to/kubeconfig
 ```
 
