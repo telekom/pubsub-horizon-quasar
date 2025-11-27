@@ -1,0 +1,3 @@
+[submodule "pubsub-horizon-shareddata"]
+	path = pubsub-horizon-shareddata
+	url = https://github.com/telekom/pubsub-horizon-shareddata
