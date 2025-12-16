@@ -11,7 +11,7 @@ require (
 	github.com/hazelcast/hazelcast-go-client v1.5.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/redis/go-redis/v9 v9.17.0
+	github.com/redis/go-redis/v9 v9.17.2
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
