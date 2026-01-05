@@ -1,0 +1,7 @@
+# Copyright 2025 Deutsche Telekom AG
+#
+# SPDX-License-Identifier: Apache-2.0
+
+[submodule "pubsub-horizon-shareddata"]
+	path = pubsub-horizon-shareddata
+	url = https://github.com/telekom/pubsub-horizon-shareddata
