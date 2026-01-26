@@ -17,7 +17,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valyala/fasthttp v1.68.0
-	go.mongodb.org/mongo-driver v1.17.6
+	go.mongodb.org/mongo-driver v1.17.7
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
