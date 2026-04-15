@@ -22,6 +22,7 @@ Quasar is a tiny service for synchronizing the state of custom resources with ca
 
 [![REUSE status](https://api.reuse.software/badge/github.com/telekom/pubsub-horizon-quasar)](https://api.reuse.software/info/github.com/telekom/pubsub-horizon-quasar)
 [![Go Test](https://github.com/telekom/pubsub-horizon-quasar/actions/workflows/go-test.yml/badge.svg)](https://github.com/telekom/pubsub-horizon-quasar/actions/workflows/go-test.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/telekom/pubsub-horizon-quasar)
 
 ## Overview
 Quasar is the config-controller powering the Horizon ecosystem. 
