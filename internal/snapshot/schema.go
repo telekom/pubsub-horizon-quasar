@@ -7,7 +7,6 @@ package snapshot
 import (
 	"context"
 	"errors"
-	"reflect"
 
 	"github.com/telekom/quasar/internal/config"
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,59 +14,71 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func snapshotValidator() bson.M {
-	return bson.M{"$jsonSchema": bson.M{
-		"bsonType": "object", "required": bson.A{"_id", "snapshotId", "subscriptionId", "resource"},
-		"properties": bson.M{
-			"_id":            bson.M{"bsonType": "objectId"},
-			"snapshotId":     versionIDSchema(),
-			"subscriptionId": bson.M{"bsonType": "string"},
-			"resource":       bson.M{"bsonType": "object"},
-		},
-	}}
+// snapshotValidator uses ordered BSON to keep create's existing-options comparison stable across starts.
+func snapshotValidator() bson.D {
+	return bson.D{{Key: "$jsonSchema", Value: bson.D{
+		{Key: "bsonType", Value: "object"},
+		{Key: "required", Value: bson.A{"_id", "snapshotId", "subscriptionId", "resource"}},
+		{Key: "properties", Value: bson.D{
+			{Key: "_id", Value: bson.D{{Key: "bsonType", Value: "objectId"}}},
+			{Key: "snapshotId", Value: versionIDSchema()},
+			{Key: "subscriptionId", Value: bson.D{{Key: "bsonType", Value: "string"}}},
+			{Key: "resource", Value: bson.D{{Key: "bsonType", Value: "object"}}},
+		}},
+	}}}
 }
 
-func versionIDSchema() bson.M {
-	return bson.M{"bsonType": "string", "pattern": "^[0-9a-f]{24}$"}
+func versionIDSchema() bson.D {
+	return bson.D{{Key: "bsonType", Value: "string"}, {Key: "pattern", Value: "^[0-9a-f]{24}$"}}
 }
 
-func descriptorProperties() bson.M {
-	return bson.M{
-		"snapshotId":    versionIDSchema(),
-		"sourceHash":    bson.M{"bsonType": "string", "pattern": "^[0-9a-f]{64}$"},
-		"documentCount": bson.M{"bsonType": "long", "minimum": int64(0)},
-		"createdAt":     bson.M{"bsonType": "date"},
+func descriptorProperties() bson.D {
+	return bson.D{
+		{Key: "snapshotId", Value: versionIDSchema()},
+		{Key: "sourceHash", Value: bson.D{{Key: "bsonType", Value: "string"}, {Key: "pattern", Value: "^[0-9a-f]{64}$"}}},
+		{Key: "documentCount", Value: bson.D{{Key: "bsonType", Value: "long"}, {Key: "minimum", Value: int64(0)}}},
+		{Key: "createdAt", Value: bson.D{{Key: "bsonType", Value: "date"}}},
 	}
 }
 
-func headValidator() bson.M {
+func headValidator() bson.D {
 	required := bson.A{"snapshotId", "sourceHash", "documentCount", "createdAt"}
-	properties := descriptorProperties()
-	properties["_id"] = bson.M{"bsonType": "string", "enum": bson.A{"head"}}
-	properties["recentSnapshots"] = bson.M{
-		"bsonType": "array", "minItems": 1, "maxItems": config.MaxSnapshotHistory,
-		"items": bson.M{"bsonType": "object", "required": required, "properties": descriptorProperties()},
+	id := bson.D{{Key: "bsonType", Value: "string"}, {Key: "enum", Value: bson.A{"head"}}}
+	properties := append(descriptorProperties(),
+		bson.E{Key: "_id", Value: id},
+		bson.E{Key: "recentSnapshots", Value: bson.D{
+			{Key: "bsonType", Value: "array"},
+			{Key: "minItems", Value: 1},
+			{Key: "maxItems", Value: config.MaxSnapshotHistory},
+			{Key: "items", Value: bson.D{
+				{Key: "bsonType", Value: "object"}, {Key: "required", Value: required}, {Key: "properties", Value: descriptorProperties()},
+			}},
+		}},
+	)
+	bootstrap := bson.D{
+		{Key: "required", Value: bson.A{"_id", "recentSnapshots"}},
+		{Key: "additionalProperties", Value: false},
+		{Key: "properties", Value: bson.D{
+			{Key: "_id", Value: id},
+			{Key: "recentSnapshots", Value: bson.D{{Key: "bsonType", Value: "array"}, {Key: "maxItems", Value: 0}}},
+		}},
 	}
-	bootstrap := bson.M{
-		"required": bson.A{"_id", "recentSnapshots"}, "additionalProperties": false,
-		"properties": bson.M{
-			"_id":             properties["_id"],
-			"recentSnapshots": bson.M{"bsonType": "array", "maxItems": 0},
-		},
+	active := bson.D{
+		{Key: "required", Value: append(bson.A{"_id", "recentSnapshots"}, required...)},
+		{Key: "properties", Value: properties},
 	}
-	active := bson.M{
-		"required": append(bson.A{"_id", "recentSnapshots"}, required...), "properties": properties,
-	}
-	return bson.M{"$jsonSchema": bson.M{"bsonType": "object", "oneOf": bson.A{bootstrap, active}}}
+	return bson.D{{Key: "$jsonSchema", Value: bson.D{
+		{Key: "bsonType", Value: "object"}, {Key: "oneOf", Value: bson.A{bootstrap, active}},
+	}}}
 }
 
 func (m *mongoStore) setup(ctx context.Context) error {
-	if _, err := m.collectionSpec(ctx, m.source.Name()); err != nil {
+	if err := m.requireSourceCollection(ctx); err != nil {
 		return err
 	}
 	for _, target := range []struct {
 		collection *mongo.Collection
-		validator  bson.M
+		validator  bson.D
 	}{
 		{m.snapshots, snapshotValidator()},
 		{m.heads, headValidator()},
@@ -97,80 +108,48 @@ func (m *mongoStore) setup(ctx context.Context) error {
 	return databaseError("create snapshot indexes", err)
 }
 
-func (m *mongoStore) collectionSpec(ctx context.Context, name string) (*mongo.CollectionSpecification, error) {
-	specs, err := m.database.ListCollectionSpecifications(ctx, bson.D{{Key: "name", Value: name}})
+func (m *mongoStore) requireSourceCollection(ctx context.Context) error {
+	cursor, err := m.database.ListCollections(ctx, bson.D{{Key: "name", Value: m.source.Name()}},
+		options.ListCollections().SetNameOnly(true).SetAuthorizedCollections(true))
 	if err != nil {
-		return nil, databaseError("inspect collection", err)
+		return databaseError("check source collection", err)
 	}
-	if len(specs) != 1 {
-		return nil, errors.New("required subscription snapshot collection is missing")
+	var collections []struct {
+		Type string `bson:"type"`
 	}
-	spec := specs[0]
-	capped, _ := spec.Options.Lookup("capped").BooleanOK()
-	if spec.Type != "collection" || spec.ReadOnly || spec.Options.Lookup("timeseries").Type != 0 ||
-		capped {
+	if err := cursor.All(ctx, &collections); err != nil {
+		return databaseError("read source collection name and type", err)
+	}
+	if len(collections) != 1 {
+		return errors.New("required subscription snapshot collection is missing or inaccessible")
+	}
+	if collections[0].Type != "collection" {
+		return errors.New("subscription snapshots require an ordinary, writable, uncapped source collection")
+	}
 
-		return nil, errors.New("subscription snapshots require ordinary, writable, uncapped collections")
+	// Collection-scoped collStats retains the capped check without reading database-wide metadata.
+	var stats struct {
+		Capped bool `bson:"capped"`
 	}
-	return spec, nil
+	if err := m.database.RunCommand(ctx, bson.D{{Key: "collStats", Value: m.source.Name()}}).Decode(&stats); err != nil {
+		return databaseError("check source collection storage", err)
+	}
+	if stats.Capped {
+		return errors.New("subscription snapshots require an ordinary, writable, uncapped source collection")
+	}
+	return nil
 }
 
-func (m *mongoStore) ensureCollection(ctx context.Context, name string, validator bson.M) error {
+func (m *mongoStore) ensureCollection(ctx context.Context, name string, validator bson.D) error {
 	err := m.database.CreateCollection(ctx, name, options.CreateCollection().
 		SetValidator(validator).SetValidationLevel("strict").SetValidationAction("error").
 		SetCollation(&options.Collation{Locale: "simple"}))
 	var commandError mongo.CommandError
-	if err != nil && (!errors.As(err, &commandError) || commandError.Code != 48) {
-		return databaseError("create snapshot/head collection", err)
+	// create is idempotent only when the existing collection options match.
+	if errors.As(err, &commandError) && commandError.Code == 48 {
+		return errors.New("existing snapshot/head collection options differ; manual migration required")
 	}
-	spec, err := m.collectionSpec(ctx, name)
-	if err != nil {
-		return err
-	}
-	if err := validateCollectionOptions(spec.Options); err != nil {
-		return err
-	}
-	existing, ok := spec.Options.Lookup("validator").DocumentOK()
-	if !ok || len(existing) == 5 {
-		return databaseError("install snapshot/head validator", m.database.RunCommand(ctx, bson.D{
-			{Key: "collMod", Value: name},
-			{Key: "validator", Value: validator},
-			{Key: "validationLevel", Value: "strict"},
-			{Key: "validationAction", Value: "error"},
-			{Key: "writeConcern", Value: m.writeConcern},
-		}).Err())
-	}
-	var actual bson.M
-	if err := bson.Unmarshal(existing, &actual); err != nil {
-		return errors.New("cannot decode existing snapshot/head validator")
-	}
-	expectedBytes, err := bson.Marshal(validator)
-	if err != nil {
-		return errors.New("cannot encode snapshot/head validator")
-	}
-	var expected bson.M
-	if err := bson.Unmarshal(expectedBytes, &expected); err != nil {
-		return errors.New("cannot decode expected snapshot/head validator")
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		return errors.New("existing snapshot/head validator differs; manual migration required")
-	}
-	return nil
-}
-
-func validateCollectionOptions(raw bson.Raw) error {
-	for key, expected := range map[string]string{"validationLevel": "strict", "validationAction": "error"} {
-		value, exists := raw.Lookup(key).StringValueOK()
-		if exists && value != expected {
-			return errors.New("existing snapshot/head validation settings require manual correction")
-		}
-	}
-	if collation, ok := raw.Lookup("collation").DocumentOK(); ok {
-		if locale, _ := collation.Lookup("locale").StringValueOK(); locale != "simple" {
-			return errors.New("snapshot/head collections require simple collation")
-		}
-	}
-	return nil
+	return databaseError("create snapshot/head collection", err)
 }
 
 func rejectTTLIndexes(ctx context.Context, collection *mongo.Collection) error {

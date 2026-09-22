@@ -21,12 +21,11 @@ import (
 )
 
 type mongoStore struct {
-	database     *mongo.Database
-	source       *mongo.Collection
-	snapshots    *mongo.Collection
-	heads        *mongo.Collection
-	writeConcern bson.D
-	seenHead     bool
+	database  *mongo.Database
+	source    *mongo.Collection
+	snapshots *mongo.Collection
+	heads     *mongo.Collection
+	seenHead  bool
 }
 
 func newMongoStore(client *mongo.Client, c config.SubscriptionSnapshots) *mongoStore {
@@ -37,9 +36,6 @@ func newMongoStore(client *mongo.Client, c config.SubscriptionSnapshots) *mongoS
 	return &mongoStore{
 		database: database, source: database.Collection(c.SourceCollection),
 		snapshots: database.Collection(c.SnapshotCollection), heads: database.Collection(c.HeadCollection),
-		writeConcern: bson.D{
-			{Key: "w", Value: "majority"}, {Key: "j", Value: true}, {Key: "wtimeout", Value: c.OperationTimeout.Milliseconds()},
-		},
 	}
 }
 
@@ -89,7 +85,7 @@ func (m *mongoStore) bootstrap(ctx context.Context) (head, error) {
 }
 
 func (m *mongoStore) readSource(ctx context.Context, limit int64) (*sourceBuffer, error) {
-	if _, err := m.collectionSpec(ctx, m.source.Name()); err != nil {
+	if err := m.requireSourceCollection(ctx); err != nil {
 		return nil, err
 	}
 	cursor, err := m.source.Find(ctx, bson.D{}, options.Find().

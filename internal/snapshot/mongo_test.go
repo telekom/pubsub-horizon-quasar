@@ -35,9 +35,6 @@ func TestMongoStoreConcerns(t *testing.T) {
 	require.Equal(t, c.SourceCollection, store.source.Name())
 	require.Equal(t, c.SnapshotCollection, store.snapshots.Name())
 	require.Equal(t, c.HeadCollection, store.heads.Name())
-	require.Equal(t, bson.D{
-		{Key: "w", Value: "majority"}, {Key: "j", Value: true}, {Key: "wtimeout", Value: c.OperationTimeout.Milliseconds()},
-	}, store.writeConcern)
 }
 
 func mongoFixture(t *testing.T, uri string) (*mongo.Client, *mongoStore, *worker) {
@@ -72,6 +69,7 @@ func TestMongoIntegration(t *testing.T) {
 	t.Run("missing source and head", func(t *testing.T) { testMongoMissingMetadata(t, uri) })
 	t.Run("repair and invalid history", func(t *testing.T) { testMongoRepair(t, uri) })
 	t.Run("existing validators", func(t *testing.T) { testMongoExistingValidators(t, uri) })
+	t.Run("source collection types", func(t *testing.T) { testMongoSourceCollections(t, uri) })
 	t.Run("crash recovery", func(t *testing.T) { testMongoCrashRecovery(t, uri) })
 	t.Run("interrupted cleanup", func(t *testing.T) { testMongoInterruptedCleanup(t, uri) })
 	t.Run("replica set", func(t *testing.T) {
@@ -263,19 +261,80 @@ func testMongoRepair(t *testing.T, uri string) {
 }
 
 func testMongoExistingValidators(t *testing.T, uri string) {
-	_, store, _ := mongoFixture(t, uri)
-	ctx := t.Context()
-	require.NoError(t, store.snapshots.Drop(ctx))
-	require.NoError(t, store.database.CreateCollection(ctx, store.snapshots.Name()))
-	require.NoError(t, store.setup(ctx), "missing validator may be installed on the new collection")
-	validator := bson.M{"$jsonSchema": bson.M{"bsonType": "object", "required": bson.A{"other"}}}
-	require.NoError(t, store.database.RunCommand(ctx, bson.D{
-		{Key: "collMod", Value: store.snapshots.Name()}, {Key: "validator", Value: validator},
-	}).Err())
-	require.ErrorContains(t, store.setup(ctx), "manual migration")
-	spec, err := store.collectionSpec(ctx, store.snapshots.Name())
-	require.NoError(t, err)
-	require.Equal(t, "other", spec.Options.Lookup("validator", "$jsonSchema", "required", "0").StringValue())
+	tests := []struct {
+		name   string
+		change func(*options.CreateCollectionOptions)
+	}{
+		{"missing validator", func(o *options.CreateCollectionOptions) { o.Validator = nil }},
+		{"different validator", func(o *options.CreateCollectionOptions) {
+			o.SetValidator(bson.M{"$jsonSchema": bson.M{"bsonType": "object", "required": bson.A{"other"}}})
+		}},
+		{"validation disabled", func(o *options.CreateCollectionOptions) { o.SetValidationLevel("off") }},
+		{"validation warning", func(o *options.CreateCollectionOptions) { o.SetValidationAction("warn") }},
+		{"different collation", func(o *options.CreateCollectionOptions) { o.SetCollation(&options.Collation{Locale: "en"}) }},
+		{"capped", func(o *options.CreateCollectionOptions) { o.SetCapped(true).SetSizeInBytes(65536) }},
+	}
+	for _, target := range []string{"snapshots", "head"} {
+		t.Run(target, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					_, store, _ := mongoFixture(t, uri)
+					ctx := t.Context()
+					collection, validator := store.snapshots, snapshotValidator()
+					if target == "head" {
+						collection, validator = store.heads, headValidator()
+					}
+					require.NoError(t, collection.Drop(ctx))
+					opts := options.CreateCollection().SetValidator(validator).SetValidationLevel("strict").
+						SetValidationAction("error").SetCollation(&options.Collation{Locale: "simple"})
+					tt.change(opts)
+					require.NoError(t, store.database.CreateCollection(ctx, collection.Name(), opts))
+					filter := bson.D{{Key: "name", Value: collection.Name()}}
+					before, err := store.database.ListCollectionSpecifications(ctx, filter)
+					require.NoError(t, err)
+					require.ErrorContains(t, store.setup(ctx), "manual migration")
+					after, err := store.database.ListCollectionSpecifications(ctx, filter)
+					require.NoError(t, err)
+					require.Equal(t, before, after, "setup must not alter an incompatible collection")
+				})
+			}
+		})
+	}
+}
+
+func testMongoSourceCollections(t *testing.T, uri string) {
+	tests := []struct {
+		name   string
+		create func(context.Context, *mongoStore) error
+	}{
+		{"view", func(ctx context.Context, store *mongoStore) error {
+			return store.database.CreateView(ctx, store.source.Name(), store.snapshots.Name(), mongo.Pipeline{})
+		}},
+		{"timeseries", func(ctx context.Context, store *mongoStore) error {
+			return store.database.CreateCollection(ctx, store.source.Name(),
+				options.CreateCollection().SetTimeSeriesOptions(options.TimeSeries().SetTimeField("time")))
+		}},
+		{"capped", func(ctx context.Context, store *mongoStore) error {
+			return store.database.CreateCollection(ctx, store.source.Name(),
+				options.CreateCollection().SetCapped(true).SetSizeInBytes(65536))
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, store, w := mongoFixture(t, uri)
+			ctx := t.Context()
+			require.NoError(t, w.refresh(ctx))
+			before, err := store.readHead(ctx)
+			require.NoError(t, err)
+			require.NoError(t, store.source.Drop(ctx))
+			require.NoError(t, tt.create(ctx, store))
+			require.ErrorContains(t, store.setup(ctx), "ordinary")
+			require.ErrorContains(t, w.refresh(ctx), "ordinary")
+			after, err := store.readHead(ctx)
+			require.NoError(t, err)
+			require.True(t, sameHead(before, after))
+		})
+	}
 }
 
 func testMongoReaderRetirement(t *testing.T, uri string) {
