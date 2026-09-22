@@ -106,6 +106,55 @@ Quasar can be configured using environment variables and/or a configuration file
 | metrics.timeout                                         | QUASAR_METRICS_TIMEOUT                                   | string        | 5s                                 | Timeout of HTTP connections to the metrics service.                                                                |
 | resources                                               | -                                                        | object (list) | []                                 | The custom resources that should be synchronized. See [configuring resources](#configuring-resources) for details. |
 
+### MongoDB subscription snapshots
+
+Quasar can publish versioned MongoDB subscription snapshots in both modes.
+The feature uses a separate client; existing stores, APIs and health checks remain unchanged.
+
+The MongoDB driver handles discovery and primary selection. The worker uses:
+
+- **Majority:** In a replica set, writes require acknowledgment from a majority of
+  members. Reads only return data acknowledged by that majority.
+- **Journaling:** Changes are recorded in the on-disk journal before acknowledgment
+  so they can be recovered after a crash.
+- **Primary reads:** Reads go to the primary, not to potentially lagging replicas.
+- **Causally consistent session:** Later reads see the worker's own acknowledged
+  changes and do not go back to older data states.
+
+```yaml
+subscriptionSnapshots:
+  enabled: true
+  uri: "" # MongoDB URI, including authentication; inject through a secret.
+  database: "{env}-horizon-config"
+  sourceCollection: subscriptions.subscriber.horizon.telekom.de.v1
+  snapshotCollection: subscriptions.subscriber.horizon.telekom.de.v1-snapshots
+  headCollection: subscriptions.subscriber.horizon.telekom.de.v1-head
+  refreshInterval: 5m
+  cleanupInterval: 1h # Interval after a successful cleanup.
+  retentionTime: 168h
+  minimumRetainedSnapshots: 3
+  operationTimeout: 2m
+  maxSnapshotBytes: 67108864 # 64 MiB source BSON buffer limit, not total RAM usage.
+```
+
+**Behavior**
+- Logs enabled/disabled status on startup. When disabled, stored data remains unchanged.
+- When enabled, registers the snapshot shutdown hook before starting provisioning or watcher services.
+  MongoDB initialization and snapshot publishing run in the background.
+- Client creation and the initial MongoDB ping must succeed; otherwise Quasar exits.
+  Later snapshot processing errors are logged and retried.
+- Initializes validators and indexes on the snapshot/head collections and publishes
+  a full snapshot on every start.
+- Scans the source at each refresh interval and compares its SHA-256 hash with the head.
+  Unchanged data creates no revision unless the active snapshot needs repair.
+- Writes the full snapshot under a new `snapshotId`, then atomically updates the head
+  and `recentSnapshots` but only if the previously read head is still current.
+- Rechecks uncertain activations before creating another snapshot or running cleanup,
+  preventing duplicate publications and unsafe deletions.
+  Successful publication and errors are logged.
+- Periodically deletes unprotected versions older than seven days. The active version
+  and at least its two direct predecessors remain protected regardless of age.
+
 ### Configuring resources
 The `resources` configuration option is a list of custom resources that should be synchronized. Each resource has the following fields:
 ```yaml

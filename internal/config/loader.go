@@ -19,6 +19,9 @@ var Current = LoadConfiguration()
 func LoadConfiguration() *Configuration {
 	setDefaults()
 	config := readConfig()
+	if err := config.SubscriptionSnapshots.Validate(); err != nil {
+		log.Fatal().Err(err).Msg("Invalid subscriptionSnapshots configuration")
+	}
 	applyLogLevel(config.LogLevel)
 	return config
 }
@@ -84,6 +87,8 @@ func setDefaults() {
 	viper.SetDefault("metrics.enabled", false)
 	viper.SetDefault("metrics.port", 8080)
 	viper.SetDefault("metrics.timeout", "5s")
+
+	setSubscriptionSnapshotsDefaults()
 }
 
 func readConfig() *Configuration {

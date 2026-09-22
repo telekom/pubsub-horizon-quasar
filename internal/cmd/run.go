@@ -15,6 +15,7 @@ import (
 	"github.com/telekom/quasar/internal/k8s"
 	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/provisioning"
+	"github.com/telekom/quasar/internal/snapshot"
 	"github.com/telekom/quasar/internal/utils"
 )
 
@@ -24,19 +25,22 @@ var runCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		kubeConfigPath, _ := cmd.Flags().GetString("kubeconfig")
 
+		var startMode func()
 		switch config.Current.Mode {
-
 		case config.ModeProvisioning:
-			go provisioning.Listen(config.Current.Provisioning.Port)
-
+			startMode = func() { go provisioning.Listen(config.Current.Provisioning.Port) }
 		case config.ModeWatcher:
-			k8s.SetupWatchers(kubeConfigPath)
-
+			startMode = func() { k8s.SetupWatchers(kubeConfigPath) }
 		default:
 			err := fmt.Errorf("invalid mode %q: must be 'provisioning' or 'watcher'", config.Current.Mode)
 			log.Fatal().Err(err).Msg("Invalid mode configuration")
-
 		}
+
+		if err := snapshot.Start(config.Current.SubscriptionSnapshots); err != nil {
+			log.Fatal().Err(err).Msg("Could not start subscription snapshot worker")
+		}
+
+		startMode()
 
 		if config.Current.Metrics.Enabled {
 			go metrics.ExposeMetrics()
