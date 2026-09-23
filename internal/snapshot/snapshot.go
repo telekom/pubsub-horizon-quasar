@@ -141,7 +141,7 @@ func (w *worker) published(current head) {
 	w.lastSuccess = time.Now().UTC()
 	log.Info().Str("snapshotId", current.Version.SnapshotID).Int64("documentCount", current.Version.DocumentCount).
 		Str("sourceCollection", w.config.SourceCollection).Str("snapshotCollection", w.config.SnapshotCollection).
-		Str("headCollection", w.config.HeadCollection).Dur("duration", duration).
+		Str("headCollection", w.config.HeadCollection).Dur("durationMs", duration).
 		Time("lastSuccess", w.lastSuccess).Msg("Subscription snapshot published")
 }
 

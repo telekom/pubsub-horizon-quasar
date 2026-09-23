@@ -373,11 +373,35 @@ func TestOperationCompletionLogging(t *testing.T) {
 				require.NoError(t, json.Unmarshal(output.Bytes(), &entry), "expected exactly one log event")
 				require.Equal(t, tt.message, entry["message"])
 				require.Equal(t, tt.level, entry["level"])
-				require.Equal(t, float64(tt.duration)/float64(zerolog.DurationFieldUnit), entry["duration"])
+				require.Equal(t, float64(tt.duration)/float64(time.Millisecond), entry["durationMs"])
+				require.NotContains(t, entry, "duration")
 				require.Equal(t, s.config.SourceCollection, entry["sourceCollection"])
 				require.Equal(t, s.config.SnapshotCollection, entry["snapshotCollection"])
 				require.Equal(t, s.config.HeadCollection, entry["headCollection"])
 			})
 		})
 	}
+}
+
+func TestPublicationLoggingDurationMs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := newFakeStore(t)
+		store.beforeRead = func(context.Context) error {
+			time.Sleep(time.Second)
+			return nil
+		}
+		var output bytes.Buffer
+		previousLogger := log.Logger
+		log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
+		t.Cleanup(func() { log.Logger = previousLogger })
+
+		require.NoError(t, newWorker(testConfig(), store).refresh(t.Context()))
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+		require.Equal(t, "Subscription snapshot published", entry["message"])
+		require.Equal(t, float64(1000), entry["durationMs"])
+		require.NotContains(t, entry, "duration")
+		require.Equal(t, store.current.Version.SnapshotID, entry["snapshotId"])
+	})
 }

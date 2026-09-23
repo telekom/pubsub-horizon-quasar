@@ -116,7 +116,7 @@ func applyLogLevel(level string) {
 		log.Info().Msgf("Invalid log level %s. Info log level is used", logLevel)
 	}
 
-	log.Logger = log.Logger.Level(logLevel).With().Timestamp().Logger()
+	log.Logger = log.Logger.Level(logLevel)
 	if logLevel == zerolog.DebugLevel {
 		log.Logger = log.Logger.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}

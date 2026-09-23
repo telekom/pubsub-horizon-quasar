@@ -162,7 +162,7 @@ func (s *service) attemptRefresh() {
 		s.logError("refresh", start, err)
 		return
 	}
-	log.Info().Dur("duration", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
+	log.Info().Dur("durationMs", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
 		Str("snapshotCollection", s.config.SnapshotCollection).Str("headCollection", s.config.HeadCollection).
 		Time("lastSuccess", s.worker.lastSuccess).Msg("Subscription snapshot refresh completed")
 }
@@ -181,14 +181,14 @@ func (s *service) attemptCleanup() bool {
 		s.logError("cleanup", start, err)
 		return false
 	}
-	log.Info().Dur("duration", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
+	log.Info().Dur("durationMs", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
 		Str("snapshotCollection", s.config.SnapshotCollection).Str("headCollection", s.config.HeadCollection).
 		Msg("Subscription snapshot cleanup completed")
 	return true
 }
 
 func (s *service) logError(operation string, start time.Time, err error) {
-	log.Error().Err(err).Str("operation", operation).Dur("duration", time.Since(start)).
+	log.Error().Err(err).Str("operation", operation).Dur("durationMs", time.Since(start)).
 		Str("sourceCollection", s.config.SourceCollection).Str("snapshotCollection", s.config.SnapshotCollection).
 		Str("headCollection", s.config.HeadCollection).Msg("Subscription snapshot operation failed")
 }
