@@ -23,6 +23,7 @@ type SubscriptionSnapshots struct {
 	SourceCollection         string        `mapstructure:"sourceCollection"`
 	SnapshotCollection       string        `mapstructure:"snapshotCollection"`
 	HeadCollection           string        `mapstructure:"headCollection"`
+	InitialStartDelay        time.Duration `mapstructure:"initialStartDelay"`
 	RefreshInterval          time.Duration `mapstructure:"refreshInterval"`
 	CleanupInterval          time.Duration `mapstructure:"cleanupInterval"`
 	RetentionTime            time.Duration `mapstructure:"retentionTime"`
@@ -39,6 +40,7 @@ func setSubscriptionSnapshotsDefaults() {
 		"sourceCollection":         "subscriptions.subscriber.horizon.telekom.de.v1",
 		"snapshotCollection":       "subscriptions.subscriber.horizon.telekom.de.v1-snapshots",
 		"headCollection":           "subscriptions.subscriber.horizon.telekom.de.v1-head",
+		"initialStartDelay":        "60s",
 		"refreshInterval":          "5m",
 		"cleanupInterval":          "1h",
 		"retentionTime":            "168h",
@@ -64,6 +66,9 @@ func (c SubscriptionSnapshots) Validate() error {
 	}
 	if err := c.validateCollections(); err != nil {
 		return err
+	}
+	if c.InitialStartDelay < 0 {
+		return errors.New("subscriptionSnapshots.initialStartDelay must not be negative")
 	}
 	if c.RefreshInterval <= 0 || c.CleanupInterval <= 0 || c.RetentionTime <= 0 || c.OperationTimeout <= 0 {
 		return errors.New("subscriptionSnapshots intervals, retentionTime and operationTimeout must be positive")

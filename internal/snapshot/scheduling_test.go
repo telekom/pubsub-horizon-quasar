@@ -27,7 +27,15 @@ type fakeSession struct {
 
 func runScheduledService(t *testing.T, store *fakeStore, refreshInterval, cleanupInterval time.Duration) *service {
 	t.Helper()
+	return runScheduledServiceWithDelay(t, store, refreshInterval, cleanupInterval, 0)
+}
+
+func runScheduledServiceWithDelay(
+	t *testing.T, store *fakeStore, refreshInterval, cleanupInterval, initialStartDelay time.Duration,
+) *service {
+	t.Helper()
 	c := testConfig()
+	c.InitialStartDelay = initialStartDelay
 	c.RefreshInterval = refreshInterval
 	c.CleanupInterval = cleanupInterval
 	c.OperationTimeout = 10 * time.Minute
@@ -37,15 +45,73 @@ func runScheduledService(t *testing.T, store *fakeStore, refreshInterval, cleanu
 	s.store = &mongoStore{}
 	s.session = &fakeSession{}
 	s.worker = newWorker(c, store)
-	refresh := time.NewTicker(c.RefreshInterval)
 	go func() {
 		defer close(s.done)
+		if !s.waitForStart() {
+			return
+		}
+		refresh := time.NewTicker(c.RefreshInterval)
 		defer refresh.Stop()
 		s.loop(refresh.C)
 	}()
 	t.Cleanup(s.shutdown)
 	synctest.Wait()
 	return s
+}
+
+func TestSchedulingInitialStartDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := newFakeStore(t)
+		s := runScheduledServiceWithDelay(t, store, 30*time.Second, time.Hour, time.Minute)
+		require.Zero(t, store.sourceReads)
+		require.Zero(t, store.cleanups)
+
+		time.Sleep(time.Minute - time.Nanosecond)
+		synctest.Wait()
+		require.Zero(t, store.sourceReads, "no snapshot work before the delay expires")
+
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		require.Equal(t, 1, store.sourceReads)
+		require.Equal(t, 1, store.activations)
+		require.Equal(t, 1, store.cleanups)
+
+		time.Sleep(30 * time.Second)
+		synctest.Wait()
+		require.Equal(t, 2, store.sourceReads, "the refresh interval starts after the initial delay")
+		s.shutdown()
+	})
+}
+
+func TestSchedulingCancelsInitialStartDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := newFakeStore(t)
+		s := runScheduledServiceWithDelay(t, store, 30*time.Second, time.Hour, time.Minute)
+		s.shutdown()
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+		require.Zero(t, store.sourceReads, "shutdown must prevent a delayed startup scan")
+		require.Zero(t, store.cleanups)
+	})
+}
+
+func TestServiceShutdownDuringInitialStartDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := testConfig()
+		c.InitialStartDelay = time.Minute
+		s := newService(c)
+		go s.run()
+
+		time.Sleep(time.Minute - time.Nanosecond)
+		synctest.Wait()
+		require.Nil(t, s.client, "MongoDB must not be initialized during the delay")
+		require.Nil(t, s.worker)
+
+		s.shutdown()
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		require.Nil(t, s.client)
+	})
 }
 
 func TestSchedulingRefreshAndCleanup(t *testing.T) {

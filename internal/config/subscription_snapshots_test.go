@@ -94,6 +94,8 @@ func TestSubscriptionSnapshotsValidation(t *testing.T) {
 		{"system collection", func(c *SubscriptionSnapshots) { c.SnapshotCollection = "system.snapshots" }, false},
 		{"collection collision", func(c *SubscriptionSnapshots) { c.HeadCollection = c.SourceCollection }, false},
 		{"namespace too long", func(c *SubscriptionSnapshots) { c.HeadCollection = strings.Repeat("x", 120) }, false},
+		{"zero startup delay", func(c *SubscriptionSnapshots) { c.InitialStartDelay = 0 }, true},
+		{"negative startup delay", func(c *SubscriptionSnapshots) { c.InitialStartDelay = -time.Second }, false},
 		{"refresh", func(c *SubscriptionSnapshots) { c.RefreshInterval = 0 }, false},
 		{"cleanup", func(c *SubscriptionSnapshots) { c.CleanupInterval = -1 }, false},
 		{"retention", func(c *SubscriptionSnapshots) { c.RetentionTime = 0 }, false},
@@ -126,6 +128,7 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	uri := "mongodb://snapshot-user:test-password@other-host:27017/?authSource=snapshot-auth"
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_URI", uri)
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_DATABASE", "test-horizon-config")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_INITIALSTARTDELAY", "75s")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHINTERVAL", "9m")
 	var c Configuration
 	require.NoError(t, viper.Unmarshal(&c))
@@ -137,6 +140,7 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	require.Equal(t, "snapshot-user", clientOptions.Auth.Username)
 	require.Equal(t, "test-password", clientOptions.Auth.Password)
 	require.Equal(t, "snapshot-auth", clientOptions.Auth.AuthSource)
+	require.Equal(t, 75*time.Second, c.SubscriptionSnapshots.InitialStartDelay)
 	require.Equal(t, 9*time.Minute, c.SubscriptionSnapshots.RefreshInterval)
 	require.Equal(t, time.Hour, c.SubscriptionSnapshots.CleanupInterval)
 	require.Equal(t, 168*time.Hour, c.SubscriptionSnapshots.RetentionTime)
@@ -155,5 +159,6 @@ func TestSubscriptionSnapshotsDisabledDefaults(t *testing.T) {
 	require.False(t, c.SubscriptionSnapshots.Enabled)
 	require.Empty(t, c.SubscriptionSnapshots.URI)
 	require.Empty(t, c.SubscriptionSnapshots.Database)
+	require.Equal(t, time.Minute, c.SubscriptionSnapshots.InitialStartDelay)
 	require.NoError(t, c.SubscriptionSnapshots.Validate())
 }

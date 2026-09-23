@@ -368,6 +368,7 @@ func TestStartupLogging(t *testing.T) {
 
 			c := testConfig()
 			c.Enabled = enabled
+			c.InitialStartDelay = time.Minute
 			c.URI = "mongodb://snapshot-user:test-password@localhost:27017/?authSource=private-auth"
 			c.RefreshInterval = 37 * time.Second
 			c.CleanupInterval = 2 * time.Hour
@@ -386,6 +387,7 @@ func TestStartupLogging(t *testing.T) {
 					"sourceCollection":"subscriptions",
 					"snapshotCollection":"snapshots",
 					"headCollection":"heads",
+					"initialStartDelay":"1m0s",
 					"refreshInterval":"37s",
 					"cleanupInterval":"2h0m0s",
 					"retentionTime":"240h0m0s",

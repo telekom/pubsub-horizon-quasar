@@ -57,6 +57,7 @@ func logStartup(c config.SubscriptionSnapshots) {
 		Str("sourceCollection", c.SourceCollection).
 		Str("snapshotCollection", c.SnapshotCollection).
 		Str("headCollection", c.HeadCollection).
+		Str("initialStartDelay", c.InitialStartDelay.String()).
 		Str("refreshInterval", c.RefreshInterval.String()).
 		Str("cleanupInterval", c.CleanupInterval.String()).
 		Str("retentionTime", c.RetentionTime.String()).
@@ -74,9 +75,23 @@ func newService(c config.SubscriptionSnapshots) *service {
 func (s *service) run() {
 	defer close(s.done)
 	defer s.disconnect()
+	if !s.waitForStart() {
+		return
+	}
 	refresh := time.NewTicker(s.config.RefreshInterval)
 	defer refresh.Stop()
 	s.loop(refresh.C)
+}
+
+func (s *service) waitForStart() bool {
+	timer := time.NewTimer(s.config.InitialStartDelay)
+	defer timer.Stop()
+	select {
+	case <-s.ctx.Done():
+		return false
+	case <-timer.C:
+		return s.ctx.Err() == nil
+	}
 }
 
 func (s *service) loop(refresh <-chan time.Time) {
