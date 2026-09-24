@@ -65,6 +65,91 @@ func TestSourceBuffer(t *testing.T) {
 	require.NotEqual(t, buffer.sourceHash(), changed.sourceHash())
 }
 
+func TestSourceHashIgnoresBSONFieldOrder(t *testing.T) {
+	date := time.Date(2026, 9, 24, 11, 0, 0, 0, time.UTC)
+	original := marshal(t, bson.D{
+		{Key: "_id", Value: "a"},
+		{Key: "metadata", Value: bson.D{
+			{Key: "annotations", Value: bson.D{{Key: "z", Value: "last"}, {Key: "a", Value: "first"}}},
+			{Key: "labels", Value: bson.D{{Key: "b", Value: true}, {Key: "a", Value: false}}},
+		}},
+		{Key: "spec", Value: bson.D{
+			{Key: "subscription", Value: bson.D{
+				{Key: "enabled", Value: true},
+				{Key: "date", Value: date},
+				{Key: "binary", Value: primitive.Binary{Data: []byte{1, 2}}},
+			}},
+			{Key: "filters", Value: bson.A{bson.D{{Key: "z", Value: int32(1)}, {Key: "a", Value: int64(2)}}}},
+		}},
+	})
+	reordered := marshal(t, bson.D{
+		{Key: "spec", Value: bson.D{
+			{Key: "filters", Value: bson.A{bson.D{{Key: "a", Value: int64(2)}, {Key: "z", Value: int32(1)}}}},
+			{Key: "subscription", Value: bson.D{
+				{Key: "binary", Value: primitive.Binary{Data: []byte{1, 2}}},
+				{Key: "date", Value: date},
+				{Key: "enabled", Value: true},
+			}},
+		}},
+		{Key: "metadata", Value: bson.D{
+			{Key: "labels", Value: bson.D{{Key: "a", Value: false}, {Key: "b", Value: true}}},
+			{Key: "annotations", Value: bson.D{{Key: "a", Value: "first"}, {Key: "z", Value: "last"}}},
+		}},
+		{Key: "_id", Value: "a"},
+	})
+	require.NotEqual(t, original, reordered)
+	first, second := newSourceBuffer(), newSourceBuffer()
+	require.NoError(t, first.add(original, int64(len(original))))
+	require.NoError(t, second.add(reordered, int64(len(reordered))))
+	require.Equal(t, first.sourceHash(), second.sourceHash())
+	require.Equal(t, original, first.documents[0])
+	require.Equal(t, reordered, second.documents[0])
+
+	wrapped, err := wrapDocument(second.documents[0], primitive.NewObjectID().Hex())
+	require.NoError(t, err)
+	require.Equal(t, reordered.Lookup("spec").Document(), wrapped.Lookup("resource", "spec").Document())
+}
+
+func TestSourceHashDetectsBSONContentChanges(t *testing.T) {
+	original := marshal(t, bson.D{
+		{Key: "_id", Value: "a"},
+		{Key: "spec", Value: bson.D{
+			{Key: "value", Value: int32(1)},
+			{Key: "items", Value: bson.A{int32(1), int32(2)}},
+		}},
+	})
+	base := newSourceBuffer()
+	require.NoError(t, base.add(original, int64(len(original))))
+	tests := []struct {
+		name string
+		raw  bson.Raw
+	}{
+		{"value", marshal(t, bson.D{
+			{Key: "_id", Value: "a"},
+			{Key: "spec", Value: bson.D{{Key: "value", Value: int32(2)}, {Key: "items", Value: bson.A{int32(1), int32(2)}}}},
+		})},
+		{"type", marshal(t, bson.D{
+			{Key: "_id", Value: "a"},
+			{Key: "spec", Value: bson.D{{Key: "value", Value: int64(1)}, {Key: "items", Value: bson.A{int32(1), int32(2)}}}},
+		})},
+		{"array order", marshal(t, bson.D{
+			{Key: "_id", Value: "a"},
+			{Key: "spec", Value: bson.D{{Key: "value", Value: int32(1)}, {Key: "items", Value: bson.A{int32(2), int32(1)}}}},
+		})},
+		{"field name", marshal(t, bson.D{
+			{Key: "_id", Value: "a"},
+			{Key: "spec", Value: bson.D{{Key: "other", Value: int32(1)}, {Key: "items", Value: bson.A{int32(1), int32(2)}}}},
+		})},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			changed := newSourceBuffer()
+			require.NoError(t, changed.add(tt.raw, int64(len(tt.raw))))
+			require.NotEqual(t, base.sourceHash(), changed.sourceHash())
+		})
+	}
+}
+
 func TestSnapshotMappingPreservesBSON(t *testing.T) {
 	id := primitive.NewObjectID()
 	resource := bson.D{

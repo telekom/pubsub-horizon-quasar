@@ -11,6 +11,7 @@ import (
 	"errors"
 	"hash"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/telekom/quasar/internal/config"
@@ -69,15 +70,51 @@ func (b *sourceBuffer) add(raw bson.Raw, limit int64) error {
 	if int64(len(raw)) > limit-b.bytes {
 		return errors.New("source BSON payload exceeds subscriptionSnapshots.maxSnapshotBytes")
 	}
+	canonical, err := appendCanonicalBSON(make([]byte, 0, len(raw)), raw, true)
+	if err != nil {
+		return err
+	}
 	owned := slices.Clone(raw)
 	var length [8]byte
-	binary.LittleEndian.PutUint64(length[:], uint64(len(owned)))
+	binary.LittleEndian.PutUint64(length[:], uint64(len(canonical)))
 	_, _ = b.digest.Write(length[:])
-	_, _ = b.digest.Write(owned)
+	_, _ = b.digest.Write(canonical)
 	b.documents = append(b.documents, owned)
 	b.bytes += int64(len(owned))
 	b.lastID = id
 	return nil
+}
+
+// appendCanonicalBSON sorts document fields for hashing while retaining array order and scalar BSON bytes.
+func appendCanonicalBSON(dst []byte, raw bson.Raw, sortFields bool) ([]byte, error) {
+	elements, err := raw.Elements()
+	if err != nil {
+		return nil, errors.New("source contains invalid BSON elements")
+	}
+	if sortFields {
+		slices.SortStableFunc(elements, func(a, b bson.RawElement) int {
+			return strings.Compare(a.Key(), b.Key())
+		})
+	}
+	start := len(dst)
+	dst = append(dst, 0, 0, 0, 0)
+	for _, element := range elements {
+		value := element.Value()
+		dst = append(dst, byte(value.Type))
+		dst = append(dst, element.Key()...)
+		dst = append(dst, 0)
+		if value.Type == bson.TypeEmbeddedDocument || value.Type == bson.TypeArray {
+			dst, err = appendCanonicalBSON(dst, bson.Raw(value.Value), value.Type == bson.TypeEmbeddedDocument)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			dst = append(dst, value.Value...)
+		}
+	}
+	dst = append(dst, 0)
+	binary.LittleEndian.PutUint32(dst[start:start+4], uint32(len(dst)-start))
+	return dst, nil
 }
 
 func (b *sourceBuffer) sourceHash() string {
