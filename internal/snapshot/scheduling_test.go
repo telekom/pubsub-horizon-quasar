@@ -469,5 +469,6 @@ func TestPublicationLoggingDurationMs(t *testing.T) {
 		require.Equal(t, float64(1000), entry["durationMs"])
 		require.NotContains(t, entry, "duration")
 		require.Equal(t, store.current.Version.SnapshotID, entry["snapshotId"])
+		require.Equal(t, "initial", entry["snapshotReason"])
 	})
 }

@@ -9,6 +9,7 @@ package snapshot
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -145,6 +146,69 @@ func TestRefreshAndRestart(t *testing.T) {
 	require.Equal(t, first.Version, store.current.RecentSnapshots[1])
 }
 
+func TestPublicationReason(t *testing.T) {
+	tests := []struct {
+		name          string
+		existing      bool
+		restart       bool
+		activeCount   int64
+		sourceChanged bool
+		want          publicationReason
+	}{
+		{name: "initial", want: reasonInitial},
+		{name: "active count lower", existing: true, activeCount: 0, want: reasonSnapshotCountMismatch},
+		{name: "active count higher", existing: true, activeCount: 2, want: reasonSnapshotCountMismatch},
+		{name: "restart unchanged", existing: true, restart: true, activeCount: 1, want: reasonRestart},
+		{
+			name: "restart with changed source", existing: true, restart: true, activeCount: 1,
+			sourceChanged: true, want: reasonRestart,
+		},
+		{
+			name: "restart with incomplete snapshot", existing: true, restart: true, activeCount: 0,
+			sourceChanged: true, want: reasonSnapshotCountMismatch,
+		},
+		{name: "source changed", existing: true, activeCount: 1, sourceChanged: true, want: reasonSourceChanged},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			store := newFakeStore(t)
+			w := newWorker(testConfig(), store)
+			if tt.existing {
+				require.NoError(t, w.refresh(ctx))
+				store.versions[store.current.Version.SnapshotID] = tt.activeCount
+			}
+			if tt.restart {
+				w = newWorker(testConfig(), store)
+			}
+			if tt.sourceChanged {
+				store.source[0] = sourceDocument(t, "a", "changed")
+			}
+
+			var output bytes.Buffer
+			previousLogger := log.Logger
+			log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
+			t.Cleanup(func() { log.Logger = previousLogger })
+
+			require.NoError(t, w.refresh(ctx))
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(output.Bytes(), &entry), "expected exactly one publish log")
+			require.Equal(t, "Subscription snapshot published", entry["message"])
+			require.Equal(t, string(tt.want), entry["snapshotReason"])
+			require.Equal(t, store.current.Version.SnapshotID, entry["snapshotId"])
+			require.Equal(t, float64(store.current.Version.DocumentCount), entry["documentCount"])
+			require.Contains(t, entry, "durationMs")
+			require.NotContains(t, entry, "startup")
+			require.NotContains(t, entry, "sourceHashChanged")
+			require.NotContains(t, entry, "activeSnapshotComplete")
+
+			output.Reset()
+			require.NoError(t, w.refresh(ctx))
+			require.Empty(t, output.String(), "unchanged refresh must not log a publication")
+		})
+	}
+}
+
 func TestSourceChangesAndRepair(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -230,7 +294,14 @@ func TestUncertainActivation(t *testing.T) {
 			require.Empty(t, store.deletions)
 			store.source[0] = sourceDocument(t, "a", "must not rebuild pending candidate")
 			store.activation = nil
+			var output bytes.Buffer
+			previousLogger := log.Logger
+			log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
+			t.Cleanup(func() { log.Logger = previousLogger })
 			require.NoError(t, w.refresh(ctx))
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+			require.Equal(t, string(reasonInitial), entry["snapshotReason"])
 			require.True(t, sameHead(candidate, store.current))
 			require.Equal(t, 1, store.inserts)
 			require.Len(t, store.current.RecentSnapshots, 1)
@@ -261,7 +332,14 @@ func TestDelayedPreRestartActivation(t *testing.T) {
 	require.Error(t, restarted.refresh(ctx), "old request wins the first CAS")
 	require.Error(t, restarted.cleanup(ctx, time.Now().Add(30*24*time.Hour)))
 	store.activation = nil
+	var output bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
+	t.Cleanup(func() { log.Logger = previousLogger })
 	require.NoError(t, restarted.refresh(ctx))
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+	require.Equal(t, string(reasonInitial), entry["snapshotReason"])
 	require.Equal(t, candidateID, store.current.Version.SnapshotID)
 	require.Equal(t, delayed.next.Version, store.current.RecentSnapshots[1])
 	require.False(t, store.apply(delayed.previous.Version.SnapshotID, delayed.next), "delayed CAS cannot match again")

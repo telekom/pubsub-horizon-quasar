@@ -147,13 +147,18 @@ subscriptionSnapshots:
   Later snapshot processing errors are logged and retried.
 - Initializes validators and indexes on the snapshot/head collections and publishes
   a full snapshot after the start delay on every start.
+- Checks snapshot completeness by document count, not stored contents; published
+  snapshot documents are expected to remain unchanged.
 - Scans the source at each refresh interval and compares its SHA-256 hash with the head.
   Unchanged data creates no revision unless the active snapshot needs repair.
 - Writes the full snapshot under a new `snapshotId`, then atomically updates the head
   and `recentSnapshots` but only if the previously read head is still current.
 - Rechecks uncertain activations before creating another snapshot or running cleanup,
   preventing duplicate publications and unsafe deletions.
-  Successful publication and errors are logged.
+  Successful publication logs `snapshotReason`: `initial` (no active snapshot),
+  `snapshot_count_mismatch` (active document count differs from the head), `restart`
+  (startup with a complete active snapshot), or `source_changed` (new source hash
+  during normal operation), in that priority order. 
 - Periodically deletes unprotected versions older than seven days. The active version
   and at least its two direct predecessors remain protected regardless of age.
 

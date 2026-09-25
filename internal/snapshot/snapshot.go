@@ -24,10 +24,20 @@ type snapshotStore interface {
 	deleteBatch(context.Context, string) (int64, error)
 }
 
+type publicationReason string
+
+const (
+	reasonInitial               publicationReason = "initial"
+	reasonSnapshotCountMismatch publicationReason = "snapshot_count_mismatch"
+	reasonRestart               publicationReason = "restart"
+	reasonSourceChanged         publicationReason = "source_changed"
+)
+
 type proposal struct {
 	previous head
 	next     head
 	started  time.Time
+	reason   publicationReason
 }
 
 type worker struct {
@@ -72,6 +82,15 @@ func (w *worker) refresh(ctx context.Context) error {
 		log.Debug().Int64("documentCount", previous.Version.DocumentCount).Msg("Subscription snapshot source unchanged")
 		return nil
 	}
+	reason := reasonSourceChanged
+	switch {
+	case previous.Version.SnapshotID == "":
+		reason = reasonInitial
+	case !complete:
+		reason = reasonSnapshotCountMismatch
+	case w.starting:
+		reason = reasonRestart
+	}
 	id := primitive.NewObjectID()
 	next := descriptor{
 		SnapshotID: id.Hex(), SourceHash: source.sourceHash(),
@@ -83,7 +102,8 @@ func (w *worker) refresh(ctx context.Context) error {
 		return err
 	}
 	w.pending = &proposal{
-		previous: previous, next: proposeHead(previous, next, w.config.MinimumRetainedSnapshots), started: started,
+		previous: previous, next: proposeHead(previous, next, w.config.MinimumRetainedSnapshots),
+		started: started, reason: reason,
 	}
 	return w.resolve(ctx)
 }
@@ -136,10 +156,12 @@ func (w *worker) confirmProposal(current head) error {
 
 func (w *worker) published(current head) {
 	duration := time.Since(w.pending.started)
+	reason := w.pending.reason
 	w.pending = nil
 	w.starting = false
 	w.lastSuccess = time.Now().UTC()
 	log.Info().Str("snapshotId", current.Version.SnapshotID).Int64("documentCount", current.Version.DocumentCount).
+		Str("snapshotReason", string(reason)).
 		Str("sourceCollection", w.config.SourceCollection).Str("snapshotCollection", w.config.SnapshotCollection).
 		Str("headCollection", w.config.HeadCollection).Dur("durationMs", duration).
 		Time("lastSuccess", w.lastSuccess).Msg("Subscription snapshot published")
