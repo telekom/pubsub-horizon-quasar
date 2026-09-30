@@ -129,7 +129,6 @@ subscriptionSnapshots:
   sourceCollection: subscriptions.subscriber.horizon.telekom.de.v1
   snapshotCollection: subscriptions.subscriber.horizon.telekom.de.v1-snapshots
   headCollection: subscriptions.subscriber.horizon.telekom.de.v1-head
-  initialStartDelay: 60s # Delay the first worker run; 0 disables it.
   refreshInterval: 5m
   cleanupInterval: 1h # Interval after a successful cleanup.
   retentionTime: 168h
@@ -141,12 +140,14 @@ subscriptionSnapshots:
 **Behavior**
 - Logs enabled/disabled status on startup. When disabled, stored data remains unchanged.
 - When enabled, registers the snapshot shutdown hook before starting provisioning or watcher services.
-  MongoDB initialization and snapshot publishing run in the background after `initialStartDelay`.
-  The API and health checks remain independent; the delay reduces rollout overlap but does not guarantee a single writer.
-- Client creation and the initial MongoDB ping must succeed after the delay; otherwise Quasar exits.
+  MongoDB initialization and snapshot publishing start in the background immediately.
+  The API and health checks remain independent.
+- Deploy with one replica, autoscaling disabled and `Recreate` as the Kubernetes Deployment strategy
+  to avoid overlapping writers during regular rollouts. This briefly interrupts the API during updates.
+- Client creation and the initial MongoDB ping must succeed; otherwise Quasar exits.
   Later snapshot processing errors are logged and retried.
 - Initializes validators and indexes on the snapshot/head collections and publishes
-  a full snapshot after the start delay on every start.
+  a full snapshot on every start.
 - Checks snapshot completeness by document count, not stored contents; published
   snapshot documents are expected to remain unchanged.
 - Scans the source at each refresh interval and compares its SHA-256 hash with the head.
