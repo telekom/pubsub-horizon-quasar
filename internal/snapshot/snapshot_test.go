@@ -37,6 +37,7 @@ type fakeStore struct {
 	beforeDelete func()
 	sourceReads  int
 	cleanups     int
+	beforeHead   func(context.Context) error
 	beforeRead   func(context.Context) error
 }
 
@@ -44,8 +45,9 @@ func testConfig() config.SubscriptionSnapshots {
 	return config.SubscriptionSnapshots{
 		Enabled: true, URI: "mongodb://localhost:27017", Database: "test-horizon-config",
 		SourceCollection: "subscriptions", SnapshotCollection: "snapshots", HeadCollection: "heads",
-		RefreshInterval: time.Minute, CleanupInterval: time.Hour, RetentionTime: 168 * time.Hour,
-		MinimumRetainedSnapshots: 3, OperationTimeout: 10 * time.Second, MaxSnapshotBytes: 64 * 1024 * 1024,
+		RefreshInterval:          time.Minute,
+		MinimumRetainedSnapshots: 3, RefreshTimeout: 10 * time.Second, CleanupTimeout: 2 * time.Minute,
+		MaxSnapshotBytes: 64 * 1024 * 1024,
 	}
 }
 
@@ -56,7 +58,12 @@ func newFakeStore(t *testing.T) *fakeStore {
 	}
 }
 
-func (f *fakeStore) readHead(context.Context) (head, error) {
+func (f *fakeStore) readHead(ctx context.Context) (head, error) {
+	if f.beforeHead != nil {
+		if err := f.beforeHead(ctx); err != nil {
+			return head{}, err
+		}
+	}
 	return f.current, f.readError
 }
 
@@ -148,16 +155,17 @@ func TestRefreshAndRestart(t *testing.T) {
 
 func TestPublicationReason(t *testing.T) {
 	tests := []struct {
-		name          string
-		existing      bool
-		restart       bool
-		activeCount   int64
-		sourceChanged bool
-		want          publicationReason
+		name           string
+		existing       bool
+		restart        bool
+		activeCount    int64
+		sourceChanged  bool
+		cleanupBlocked bool
+		want           publicationReason
 	}{
 		{name: "initial", want: reasonInitial},
-		{name: "active count lower", existing: true, activeCount: 0, want: reasonSnapshotCountMismatch},
-		{name: "active count higher", existing: true, activeCount: 2, want: reasonSnapshotCountMismatch},
+		{name: "active count lower", existing: true, activeCount: 0, cleanupBlocked: true, want: reasonSnapshotCountMismatch},
+		{name: "active count higher", existing: true, activeCount: 2, cleanupBlocked: true, want: reasonSnapshotCountMismatch},
 		{name: "restart unchanged", existing: true, restart: true, activeCount: 1, want: reasonRestart},
 		{
 			name: "restart with changed source", existing: true, restart: true, activeCount: 1,
@@ -165,7 +173,7 @@ func TestPublicationReason(t *testing.T) {
 		},
 		{
 			name: "restart with incomplete snapshot", existing: true, restart: true, activeCount: 0,
-			sourceChanged: true, want: reasonSnapshotCountMismatch,
+			sourceChanged: true, cleanupBlocked: true, want: reasonSnapshotCountMismatch,
 		},
 		{name: "source changed", existing: true, activeCount: 1, sourceChanged: true, want: reasonSourceChanged},
 	}
@@ -190,23 +198,43 @@ func TestPublicationReason(t *testing.T) {
 			log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
 			t.Cleanup(func() { log.Logger = previousLogger })
 
-			require.NoError(t, w.refresh(ctx))
-			var entry map[string]any
-			require.NoError(t, json.Unmarshal(output.Bytes(), &entry), "expected exactly one publish log")
-			require.Equal(t, "Subscription snapshot published", entry["message"])
-			require.Equal(t, string(tt.want), entry["snapshotReason"])
-			require.Equal(t, store.current.Version.SnapshotID, entry["snapshotId"])
-			require.Equal(t, float64(store.current.Version.DocumentCount), entry["documentCount"])
-			require.Contains(t, entry, "durationMs")
-			require.NotContains(t, entry, "startup")
-			require.NotContains(t, entry, "sourceHashChanged")
-			require.NotContains(t, entry, "activeSnapshotComplete")
+			assertCleanupResult(t, w.refresh(ctx), tt.cleanupBlocked)
+			assertPublicationLogs(t, output.Bytes(), store.current, tt.want, tt.cleanupBlocked)
 
 			output.Reset()
-			require.NoError(t, w.refresh(ctx))
+			assertCleanupResult(t, w.refresh(ctx), tt.cleanupBlocked)
 			require.Empty(t, output.String(), "unchanged refresh must not log a publication")
 		})
 	}
+}
+
+func assertCleanupResult(t *testing.T, err error, blocked bool) {
+	t.Helper()
+	if blocked {
+		require.ErrorContains(t, err, "protected snapshot is incomplete")
+		return
+	}
+	require.NoError(t, err)
+}
+
+func assertPublicationLogs(t *testing.T, output []byte, current head, reason publicationReason, cleanupBlocked bool) {
+	t.Helper()
+	lines := bytes.Split(bytes.TrimSpace(output), []byte("\n"))
+	wantLines := 2
+	if cleanupBlocked {
+		wantLines = 1
+	}
+	require.Len(t, lines, wantLines)
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(lines[0], &entry), "expected publish log first")
+	require.Equal(t, "Subscription snapshot published", entry["message"])
+	require.Equal(t, string(reason), entry["snapshotReason"])
+	require.Equal(t, current.Version.SnapshotID, entry["snapshotId"])
+	require.Equal(t, float64(current.Version.DocumentCount), entry["documentCount"])
+	require.Contains(t, entry, "durationMs")
+	require.NotContains(t, entry, "startup")
+	require.NotContains(t, entry, "sourceHashChanged")
+	require.NotContains(t, entry, "activeSnapshotComplete")
 }
 
 func TestSourceChangesAndRepair(t *testing.T) {
@@ -228,7 +256,12 @@ func TestSourceChangesAndRepair(t *testing.T) {
 			require.NoError(t, w.refresh(context.Background()))
 			old := store.current.Version
 			tt.mutate(t, store)
-			require.NoError(t, w.refresh(context.Background()))
+			err := w.refresh(context.Background())
+			if tt.name == "repair" {
+				require.ErrorContains(t, err, "protected snapshot is incomplete")
+			} else {
+				require.NoError(t, err)
+			}
 			require.NotEqual(t, old.SnapshotID, store.current.Version.SnapshotID)
 			require.Equal(t, tt.count, store.current.Version.DocumentCount)
 			require.Equal(t, old, store.current.RecentSnapshots[1])
@@ -290,7 +323,7 @@ func TestUncertainActivation(t *testing.T) {
 			}
 			require.Error(t, w.refresh(ctx))
 			require.NotNil(t, w.pending)
-			require.Error(t, w.cleanup(ctx, time.Now().Add(30*24*time.Hour)))
+			require.Error(t, w.cleanup(ctx))
 			require.Empty(t, store.deletions)
 			store.source[0] = sourceDocument(t, "a", "must not rebuild pending candidate")
 			store.activation = nil
@@ -299,8 +332,10 @@ func TestUncertainActivation(t *testing.T) {
 			log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
 			t.Cleanup(func() { log.Logger = previousLogger })
 			require.NoError(t, w.refresh(ctx))
+			lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
+			require.Len(t, lines, 2)
 			var entry map[string]any
-			require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+			require.NoError(t, json.Unmarshal(lines[0], &entry))
 			require.Equal(t, string(reasonInitial), entry["snapshotReason"])
 			require.True(t, sameHead(candidate, store.current))
 			require.Equal(t, 1, store.inserts)
@@ -330,15 +365,17 @@ func TestDelayedPreRestartActivation(t *testing.T) {
 		return false, nil
 	}
 	require.Error(t, restarted.refresh(ctx), "old request wins the first CAS")
-	require.Error(t, restarted.cleanup(ctx, time.Now().Add(30*24*time.Hour)))
+	require.Error(t, restarted.cleanup(ctx))
 	store.activation = nil
 	var output bytes.Buffer
 	previousLogger := log.Logger
 	log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
 	t.Cleanup(func() { log.Logger = previousLogger })
 	require.NoError(t, restarted.refresh(ctx))
+	lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
+	require.Len(t, lines, 2)
 	var entry map[string]any
-	require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+	require.NoError(t, json.Unmarshal(lines[0], &entry))
 	require.Equal(t, string(reasonInitial), entry["snapshotReason"])
 	require.Equal(t, candidateID, store.current.Version.SnapshotID)
 	require.Equal(t, delayed.next.Version, store.current.RecentSnapshots[1])
@@ -346,7 +383,7 @@ func TestDelayedPreRestartActivation(t *testing.T) {
 	require.Equal(t, 2, store.inserts)
 }
 
-func TestRetentionProtectsExactPredecessors(t *testing.T) {
+func TestCleanupRetainsOnlyHeadHistory(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, total := range []int{1, 2, 3, 5} {
 		store := newFakeStore(t)
@@ -363,12 +400,20 @@ func TestRetentionProtectsExactPredecessors(t *testing.T) {
 		store.versions[expired.SnapshotID] = 1
 		w := newWorker(testConfig(), store)
 		w.starting = false
-		require.NoError(t, w.cleanup(context.Background(), now))
-		require.Contains(t, store.versions, boundary.SnapshotID, "exact cutoff must not expire")
+		require.NoError(t, w.cleanup(context.Background()))
+		require.NotContains(t, store.versions, boundary.SnapshotID)
 		require.NotContains(t, store.versions, expired.SnapshotID)
 		for _, version := range store.current.RecentSnapshots {
 			require.NotContains(t, store.deletions, version.SnapshotID)
 		}
+		expectedVersions := 0
+		for _, version := range store.current.RecentSnapshots {
+			if version.DocumentCount > 0 {
+				expectedVersions++
+			}
+		}
+		require.Len(t, store.versions, expectedVersions,
+			"only snapshots protected by the active head history should remain")
 	}
 }
 
@@ -391,7 +436,7 @@ func TestCleanupIntegrityAndHeadRecheck(t *testing.T) {
 					store.beforeDelete = nil
 				}
 			}
-			require.Error(t, w.cleanup(context.Background(), time.Now()))
+			require.Error(t, w.cleanup(context.Background()))
 			if scenario == "malformed ID" {
 				require.Contains(t, store.versions, "invalid")
 			}
@@ -406,7 +451,7 @@ func TestResetHeadDoesNotLoseHistory(t *testing.T) {
 	require.NoError(t, w.refresh(ctx))
 	store.current = head{ID: "head", RecentSnapshots: []descriptor{}}
 	require.ErrorContains(t, w.refresh(ctx), "reset to bootstrap")
-	require.ErrorContains(t, w.cleanup(ctx, time.Now().Add(30*24*time.Hour)), "reset to bootstrap")
+	require.ErrorContains(t, w.cleanup(ctx), "reset to bootstrap")
 	require.Equal(t, 1, store.inserts)
 	require.Empty(t, store.deletions)
 }
@@ -448,11 +493,9 @@ func TestStartupLogging(t *testing.T) {
 			c.Enabled = enabled
 			c.URI = "mongodb://snapshot-user:test-password@localhost:27017/?authSource=private-auth"
 			c.RefreshInterval = 37 * time.Second
-			c.CleanupInterval = 2 * time.Hour
-			c.RetentionTime = 240 * time.Hour
 			c.MinimumRetainedSnapshots = 4
 			c.MaxSnapshotBytes = 33554432
-			c.OperationTimeout = 7 * time.Second
+			c.RefreshTimeout = 7 * time.Second
 			logStartup(c)
 
 			expected := `{"level":"info","enabled":false,"message":"Subscription snapshots disabled"}`
@@ -465,11 +508,10 @@ func TestStartupLogging(t *testing.T) {
 					"snapshotCollection":"snapshots",
 					"headCollection":"heads",
 					"refreshInterval":"37s",
-					"cleanupInterval":"2h0m0s",
-					"retentionTime":"240h0m0s",
 					"minimumRetainedSnapshots":4,
 					"maxSnapshotBytes":33554432,
-					"operationTimeout":"7s",
+					"refreshTimeout":"7s",
+					"cleanupTimeout":"2m0s",
 					"message":"Starting subscription snapshot worker"
 				}`
 			}

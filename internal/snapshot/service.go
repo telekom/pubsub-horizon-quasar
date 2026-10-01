@@ -58,11 +58,10 @@ func logStartup(c config.SubscriptionSnapshots) {
 		Str("snapshotCollection", c.SnapshotCollection).
 		Str("headCollection", c.HeadCollection).
 		Str("refreshInterval", c.RefreshInterval.String()).
-		Str("cleanupInterval", c.CleanupInterval.String()).
-		Str("retentionTime", c.RetentionTime.String()).
 		Int("minimumRetainedSnapshots", c.MinimumRetainedSnapshots).
 		Int64("maxSnapshotBytes", c.MaxSnapshotBytes).
-		Str("operationTimeout", c.OperationTimeout.String()).
+		Str("refreshTimeout", c.RefreshTimeout.String()).
+		Str("cleanupTimeout", c.CleanupTimeout.String()).
 		Msg("Starting subscription snapshot worker")
 }
 
@@ -80,22 +79,13 @@ func (s *service) run() {
 }
 
 func (s *service) loop(refresh <-chan time.Time) {
-	cleanup := time.NewTimer(s.config.CleanupInterval)
-	defer cleanup.Stop()
-	cleanupDue := true
 	s.attemptRefresh()
 	for {
-		if cleanupDue {
-			cleanupDue = !s.attemptCleanup()
-			cleanup.Reset(s.config.CleanupInterval)
-		}
 		select {
 		case <-s.ctx.Done():
 			return
 		case <-refresh:
 			s.attemptRefresh()
-		case <-cleanup.C:
-			cleanupDue = true
 		}
 	}
 }
@@ -126,9 +116,7 @@ func (s *service) connect(ctx context.Context) error {
 		return err
 	}
 	opts := options.Client().ApplyURI(s.config.URI).
-		SetReadPreference(readpref.Primary()).
-		SetServerSelectionTimeout(s.config.OperationTimeout).
-		SetConnectTimeout(s.config.OperationTimeout)
+		SetReadPreference(readpref.Primary())
 	client, err := mongo.Connect(ctx, opts)
 	if err != nil {
 		return databaseError("connect dedicated subscription snapshot client", err)
@@ -151,40 +139,36 @@ func (s *service) withSession(ctx context.Context, action func(context.Context) 
 }
 
 func (s *service) attemptRefresh() {
-	ctx, cancel := context.WithTimeout(s.ctx, s.config.OperationTimeout)
+	ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
 	start := time.Now()
 	err := s.initialize(ctx)
 	if err == nil {
-		err = s.withSession(ctx, s.worker.refresh)
+		err = s.withSession(ctx, s.worker.refreshSnapshot)
 	}
 	cancel()
 	if err != nil {
 		s.logError("refresh", start, err)
+		if s.worker != nil && s.worker.cleanupDue && s.ctx.Err() == nil {
+			s.attemptCleanup()
+		}
 		return
 	}
 	log.Info().Dur("durationMs", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
 		Str("snapshotCollection", s.config.SnapshotCollection).Str("headCollection", s.config.HeadCollection).
 		Time("lastSuccess", s.worker.lastSuccess).Msg("Subscription snapshot refresh completed")
+	if s.worker.cleanupDue {
+		s.attemptCleanup()
+	}
 }
 
-func (s *service) attemptCleanup() bool {
-	if s.worker == nil || s.worker.starting || s.worker.pending != nil {
-		return false
-	}
+func (s *service) attemptCleanup() {
+	ctx, cancel := context.WithTimeout(s.ctx, s.config.CleanupTimeout)
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(s.ctx, s.config.OperationTimeout)
-	defer cancel()
-	err := s.withSession(ctx, func(ctx context.Context) error {
-		return s.worker.cleanup(ctx, start)
-	})
+	err := s.withSession(ctx, s.worker.cleanupPending)
+	cancel()
 	if err != nil {
 		s.logError("cleanup", start, err)
-		return false
 	}
-	log.Info().Dur("durationMs", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
-		Str("snapshotCollection", s.config.SnapshotCollection).Str("headCollection", s.config.HeadCollection).
-		Msg("Subscription snapshot cleanup completed")
-	return true
 }
 
 func (s *service) logError(operation string, start time.Time, err error) {

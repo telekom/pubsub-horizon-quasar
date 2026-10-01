@@ -168,7 +168,7 @@ func decodeHead(raw bson.Raw) (head, error) {
 		return result, errors.New("head recentSnapshots must be a BSON array")
 	}
 	values, err := history.Values()
-	if err != nil || len(values) > config.MaxSnapshotHistory || len(raw) > maxDocumentBytes {
+	if err != nil || len(values) > config.MaxRetainedSnapshots || len(raw) > maxDocumentBytes {
 		return result, errors.New("head history is invalid or exceeds its size limit")
 	}
 	result.ID = "head"
@@ -247,6 +247,7 @@ func sameHead(a, b head) bool {
 }
 
 func proposeHead(previous head, next descriptor, retained int) head {
+	retained = max(retained, 3)
 	history := make([]descriptor, 0, min(retained, len(previous.RecentSnapshots)+1))
 	history = append(history, next)
 	history = append(history, previous.RecentSnapshots[:min(len(previous.RecentSnapshots), retained-1)]...)

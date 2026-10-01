@@ -30,7 +30,7 @@ type mongoStore struct {
 
 func newMongoStore(client *mongo.Client, c config.SubscriptionSnapshots) *mongoStore {
 	journal := true
-	wc := &writeconcern.WriteConcern{W: "majority", Journal: &journal, WTimeout: c.OperationTimeout}
+	wc := &writeconcern.WriteConcern{W: "majority", Journal: &journal}
 	database := client.Database(c.Database, options.Database().
 		SetReadPreference(readpref.Primary()).SetReadConcern(readconcern.Majority()).SetWriteConcern(wc))
 	return &mongoStore{

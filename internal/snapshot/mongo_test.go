@@ -27,7 +27,7 @@ func TestMongoStoreConcerns(t *testing.T) {
 	c := testConfig()
 	store := newMongoStore(&mongo.Client{}, c)
 	require.Equal(t, c.Database, store.database.Name())
-	require.Equal(t, c.OperationTimeout, store.database.WriteConcern().WTimeout)
+	require.Zero(t, store.database.WriteConcern().WTimeout, "write-concern timeout uses MongoDB defaults")
 	require.Equal(t, "majority", store.database.WriteConcern().W)
 	require.True(t, *store.database.WriteConcern().Journal)
 	require.Equal(t, "majority", store.database.ReadConcern().Level)
@@ -42,7 +42,7 @@ func mongoFixture(t *testing.T, uri string) (*mongo.Client, *mongoStore, *worker
 	c := testConfig()
 	c.URI = uri
 	c.Database = "snapshots_" + primitive.NewObjectID().Hex()
-	c.OperationTimeout = 20 * time.Second
+	c.RefreshTimeout = 20 * time.Second
 	client, err := mongo.Connect(t.Context(), options.Client().ApplyURI(uri).SetServerSelectionTimeout(20*time.Second))
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -98,7 +98,7 @@ func testMongoSession(t *testing.T, uri string) {
 	require.NotNil(t, session.OperationTime())
 	require.NoError(t, s.withSession(t.Context(), func(ctx context.Context) error {
 		require.Same(t, session, mongo.SessionFromContext(ctx), "refresh and cleanup must reuse the same session")
-		return w.cleanup(ctx, time.Now())
+		return w.cleanup(ctx)
 	}))
 }
 
@@ -154,7 +154,7 @@ func testMongoSetupRetry(t *testing.T, uri string) {
 		s.cancel()
 		s.disconnect()
 	})
-	ctx, cancel := context.WithTimeout(t.Context(), w.config.OperationTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), w.config.RefreshTimeout)
 	defer cancel()
 	require.ErrorContains(t, s.initialize(ctx), "required subscription snapshot collection is missing")
 	require.NotNil(t, s.client, "connect and ping succeeded before setup failed")
@@ -234,7 +234,7 @@ func testMongoMissingMetadata(t *testing.T, uri string) {
 	require.Error(t, w.refresh(ctx))
 	store.seenHead = false
 	require.Error(t, newWorker(w.config, store).refresh(ctx), "restart cannot invent lost history from snapshot rows")
-	require.Error(t, w.cleanup(ctx, time.Now().Add(30*24*time.Hour)))
+	require.Error(t, w.cleanup(ctx))
 }
 
 func testMongoRepair(t *testing.T, uri string) {
@@ -245,19 +245,19 @@ func testMongoRepair(t *testing.T, uri string) {
 	require.NoError(t, err)
 	_, err = store.snapshots.DeleteOne(ctx, bson.D{{Key: "snapshotId", Value: before.Version.SnapshotID}})
 	require.NoError(t, err)
-	require.NoError(t, w.refresh(ctx))
+	require.ErrorContains(t, w.refresh(ctx), "protected snapshot is incomplete")
 	repaired, err := store.readHead(ctx)
 	require.NoError(t, err)
 	require.Equal(t, before.Version.SourceHash, repaired.Version.SourceHash)
 	require.NotEqual(t, before.Version.SnapshotID, repaired.Version.SnapshotID)
 	require.Equal(t, before.Version, repaired.RecentSnapshots[1])
-	require.Error(t, w.cleanup(ctx, time.Now()), "damaged predecessor must not be silently replaced by an orphan")
+	require.Error(t, w.cleanup(ctx), "damaged predecessor must not be silently replaced by an orphan")
 	_, err = store.heads.UpdateOne(ctx, bson.D{{Key: "_id", Value: "head"}},
 		bson.D{{Key: "$set", Value: bson.D{{Key: "documentCount", Value: int32(3)}}}},
 		options.Update().SetBypassDocumentValidation(true))
 	require.NoError(t, err)
 	require.Error(t, w.refresh(ctx), "BSON int32 does not satisfy the head contract")
-	require.Error(t, w.cleanup(ctx, time.Now()))
+	require.Error(t, w.cleanup(ctx))
 }
 
 func testMongoExistingValidators(t *testing.T, uri string) {
@@ -360,7 +360,7 @@ func testMongoReaderRetirement(t *testing.T, uri string) {
 				for range 3 {
 					require.NoError(t, newWorker(w.config, store).refresh(t.Context()))
 				}
-				require.NoError(t, w.cleanup(t.Context(), time.Now().Add(8*24*time.Hour)))
+				require.NoError(t, w.cleanup(t.Context()))
 			})
 			if err != nil {
 				return err
@@ -447,7 +447,7 @@ func testMongoUncertainWrites(t *testing.T, uri string) {
 	require.Error(t, s.withSession(ctx, w.refresh))
 	require.NotNil(t, w.pending)
 	candidate := w.pending.next
-	require.Error(t, w.cleanup(ctx, time.Now().Add(30*24*time.Hour)))
+	require.Error(t, w.cleanup(ctx))
 	require.NoError(t, s.withSession(ctx, w.refresh))
 	confirmed, err := store.readHead(ctx)
 	require.NoError(t, err)

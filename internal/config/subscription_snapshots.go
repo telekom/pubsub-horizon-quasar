@@ -13,8 +13,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-// MaxSnapshotHistory bounds even the largest serialized head below MongoDB's 16 MiB limit.
-const MaxSnapshotHistory = 10000
+// MaxRetainedSnapshots limits the configured snapshot history.
+const MaxRetainedSnapshots = 100
 
 type SubscriptionSnapshots struct {
 	Enabled                  bool          `mapstructure:"enabled"`
@@ -24,10 +24,9 @@ type SubscriptionSnapshots struct {
 	SnapshotCollection       string        `mapstructure:"snapshotCollection"`
 	HeadCollection           string        `mapstructure:"headCollection"`
 	RefreshInterval          time.Duration `mapstructure:"refreshInterval"`
-	CleanupInterval          time.Duration `mapstructure:"cleanupInterval"`
-	RetentionTime            time.Duration `mapstructure:"retentionTime"`
 	MinimumRetainedSnapshots int           `mapstructure:"minimumRetainedSnapshots"`
-	OperationTimeout         time.Duration `mapstructure:"operationTimeout"`
+	RefreshTimeout           time.Duration `mapstructure:"refreshTimeout"`
+	CleanupTimeout           time.Duration `mapstructure:"cleanupTimeout"`
 	MaxSnapshotBytes         int64         `mapstructure:"maxSnapshotBytes"`
 }
 
@@ -40,10 +39,9 @@ func setSubscriptionSnapshotsDefaults() {
 		"snapshotCollection":       "subscriptions.subscriber.horizon.telekom.de.v1-snapshots",
 		"headCollection":           "subscriptions.subscriber.horizon.telekom.de.v1-head",
 		"refreshInterval":          "5m",
-		"cleanupInterval":          "1h",
-		"retentionTime":            "168h",
 		"minimumRetainedSnapshots": 3,
-		"operationTimeout":         "2m",
+		"refreshTimeout":           "60s",
+		"cleanupTimeout":           "60s",
 		"maxSnapshotBytes":         int64(64 * 1024 * 1024),
 	}
 	for key, value := range defaults {
@@ -65,14 +63,14 @@ func (c SubscriptionSnapshots) Validate() error {
 	if err := c.validateCollections(); err != nil {
 		return err
 	}
-	if c.RefreshInterval <= 0 || c.CleanupInterval <= 0 || c.RetentionTime <= 0 || c.OperationTimeout <= 0 {
-		return errors.New("subscriptionSnapshots intervals, retentionTime and operationTimeout must be positive")
+	if c.RefreshInterval <= 0 || c.RefreshTimeout <= 0 || c.CleanupTimeout <= 0 {
+		return errors.New("subscriptionSnapshots refreshInterval, refreshTimeout and cleanupTimeout must be positive")
 	}
 	if c.MaxSnapshotBytes <= 0 {
 		return errors.New("subscriptionSnapshots.maxSnapshotBytes must be positive")
 	}
-	if c.MinimumRetainedSnapshots < 3 || c.MinimumRetainedSnapshots > MaxSnapshotHistory {
-		return errors.New("subscriptionSnapshots.minimumRetainedSnapshots must be between 3 and 10000")
+	if c.MinimumRetainedSnapshots < 3 || c.MinimumRetainedSnapshots > MaxRetainedSnapshots {
+		return errors.New("subscriptionSnapshots.minimumRetainedSnapshots must be between 3 and 100")
 	}
 	return nil
 }

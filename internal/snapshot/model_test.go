@@ -236,3 +236,14 @@ func TestHistoryUsesActivationOrder(t *testing.T) {
 	}
 	require.Equal(t, []descriptor{versions[3], versions[2], versions[1]}, current.RecentSnapshots)
 }
+
+func TestBelowMinimumRetainsThreeSnapshots(t *testing.T) {
+	current := head{}
+	var versions []descriptor
+	for i := range 4 {
+		version := testDescriptor(time.Now().Add(time.Duration(i)*time.Second), 0)
+		versions = append(versions, version)
+		current = proposeHead(current, version, 0)
+	}
+	require.Equal(t, []descriptor{versions[3], versions[2], versions[1]}, current.RecentSnapshots)
+}

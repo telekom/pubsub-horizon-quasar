@@ -20,8 +20,9 @@ func validSubscriptionSnapshots() SubscriptionSnapshots {
 	return SubscriptionSnapshots{
 		Enabled: true, URI: "mongodb://localhost:27017", Database: "integration-horizon-config",
 		SourceCollection: "source", SnapshotCollection: "snapshots", HeadCollection: "head",
-		RefreshInterval: 5 * time.Minute, CleanupInterval: time.Hour, RetentionTime: 168 * time.Hour,
-		MinimumRetainedSnapshots: 3, OperationTimeout: 2 * time.Minute, MaxSnapshotBytes: 64 * 1024 * 1024,
+		RefreshInterval:          5 * time.Minute,
+		MinimumRetainedSnapshots: 3, RefreshTimeout: 2 * time.Minute, CleanupTimeout: 2 * time.Minute,
+		MaxSnapshotBytes: 64 * 1024 * 1024,
 	}
 }
 
@@ -95,12 +96,20 @@ func TestSubscriptionSnapshotsValidation(t *testing.T) {
 		{"collection collision", func(c *SubscriptionSnapshots) { c.HeadCollection = c.SourceCollection }, false},
 		{"namespace too long", func(c *SubscriptionSnapshots) { c.HeadCollection = strings.Repeat("x", 120) }, false},
 		{"refresh", func(c *SubscriptionSnapshots) { c.RefreshInterval = 0 }, false},
-		{"cleanup", func(c *SubscriptionSnapshots) { c.CleanupInterval = -1 }, false},
-		{"retention", func(c *SubscriptionSnapshots) { c.RetentionTime = 0 }, false},
-		{"timeout", func(c *SubscriptionSnapshots) { c.OperationTimeout = 0 }, false},
+		{"refresh timeout", func(c *SubscriptionSnapshots) { c.RefreshTimeout = 0 }, false},
+		{"cleanup timeout", func(c *SubscriptionSnapshots) { c.CleanupTimeout = 0 }, false},
 		{"payload size", func(c *SubscriptionSnapshots) { c.MaxSnapshotBytes = 0 }, false},
 		{"minimum history", func(c *SubscriptionSnapshots) { c.MinimumRetainedSnapshots = 2 }, false},
-		{"history BSON bound", func(c *SubscriptionSnapshots) { c.MinimumRetainedSnapshots = MaxSnapshotHistory + 1 }, false},
+		{"zero history", func(c *SubscriptionSnapshots) { c.MinimumRetainedSnapshots = 0 }, false},
+		{"negative minimum history", func(c *SubscriptionSnapshots) {
+			c.MinimumRetainedSnapshots = -1
+		}, false},
+		{"maximum retained snapshots", func(c *SubscriptionSnapshots) {
+			c.MinimumRetainedSnapshots = MaxRetainedSnapshots
+		}, true},
+		{"history bound", func(c *SubscriptionSnapshots) {
+			c.MinimumRetainedSnapshots = MaxRetainedSnapshots + 1
+		}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,6 +136,7 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_URI", uri)
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_DATABASE", "test-horizon-config")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHINTERVAL", "9m")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHTIMEOUT", "3m")
 	var c Configuration
 	require.NoError(t, viper.Unmarshal(&c))
 	require.NoError(t, c.SubscriptionSnapshots.Validate())
@@ -138,9 +148,9 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	require.Equal(t, "test-password", clientOptions.Auth.Password)
 	require.Equal(t, "snapshot-auth", clientOptions.Auth.AuthSource)
 	require.Equal(t, 9*time.Minute, c.SubscriptionSnapshots.RefreshInterval)
-	require.Equal(t, time.Hour, c.SubscriptionSnapshots.CleanupInterval)
-	require.Equal(t, 168*time.Hour, c.SubscriptionSnapshots.RetentionTime)
+	require.Equal(t, 3*time.Minute, c.SubscriptionSnapshots.RefreshTimeout)
 	require.Equal(t, 3, c.SubscriptionSnapshots.MinimumRetainedSnapshots)
+	require.Equal(t, time.Minute, c.SubscriptionSnapshots.CleanupTimeout)
 	require.Equal(t, int64(64*1024*1024), c.SubscriptionSnapshots.MaxSnapshotBytes)
 	require.Equal(t, "mongodb://localhost:27017", c.Store.Mongo.Uri)
 	require.Equal(t, "mongodb://localhost:27017", c.Fallback.Mongo.Uri)

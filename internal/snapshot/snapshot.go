@@ -46,6 +46,7 @@ type worker struct {
 	starting    bool
 	pending     *proposal
 	abandoned   string
+	cleanupDue  bool
 	lastSuccess time.Time
 }
 
@@ -54,6 +55,13 @@ func newWorker(c config.SubscriptionSnapshots, store snapshotStore) *worker {
 }
 
 func (w *worker) refresh(ctx context.Context) error {
+	if err := w.refreshSnapshot(ctx); err != nil {
+		return err
+	}
+	return w.cleanupPending(ctx)
+}
+
+func (w *worker) refreshSnapshot(ctx context.Context) error {
 	started := time.Now()
 	if w.pending != nil {
 		return w.resolve(ctx)
@@ -142,29 +150,40 @@ func (w *worker) resolve(ctx context.Context) error {
 		}
 		return errors.New("head CAS did not match; retaining the proposal for read-back and recovery")
 	}
-	w.published(candidate.next)
-	return nil
+	return w.published(candidate.next)
 }
 
 func (w *worker) confirmProposal(current head) error {
 	if !sameHead(current, w.pending.next) {
 		return errors.New("activated candidate has unexpected metadata or history; cleanup blocked")
 	}
-	w.published(current)
-	return nil
+	return w.published(current)
 }
 
-func (w *worker) published(current head) {
+func (w *worker) published(current head) error {
 	duration := time.Since(w.pending.started)
 	reason := w.pending.reason
 	w.pending = nil
 	w.starting = false
+	w.cleanupDue = true
 	w.lastSuccess = time.Now().UTC()
 	log.Info().Str("snapshotId", current.Version.SnapshotID).Int64("documentCount", current.Version.DocumentCount).
 		Str("snapshotReason", string(reason)).
 		Str("sourceCollection", w.config.SourceCollection).Str("snapshotCollection", w.config.SnapshotCollection).
 		Str("headCollection", w.config.HeadCollection).Dur("durationMs", duration).
 		Time("lastSuccess", w.lastSuccess).Msg("Subscription snapshot published")
+	return nil
+}
+
+func (w *worker) cleanupPending(ctx context.Context) error {
+	if !w.cleanupDue {
+		return nil
+	}
+	if err := w.cleanup(ctx); err != nil {
+		return err
+	}
+	w.cleanupDue = false
+	return nil
 }
 
 func (w *worker) complete(ctx context.Context, version descriptor) (bool, error) {
@@ -198,7 +217,8 @@ func (w *worker) deleteUnpublished(ctx context.Context, current head) error {
 	return nil
 }
 
-func (w *worker) cleanup(ctx context.Context, now time.Time) error {
+func (w *worker) cleanup(ctx context.Context) error {
+	started := time.Now()
 	if w.starting || w.pending != nil {
 		return errors.New("cleanup blocked until this process has acknowledged its activation")
 	}
@@ -218,17 +238,23 @@ func (w *worker) cleanup(ctx context.Context, now time.Time) error {
 			return errors.New("protected snapshot is incomplete; cleanup blocked")
 		}
 	}
-	cutoff := now.Add(-w.config.RetentionTime)
-	return w.store.visitSnapshotIDs(ctx, func(value string) error {
-		id, err := canonicalID(value)
-		if err != nil {
+	if err := w.store.visitSnapshotIDs(ctx, func(value string) error {
+		if _, err := canonicalID(value); err != nil {
 			return err
 		}
-		if containsSnapshot(current, value) || !id.Timestamp().Before(cutoff) {
+		if containsSnapshot(current, value) {
 			return nil
 		}
 		return w.deleteVersion(ctx, current, value)
-	})
+	}); err != nil {
+		return err
+	}
+	log.Info().Dur("durationMs", time.Since(started)).
+		Str("sourceCollection", w.config.SourceCollection).
+		Str("snapshotCollection", w.config.SnapshotCollection).
+		Str("headCollection", w.config.HeadCollection).
+		Msg("Subscription snapshot cleanup completed")
+	return nil
 }
 
 func (w *worker) deleteVersion(ctx context.Context, expected head, id string) error {

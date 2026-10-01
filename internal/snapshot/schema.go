@@ -49,7 +49,7 @@ func headValidator() bson.D {
 		bson.E{Key: "recentSnapshots", Value: bson.D{
 			{Key: "bsonType", Value: "array"},
 			{Key: "minItems", Value: 1},
-			{Key: "maxItems", Value: config.MaxSnapshotHistory},
+			{Key: "maxItems", Value: config.MaxRetainedSnapshots},
 			{Key: "items", Value: bson.D{
 				{Key: "bsonType", Value: "object"}, {Key: "required", Value: required}, {Key: "properties", Value: descriptorProperties()},
 			}},

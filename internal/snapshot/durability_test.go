@@ -161,7 +161,7 @@ func testMongoInflightShutdown(t *testing.T, uri string) {
 	existingClient, store, w := mongoFixture(t, uri)
 	ctx := t.Context()
 	c := w.config
-	c.OperationTimeout = 2 * time.Minute
+	c.RefreshTimeout = 2 * time.Minute
 	s := newService(c)
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetAppName("snapshot-shutdown-test"))
 	require.NoError(t, err)

@@ -130,10 +130,9 @@ subscriptionSnapshots:
   snapshotCollection: subscriptions.subscriber.horizon.telekom.de.v1-snapshots
   headCollection: subscriptions.subscriber.horizon.telekom.de.v1-head
   refreshInterval: 5m
-  cleanupInterval: 1h # Interval after a successful cleanup.
-  retentionTime: 168h
   minimumRetainedSnapshots: 3
-  operationTimeout: 2m
+  refreshTimeout: 60s
+  cleanupTimeout: 60s
   maxSnapshotBytes: 67108864 # 64 MiB source BSON buffer limit, not total RAM usage.
 ```
 
@@ -148,6 +147,12 @@ subscriptionSnapshots:
   Later snapshot processing errors are logged and retried.
 - Initializes validators and indexes on the snapshot/head collections and publishes
   a full snapshot on every start.
+- After each publication, retains only the latest `minimumRetainedSnapshots` versions
+  and immediately removes other snapshots. The value must be between 3 and 100,
+  keeping the active snapshot and at least its two direct predecessors.
+- If cleanup fails or is interrupted, it is retried on the next refresh, including
+  when the source has not changed. Consumers should compare returned document counts
+  with the head's `documentCount` and reread the head if they differ.
 - Checks snapshot completeness by document count, not stored contents; published
   snapshot documents are expected to remain unchanged.
 - Scans the source at each refresh interval and compares its SHA-256 hash with the head.
@@ -160,8 +165,6 @@ subscriptionSnapshots:
   `snapshot_count_mismatch` (active document count differs from the head), `restart`
   (startup with a complete active snapshot), or `source_changed` (new source hash
   during normal operation), in that priority order. 
-- Periodically deletes unprotected versions older than seven days. The active version
-  and at least its two direct predecessors remain protected regardless of age.
 
 ### Configuring resources
 The `resources` configuration option is a list of custom resources that should be synchronized. Each resource has the following fields:

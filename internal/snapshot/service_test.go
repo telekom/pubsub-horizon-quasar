@@ -39,12 +39,13 @@ func TestSnapshotConnectionProcess(t *testing.T) {
 	log.Logger = zerolog.New(os.Stdout)
 	c := testConfig()
 	c.URI = uri
-	c.OperationTimeout = 2 * time.Second
+	c.RefreshTimeout = 2 * time.Second
+	c.CleanupTimeout = 2 * time.Second
 	require.NoError(t, c.Validate())
 	s := newService(c)
 	defer s.cancel()
 	defer s.disconnect()
-	ctx, cancel := context.WithTimeout(t.Context(), c.OperationTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), c.RefreshTimeout)
 	defer cancel()
 	require.NoError(t, s.initialize(ctx))
 }

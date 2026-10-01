@@ -78,7 +78,7 @@ func testMongoCrashRecovery(t *testing.T, uri string) {
 			// Lose all process-local proposal/orphan state while preserving only MongoDB data.
 			reopened := newMongoStore(client, w.config)
 			restarted := newWorker(w.config, reopened)
-			require.Error(t, restarted.cleanup(ctx, time.Now().Add(8*24*time.Hour)))
+			require.Error(t, restarted.cleanup(ctx))
 			require.NoError(t, restarted.refresh(ctx))
 			active, err := reopened.readHead(ctx)
 			require.NoError(t, err)
@@ -120,17 +120,12 @@ func verifyRecoveredCleanup(t *testing.T, w *worker, store *mongoStore, candidat
 	ctx := t.Context()
 	active, err := store.readHead(ctx)
 	require.NoError(t, err)
-	require.NoError(t, w.cleanup(ctx, time.Now()), "young orphan rows must not be mistaken for old history")
 	rows, err := store.countSnapshot(ctx, candidate)
-	require.NoError(t, err)
-	require.Positive(t, rows)
-	require.NoError(t, w.cleanup(ctx, time.Now().Add(8*24*time.Hour)))
-	rows, err = store.countSnapshot(ctx, candidate)
 	require.NoError(t, err)
 	if activated {
 		require.Equal(t, int64(3), rows, "successfully activated predecessor must stay protected")
 	} else {
-		require.Zero(t, rows, "unpublished orphan is removed only after retention expires")
+		require.Zero(t, rows, "unpublished orphan is removed immediately after the new snapshot is activated")
 		require.False(t, containsSnapshot(active, candidate))
 	}
 	for _, version := range active.RecentSnapshots {
@@ -168,7 +163,7 @@ func testMongoInterruptedCleanup(t *testing.T, uri string) {
 				return count, err
 			}
 			w.store = faults
-			require.Error(t, w.cleanup(ctx, time.Now()))
+			require.Error(t, w.cleanup(ctx))
 			remaining, err := store.countSnapshot(ctx, expired)
 			require.NoError(t, err)
 			require.Equal(t, int64(batchSize+5), remaining, "first batch deleted, remainder must be retryable")
@@ -176,7 +171,7 @@ func testMongoInterruptedCleanup(t *testing.T, uri string) {
 			require.NoError(t, err)
 			require.True(t, sameHead(before, afterFailure))
 			w.store = store
-			require.NoError(t, w.cleanup(ctx, time.Now()))
+			require.NoError(t, w.cleanup(ctx))
 			remaining, err = store.countSnapshot(ctx, expired)
 			require.NoError(t, err)
 			require.Zero(t, remaining)
