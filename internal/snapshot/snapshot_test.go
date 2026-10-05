@@ -48,6 +48,10 @@ func testConfig() config.SubscriptionSnapshots {
 		RefreshInterval:          time.Minute,
 		MinimumRetainedSnapshots: 3, RefreshTimeout: 10 * time.Second, CleanupTimeout: 2 * time.Minute,
 		MaxSnapshotBytes: 64 * 1024 * 1024,
+		ActivationDelay:  time.Minute,
+		ZooKeeper: config.SnapshotZooKeeper{
+			Addresses: []string{"localhost:2181"}, BasePath: "/horizon/subscriptions", SessionTimeout: 10 * time.Second,
+		},
 	}
 }
 
@@ -512,6 +516,9 @@ func TestStartupLogging(t *testing.T) {
 					"maxSnapshotBytes":33554432,
 					"refreshTimeout":"7s",
 					"cleanupTimeout":"2m0s",
+					"activationDelay":"1m0s",
+					"zookeeperBasePath":"/horizon/subscriptions",
+					"zookeeperClient":"Shopify/zk",
 					"message":"Starting subscription snapshot worker"
 				}`
 			}
@@ -532,7 +539,7 @@ func TestServiceSchedulingAndCancellation(t *testing.T) {
 	go func() {
 		defer close(s.done)
 		defer s.disconnect()
-		s.loop(refresh)
+		s.loop(refresh, nil)
 	}()
 	select {
 	case <-s.done:

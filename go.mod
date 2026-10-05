@@ -1,8 +1,9 @@
 module github.com/telekom/quasar
 
-go 1.25.0
+go 1.26.0
 
 require (
+	github.com/Shopify/zk v1.0.14
 	github.com/gofiber/contrib/fiberzerolog v1.0.3
 	github.com/gofiber/contrib/jwt v1.1.2
 	github.com/gofiber/fiber/v2 v2.52.13

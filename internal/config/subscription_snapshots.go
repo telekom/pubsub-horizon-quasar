@@ -6,9 +6,12 @@ package config
 
 import (
 	"errors"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/spf13/viper"
 )
@@ -17,17 +20,25 @@ import (
 const MaxRetainedSnapshots = 100
 
 type SubscriptionSnapshots struct {
-	Enabled                  bool          `mapstructure:"enabled"`
-	URI                      string        `mapstructure:"uri"`
-	Database                 string        `mapstructure:"database"`
-	SourceCollection         string        `mapstructure:"sourceCollection"`
-	SnapshotCollection       string        `mapstructure:"snapshotCollection"`
-	HeadCollection           string        `mapstructure:"headCollection"`
-	RefreshInterval          time.Duration `mapstructure:"refreshInterval"`
-	MinimumRetainedSnapshots int           `mapstructure:"minimumRetainedSnapshots"`
-	RefreshTimeout           time.Duration `mapstructure:"refreshTimeout"`
-	CleanupTimeout           time.Duration `mapstructure:"cleanupTimeout"`
-	MaxSnapshotBytes         int64         `mapstructure:"maxSnapshotBytes"`
+	Enabled                  bool              `mapstructure:"enabled"`
+	URI                      string            `mapstructure:"uri"`
+	Database                 string            `mapstructure:"database"`
+	SourceCollection         string            `mapstructure:"sourceCollection"`
+	SnapshotCollection       string            `mapstructure:"snapshotCollection"`
+	HeadCollection           string            `mapstructure:"headCollection"`
+	RefreshInterval          time.Duration     `mapstructure:"refreshInterval"`
+	MinimumRetainedSnapshots int               `mapstructure:"minimumRetainedSnapshots"`
+	RefreshTimeout           time.Duration     `mapstructure:"refreshTimeout"`
+	CleanupTimeout           time.Duration     `mapstructure:"cleanupTimeout"`
+	MaxSnapshotBytes         int64             `mapstructure:"maxSnapshotBytes"`
+	ActivationDelay          time.Duration     `mapstructure:"activationDelay"`
+	ZooKeeper                SnapshotZooKeeper `mapstructure:"zookeeper"`
+}
+
+type SnapshotZooKeeper struct {
+	Addresses      []string      `mapstructure:"addresses"`
+	BasePath       string        `mapstructure:"basePath"`
+	SessionTimeout time.Duration `mapstructure:"sessionTimeout"`
 }
 
 func setSubscriptionSnapshotsDefaults() {
@@ -43,6 +54,10 @@ func setSubscriptionSnapshotsDefaults() {
 		"refreshTimeout":           "60s",
 		"cleanupTimeout":           "60s",
 		"maxSnapshotBytes":         int64(64 * 1024 * 1024),
+		"activationDelay":          time.Minute,
+		"zookeeper.addresses":      []string{},
+		"zookeeper.basePath":       "/horizon/subscriptions",
+		"zookeeper.sessionTimeout": "10s",
 	}
 	for key, value := range defaults {
 		// Defaults also make environment-only keys visible to Viper.Unmarshal.
@@ -72,7 +87,77 @@ func (c SubscriptionSnapshots) Validate() error {
 	if c.MinimumRetainedSnapshots < 3 || c.MinimumRetainedSnapshots > MaxRetainedSnapshots {
 		return errors.New("subscriptionSnapshots.minimumRetainedSnapshots must be between 3 and 100")
 	}
+	return c.validateZooKeeper()
+}
+
+func (c SubscriptionSnapshots) validateZooKeeper() error {
+	if c.ActivationDelay <= 0 || c.ZooKeeper.SessionTimeout <= 0 {
+		return errors.New("subscriptionSnapshots activationDelay and zookeeper.sessionTimeout must be positive")
+	}
+	if len(c.ZooKeeper.Addresses) == 0 {
+		return errors.New("subscriptionSnapshots.zookeeper.addresses must contain an explicit host:port address")
+	}
+	for _, address := range c.ZooKeeper.Addresses {
+		if !validZooKeeperAddress(address) {
+			return errors.New("subscriptionSnapshots.zookeeper.addresses must contain valid host:port addresses")
+		}
+	}
+	if !validZooKeeperPath(c.ZooKeeper.BasePath) {
+		return errors.New("subscriptionSnapshots.zookeeper.basePath must be a canonical absolute non-system ZooKeeper path")
+	}
 	return nil
+}
+
+func validZooKeeperAddress(address string) bool {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || host == "" || strings.ContainsAny(host, " \t\r\n/@?#\\") {
+		return false
+	}
+	number, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || number == 0 {
+		return false
+	}
+	if strings.Contains(host, ":") {
+		host, _, _ = strings.Cut(host, "%")
+		return net.ParseIP(host) != nil
+	}
+	if len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(strings.TrimSuffix(host, "."), ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, char := range label {
+			if char != '-' && (char < '0' || char > '9') && (char < 'A' || char > 'Z') && (char < 'a' || char > 'z') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validZooKeeperPath(value string) bool {
+	if !utf8.ValidString(value) || !strings.HasPrefix(value, "/") ||
+		value == "/zookeeper" || strings.HasPrefix(value, "/zookeeper/") {
+
+		return false
+	}
+	if value != "/" {
+		for _, segment := range strings.Split(value[1:], "/") {
+			if segment == "" || segment == "." || segment == ".." {
+				return false
+			}
+		}
+	}
+	for _, char := range value {
+		if char <= 0x1f || char >= 0x7f && char <= 0x9f ||
+			char >= 0xd800 && char <= 0xf8ff || char >= 0xfff0 && char <= 0xffff {
+
+			return false
+		}
+	}
+	return true
 }
 
 func (c SubscriptionSnapshots) validateCollections() error {

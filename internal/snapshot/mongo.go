@@ -40,7 +40,7 @@ func newMongoStore(client *mongo.Client, c config.SubscriptionSnapshots) *mongoS
 }
 
 func (m *mongoStore) readHead(ctx context.Context) (head, error) {
-	raw, err := m.heads.FindOne(ctx, bson.D{{Key: "_id", Value: "head"}}).Raw()
+	raw, err := m.heads.FindOne(ctx, bson.D{{Key: fieldID, Value: headID}}).Raw()
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		return m.bootstrap(ctx)
 	}
@@ -68,12 +68,12 @@ func (m *mongoStore) bootstrap(ctx context.Context) (head, error) {
 		}
 	}
 	_, err := m.heads.InsertOne(ctx, bson.D{
-		{Key: "_id", Value: "head"}, {Key: "recentSnapshots", Value: bson.A{}},
+		{Key: fieldID, Value: headID}, {Key: fieldRecentSnapshots, Value: bson.A{}},
 	})
 	if err != nil && !mongo.IsDuplicateKeyError(err) {
 		return head{}, databaseError("bootstrap head", err)
 	}
-	raw, err := m.heads.FindOne(ctx, bson.D{{Key: "_id", Value: "head"}}).Raw()
+	raw, err := m.heads.FindOne(ctx, bson.D{{Key: fieldID, Value: headID}}).Raw()
 	if err != nil {
 		return head{}, databaseError("confirm bootstrap head", err)
 	}
@@ -89,7 +89,7 @@ func (m *mongoStore) readSource(ctx context.Context, limit int64) (*sourceBuffer
 		return nil, err
 	}
 	cursor, err := m.source.Find(ctx, bson.D{}, options.Find().
-		SetSort(bson.D{{Key: "_id", Value: 1}}).SetCollation(&options.Collation{Locale: "simple"}).
+		SetSort(bson.D{{Key: fieldID, Value: 1}}).SetCollation(&options.Collation{Locale: simpleCollation}).
 		SetBatchSize(batchSize))
 	if err != nil {
 		return nil, databaseError("read source", err)
@@ -142,7 +142,7 @@ func (m *mongoStore) activate(ctx context.Context, previous string, next head) (
 		expected = bson.D{{Key: "$exists", Value: false}}
 	}
 	result, err := m.heads.ReplaceOne(ctx, bson.D{
-		{Key: "_id", Value: "head"}, {Key: "snapshotId", Value: expected},
+		{Key: fieldID, Value: headID}, {Key: fieldSnapshotID, Value: expected},
 	}, next, options.Replace().SetUpsert(false))
 	if err != nil {
 		return false, databaseError("activate head", err)
@@ -151,20 +151,20 @@ func (m *mongoStore) activate(ctx context.Context, previous string, next head) (
 }
 
 func (m *mongoStore) countSnapshot(ctx context.Context, id string) (int64, error) {
-	count, err := m.snapshots.CountDocuments(ctx, bson.D{{Key: "snapshotId", Value: id}})
+	count, err := m.snapshots.CountDocuments(ctx, bson.D{{Key: fieldSnapshotID, Value: id}})
 	return count, databaseError("count snapshot", err)
 }
 
 func (m *mongoStore) visitSnapshotIDs(ctx context.Context, visit func(string) error) error {
 	cursor, err := m.snapshots.Aggregate(ctx, mongo.Pipeline{
-		bson.D{{Key: "$group", Value: bson.D{{Key: "_id", Value: "$snapshotId"}}}},
+		bson.D{{Key: "$group", Value: bson.D{{Key: fieldID, Value: "$snapshotId"}}}},
 	}, options.Aggregate().SetAllowDiskUse(true).SetBatchSize(batchSize))
 	if err != nil {
 		return databaseError("list snapshot versions", err)
 	}
 	defer closeCursor(ctx, cursor)
 	for cursor.Next(ctx) {
-		id, ok := cursor.Current.Lookup("_id").StringValueOK()
+		id, ok := cursor.Current.Lookup(fieldID).StringValueOK()
 		if !ok {
 			return errors.New("snapshot collection contains a non-string snapshotId; cleanup aborted")
 		}
@@ -176,15 +176,15 @@ func (m *mongoStore) visitSnapshotIDs(ctx context.Context, visit func(string) er
 }
 
 func (m *mongoStore) deleteBatch(ctx context.Context, id string) (int64, error) {
-	cursor, err := m.snapshots.Find(ctx, bson.D{{Key: "snapshotId", Value: id}},
-		options.Find().SetProjection(bson.D{{Key: "_id", Value: 1}}).SetLimit(batchSize))
+	cursor, err := m.snapshots.Find(ctx, bson.D{{Key: fieldSnapshotID, Value: id}},
+		options.Find().SetProjection(bson.D{{Key: fieldID, Value: 1}}).SetLimit(batchSize))
 	if err != nil {
 		return 0, databaseError("select snapshot deletion batch", err)
 	}
 	defer closeCursor(ctx, cursor)
 	ids := make(bson.A, 0, batchSize)
 	for cursor.Next(ctx) {
-		id := cursor.Current.Lookup("_id")
+		id := cursor.Current.Lookup(fieldID)
 		id.Value = slices.Clone(id.Value)
 		ids = append(ids, id)
 	}
@@ -195,7 +195,7 @@ func (m *mongoStore) deleteBatch(ctx context.Context, id string) (int64, error) 
 		return 0, nil
 	}
 	result, err := m.snapshots.DeleteMany(ctx, bson.D{
-		{Key: "snapshotId", Value: id}, {Key: "_id", Value: bson.D{{Key: "$in", Value: ids}}},
+		{Key: fieldSnapshotID, Value: id}, {Key: fieldID, Value: bson.D{{Key: "$in", Value: ids}}},
 	})
 	if err != nil {
 		return 0, databaseError("delete snapshot batch", err)

@@ -14,61 +14,71 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const (
+	schemaObject   = "object"
+	schemaRequired = "required"
+)
+
 // snapshotValidator uses ordered BSON to keep create's existing-options comparison stable across starts.
 func snapshotValidator() bson.D {
 	return bson.D{{Key: "$jsonSchema", Value: bson.D{
-		{Key: "bsonType", Value: "object"},
-		{Key: "required", Value: bson.A{"_id", "snapshotId", "subscriptionId", "resource"}},
-		{Key: "properties", Value: bson.D{
-			{Key: "_id", Value: bson.D{{Key: "bsonType", Value: "objectId"}}},
-			{Key: "snapshotId", Value: versionIDSchema()},
-			{Key: "subscriptionId", Value: bson.D{{Key: "bsonType", Value: "string"}}},
-			{Key: "resource", Value: bson.D{{Key: "bsonType", Value: "object"}}},
+		{Key: schemaBSONType, Value: schemaObject},
+		{Key: schemaRequired, Value: bson.A{fieldID, fieldSnapshotID, fieldSubscriptionID, "resource"}},
+		{Key: schemaProperties, Value: bson.D{
+			{Key: fieldID, Value: bson.D{{Key: schemaBSONType, Value: "objectId"}}},
+			{Key: fieldSnapshotID, Value: versionIDSchema()},
+			{Key: fieldSubscriptionID, Value: bson.D{{Key: schemaBSONType, Value: schemaString}}},
+			{Key: "resource", Value: bson.D{{Key: schemaBSONType, Value: schemaObject}}},
 		}},
 	}}}
 }
 
 func versionIDSchema() bson.D {
-	return bson.D{{Key: "bsonType", Value: "string"}, {Key: "pattern", Value: "^[0-9a-f]{24}$"}}
+	return bson.D{{Key: schemaBSONType, Value: schemaString}, {Key: "pattern", Value: "^[0-9a-f]{24}$"}}
 }
 
 func descriptorProperties() bson.D {
 	return bson.D{
-		{Key: "snapshotId", Value: versionIDSchema()},
-		{Key: "sourceHash", Value: bson.D{{Key: "bsonType", Value: "string"}, {Key: "pattern", Value: "^[0-9a-f]{64}$"}}},
-		{Key: "documentCount", Value: bson.D{{Key: "bsonType", Value: "long"}, {Key: "minimum", Value: int64(0)}}},
-		{Key: "createdAt", Value: bson.D{{Key: "bsonType", Value: "date"}}},
+		{Key: fieldSnapshotID, Value: versionIDSchema()},
+		{Key: fieldSourceHash, Value: bson.D{{Key: schemaBSONType, Value: schemaString}, {Key: "pattern", Value: "^[0-9a-f]{64}$"}}},
+		{Key: fieldDocumentCount, Value: bson.D{{Key: schemaBSONType, Value: "long"}, {Key: "minimum", Value: int64(0)}}},
+		{Key: fieldCreatedAt, Value: bson.D{{Key: schemaBSONType, Value: "date"}}},
 	}
 }
 
 func headValidator() bson.D {
-	required := bson.A{"snapshotId", "sourceHash", "documentCount", "createdAt"}
-	id := bson.D{{Key: "bsonType", Value: "string"}, {Key: "enum", Value: bson.A{"head"}}}
+	required := bson.A{fieldSnapshotID, fieldSourceHash, fieldDocumentCount, fieldCreatedAt}
+	id := bson.D{{Key: schemaBSONType, Value: schemaString}, {Key: "enum", Value: bson.A{headID}}}
 	properties := append(descriptorProperties(),
-		bson.E{Key: "_id", Value: id},
-		bson.E{Key: "recentSnapshots", Value: bson.D{
-			{Key: "bsonType", Value: "array"},
+		bson.E{Key: fieldID, Value: id},
+		bson.E{Key: fieldRecentSnapshots, Value: bson.D{
+			{Key: schemaBSONType, Value: "array"},
 			{Key: "minItems", Value: 1},
 			{Key: "maxItems", Value: config.MaxRetainedSnapshots},
 			{Key: "items", Value: bson.D{
-				{Key: "bsonType", Value: "object"}, {Key: "required", Value: required}, {Key: "properties", Value: descriptorProperties()},
+				{
+					Key:   schemaBSONType,
+					Value: schemaObject,
+				},
+				{Key: schemaRequired, Value: required},
+				{Key: schemaProperties, Value: descriptorProperties()},
 			}},
 		}},
 	)
 	bootstrap := bson.D{
-		{Key: "required", Value: bson.A{"_id", "recentSnapshots"}},
+		{Key: schemaRequired, Value: bson.A{fieldID, fieldRecentSnapshots}},
 		{Key: "additionalProperties", Value: false},
-		{Key: "properties", Value: bson.D{
-			{Key: "_id", Value: id},
-			{Key: "recentSnapshots", Value: bson.D{{Key: "bsonType", Value: "array"}, {Key: "maxItems", Value: 0}}},
+		{Key: schemaProperties, Value: bson.D{
+			{Key: fieldID, Value: id},
+			{Key: fieldRecentSnapshots, Value: bson.D{{Key: schemaBSONType, Value: "array"}, {Key: "maxItems", Value: 0}}},
 		}},
 	}
 	active := bson.D{
-		{Key: "required", Value: append(bson.A{"_id", "recentSnapshots"}, required...)},
-		{Key: "properties", Value: properties},
+		{Key: schemaRequired, Value: append(bson.A{fieldID, fieldRecentSnapshots}, required...)},
+		{Key: schemaProperties, Value: properties},
 	}
 	return bson.D{{Key: "$jsonSchema", Value: bson.D{
-		{Key: "bsonType", Value: "object"}, {Key: "oneOf", Value: bson.A{bootstrap, active}},
+		{Key: schemaBSONType, Value: schemaObject}, {Key: "oneOf", Value: bson.A{bootstrap, active}},
 	}}}
 }
 
@@ -92,17 +102,17 @@ func (m *mongoStore) setup(ctx context.Context) error {
 	}
 	_, err := m.snapshots.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{
-			Keys: bson.D{{Key: "snapshotId", Value: 1}, {Key: "subscriptionId", Value: 1}},
+			Keys: bson.D{{Key: fieldSnapshotID, Value: 1}, {Key: fieldSubscriptionID, Value: 1}},
 			Options: options.Index().SetUnique(true).SetName("snapshot_subscription").
-				SetCollation(&options.Collation{Locale: "simple"}),
+				SetCollation(&options.Collation{Locale: simpleCollation}),
 		},
 		{
 			Keys: bson.D{
-				{Key: "snapshotId", Value: 1},
+				{Key: fieldSnapshotID, Value: 1},
 				{Key: "resource.spec.environment", Value: 1},
 				{Key: "resource.spec.subscription.type", Value: 1},
 			},
-			Options: options.Index().SetName("snapshot_environment_type").SetCollation(&options.Collation{Locale: "simple"}),
+			Options: options.Index().SetName("snapshot_environment_type").SetCollation(&options.Collation{Locale: simpleCollation}),
 		},
 	})
 	return databaseError("create snapshot indexes", err)
@@ -143,7 +153,7 @@ func (m *mongoStore) requireSourceCollection(ctx context.Context) error {
 func (m *mongoStore) ensureCollection(ctx context.Context, name string, validator bson.D) error {
 	err := m.database.CreateCollection(ctx, name, options.CreateCollection().
 		SetValidator(validator).SetValidationLevel("strict").SetValidationAction("error").
-		SetCollation(&options.Collation{Locale: "simple"}))
+		SetCollation(&options.Collation{Locale: simpleCollation}))
 	var commandError mongo.CommandError
 	// create is idempotent only when the existing collection options match.
 	if errors.As(err, &commandError) && commandError.Code == 48 {

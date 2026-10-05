@@ -24,13 +24,34 @@ type fakeSession struct {
 	mongo.Session
 }
 
-func runScheduledService(t *testing.T, store *fakeStore, refreshInterval time.Duration) *service {
+type scheduledService struct {
+	*service
+	actions chan func()
+}
+
+func (s *scheduledService) advance(duration time.Duration) {
+	// Wait acquires worker activity; this channel also orders assertions/mutations before future timer work.
+	s.actions <- func() {}
+	time.Sleep(duration)
+}
+
+func (s *scheduledService) attemptRefresh() {
+	done := make(chan struct{})
+	s.actions <- func() {
+		s.service.attemptRefresh()
+		close(done)
+	}
+	<-done
+	synctest.Wait()
+}
+
+func runScheduledService(t *testing.T, store *fakeStore, refreshInterval time.Duration) *scheduledService {
 	t.Helper()
 	c := testConfig()
 	c.RefreshInterval = refreshInterval
 	c.RefreshTimeout = 10 * time.Minute
 	c.CleanupTimeout = 10 * time.Minute
-	s := newService(c)
+	s := &scheduledService{service: newService(c), actions: make(chan func(), 1)}
 	s.client = &mongo.Client{}
 	s.store = &mongoStore{}
 	s.session = &fakeSession{}
@@ -39,7 +60,7 @@ func runScheduledService(t *testing.T, store *fakeStore, refreshInterval time.Du
 		defer close(s.done)
 		refresh := time.NewTicker(c.RefreshInterval)
 		defer refresh.Stop()
-		s.loop(refresh.C)
+		s.loop(refresh.C, s.actions)
 	}()
 	t.Cleanup(s.shutdown)
 	synctest.Wait()
@@ -56,7 +77,7 @@ func TestSchedulingRefreshAndCleanupAfterPublication(t *testing.T) {
 
 		orphan := testDescriptor(time.Now().Add(-24*time.Hour), 1)
 		store.versions[orphan.SnapshotID] = 1
-		time.Sleep(time.Minute)
+		s.advance(time.Minute)
 		synctest.Wait()
 		require.Equal(t, 2, store.sourceReads)
 		require.Equal(t, 1, store.activations, "unchanged checks must not publish")
@@ -64,14 +85,14 @@ func TestSchedulingRefreshAndCleanupAfterPublication(t *testing.T) {
 		require.Contains(t, store.versions, orphan.SnapshotID)
 
 		store.source[0] = sourceDocument(t, "a", "changed")
-		time.Sleep(time.Minute)
+		s.advance(time.Minute)
 		synctest.Wait()
 		require.Equal(t, 2, store.activations)
 		require.Equal(t, 2, store.cleanups, "publication immediately triggers cleanup")
 		require.NotContains(t, store.versions, orphan.SnapshotID)
 
 		reads := store.sourceReads
-		time.Sleep(10 * time.Minute)
+		s.advance(10 * time.Minute)
 		synctest.Wait()
 		require.Equal(t, reads+10, store.sourceReads)
 		require.Equal(t, 2, store.cleanups, "unchanged refreshes must not trigger cleanup")
@@ -92,10 +113,10 @@ func TestSchedulingCoalescesTicksWhileRefreshIsRunning(t *testing.T) {
 				return ctx.Err()
 			}
 		}
-		time.Sleep(time.Minute)
+		s.advance(time.Minute)
 		synctest.Wait()
 		require.Equal(t, 2, store.sourceReads)
-		time.Sleep(5 * time.Minute)
+		s.advance(5 * time.Minute)
 		synctest.Wait()
 		require.Equal(t, 2, store.sourceReads, "ticks must not launch concurrent scans")
 		require.Equal(t, 1, store.cleanups, "cleanup must not run during a blocked, unchanged refresh")
@@ -120,7 +141,7 @@ func TestSchedulingCancelsInflightRefresh(t *testing.T) {
 			readErr = ctx.Err()
 			return readErr
 		}
-		time.Sleep(time.Minute)
+		s.advance(time.Minute)
 		synctest.Wait()
 		before := store.current
 		start := time.Now()
@@ -145,7 +166,7 @@ func TestSchedulingUnresolvedActivationBlocksCleanup(t *testing.T) {
 		require.Equal(t, 1, store.inserts)
 
 		store.activation = nil
-		time.Sleep(time.Minute)
+		s.advance(time.Minute)
 		synctest.Wait()
 		require.Nil(t, s.worker.pending)
 		require.Equal(t, 1, store.inserts, "recovery must reuse the exact buffered candidate")

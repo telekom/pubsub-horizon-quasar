@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,14 +120,15 @@ func testMongoServiceLifecycle(t *testing.T, uri string) {
 			bson.D{{Key: "dropUser", Value: "snapshot-writer"}}).Err())
 	})
 	c := w.config
-	authenticatedURI, err := url.Parse(c.URI)
+	base, rawQuery, _ := strings.Cut(c.URI, "?")
+	query, err := url.ParseQuery(rawQuery)
 	require.NoError(t, err)
-	authenticatedURI.Path = "/"
-	authenticatedURI.User = url.UserPassword("snapshot-writer", password)
-	query := authenticatedURI.Query()
 	query.Set("authSource", c.Database)
-	authenticatedURI.RawQuery = query.Encode()
-	c.URI = authenticatedURI.String()
+	authenticatedURI := func(password string) string {
+		return strings.Replace(base, "mongodb://", "mongodb://"+url.UserPassword("snapshot-writer", password).String()+"@", 1) +
+			"?" + query.Encode()
+	}
+	c.URI = authenticatedURI(password)
 	require.NoError(t, c.Validate())
 	s := newService(c)
 	t.Cleanup(s.shutdown)
@@ -140,8 +142,7 @@ func testMongoServiceLifecycle(t *testing.T, uri string) {
 	require.NoError(t, existingClient.Ping(ctx, nil), "the independent worker must not close existing clients")
 	require.NoError(t, store.setup(ctx), "shutdown must preserve the published collections")
 	t.Run("invalid authentication is fatal", func(t *testing.T) {
-		authenticatedURI.User = url.UserPassword("snapshot-writer", "wrong-auth-secret")
-		output := requireSnapshotConnectionFatal(t, authenticatedURI.String(), "ping", "snapshot-writer", "wrong-auth-secret")
+		output := requireSnapshotConnectionFatal(t, authenticatedURI("wrong-auth-secret"), "ping", "snapshot-writer", "wrong-auth-secret")
 		require.NotContains(t, output, "(timeout)", "authentication must fail against the reachable replica set")
 	})
 }

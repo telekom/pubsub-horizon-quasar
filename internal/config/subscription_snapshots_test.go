@@ -23,6 +23,10 @@ func validSubscriptionSnapshots() SubscriptionSnapshots {
 		RefreshInterval:          5 * time.Minute,
 		MinimumRetainedSnapshots: 3, RefreshTimeout: 2 * time.Minute, CleanupTimeout: 2 * time.Minute,
 		MaxSnapshotBytes: 64 * 1024 * 1024,
+		ActivationDelay:  time.Minute,
+		ZooKeeper: SnapshotZooKeeper{
+			Addresses: []string{"localhost:2181"}, BasePath: "/horizon/subscriptions", SessionTimeout: 10 * time.Second,
+		},
 	}
 }
 
@@ -137,6 +141,10 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_DATABASE", "test-horizon-config")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHINTERVAL", "9m")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHTIMEOUT", "3m")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ACTIVATIONDELAY", "45s")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_ADDRESSES", "host-a:2181,[::1]:2182")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_BASEPATH", "/test/subscriptions")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_SESSIONTIMEOUT", "12s")
 	var c Configuration
 	require.NoError(t, viper.Unmarshal(&c))
 	require.NoError(t, c.SubscriptionSnapshots.Validate())
@@ -149,6 +157,10 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	require.Equal(t, "snapshot-auth", clientOptions.Auth.AuthSource)
 	require.Equal(t, 9*time.Minute, c.SubscriptionSnapshots.RefreshInterval)
 	require.Equal(t, 3*time.Minute, c.SubscriptionSnapshots.RefreshTimeout)
+	require.Equal(t, 45*time.Second, c.SubscriptionSnapshots.ActivationDelay)
+	require.Equal(t, []string{"host-a:2181", "[::1]:2182"}, c.SubscriptionSnapshots.ZooKeeper.Addresses)
+	require.Equal(t, "/test/subscriptions", c.SubscriptionSnapshots.ZooKeeper.BasePath)
+	require.Equal(t, 12*time.Second, c.SubscriptionSnapshots.ZooKeeper.SessionTimeout)
 	require.Equal(t, 3, c.SubscriptionSnapshots.MinimumRetainedSnapshots)
 	require.Equal(t, time.Minute, c.SubscriptionSnapshots.CleanupTimeout)
 	require.Equal(t, int64(64*1024*1024), c.SubscriptionSnapshots.MaxSnapshotBytes)
@@ -165,5 +177,52 @@ func TestSubscriptionSnapshotsDisabledDefaults(t *testing.T) {
 	require.False(t, c.SubscriptionSnapshots.Enabled)
 	require.Empty(t, c.SubscriptionSnapshots.URI)
 	require.Empty(t, c.SubscriptionSnapshots.Database)
+	require.Empty(t, c.SubscriptionSnapshots.ZooKeeper.Addresses)
+	require.Equal(t, time.Minute, c.SubscriptionSnapshots.ActivationDelay)
+	require.Equal(t, "/horizon/subscriptions", c.SubscriptionSnapshots.ZooKeeper.BasePath)
+	require.Equal(t, 10*time.Second, c.SubscriptionSnapshots.ZooKeeper.SessionTimeout)
 	require.NoError(t, c.SubscriptionSnapshots.Validate())
+}
+
+func TestSubscriptionSnapshotsZooKeeperValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(*SubscriptionSnapshots)
+		valid  bool
+	}{
+		{"missing addresses", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = nil }, false},
+		{"IPv6", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"[::1]:2181"} }, true},
+		{"multiple servers", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"a:2181", "b:2182"} }, true},
+		{"missing host", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{":2181"} }, false},
+		{"missing port", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"localhost"} }, false},
+		{"URL", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"http://localhost:2181"} }, false},
+		{"credentials", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"user@localhost:2181"} }, false},
+		{"zero port", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"localhost:0"} }, false},
+		{"overflow port", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"localhost:65536"} }, false},
+		{"invalid hostname", func(c *SubscriptionSnapshots) { c.ZooKeeper.Addresses = []string{"a b:2181"} }, false},
+		{"relative path", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "horizon/subscriptions" }, false},
+		{"empty segment", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "/horizon//subscriptions" }, false},
+		{"trailing slash", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "/horizon/" }, false},
+		{"dot segment", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "/horizon/../subscriptions" }, false},
+		{"system path", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "/zookeeper/test" }, false},
+		{"control character", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "/horizon/\x00" }, false},
+		{"root", func(c *SubscriptionSnapshots) { c.ZooKeeper.BasePath = "/" }, true},
+		{"zero delay", func(c *SubscriptionSnapshots) { c.ActivationDelay = 0 }, false},
+		{"negative delay", func(c *SubscriptionSnapshots) { c.ActivationDelay = -time.Second }, false},
+		{"zero session timeout", func(c *SubscriptionSnapshots) { c.ZooKeeper.SessionTimeout = 0 }, false},
+		{"short refresh budget", func(c *SubscriptionSnapshots) { c.RefreshTimeout = time.Second }, true},
+		{"disabled invalid values", func(c *SubscriptionSnapshots) { *c = SubscriptionSnapshots{} }, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := validSubscriptionSnapshots()
+			tt.change(&c)
+			err := c.Validate()
+			if tt.valid {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
 }

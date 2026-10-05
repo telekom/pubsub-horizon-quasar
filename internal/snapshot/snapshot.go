@@ -41,13 +41,15 @@ type proposal struct {
 }
 
 type worker struct {
-	config      config.SubscriptionSnapshots
-	store       snapshotStore
-	starting    bool
-	pending     *proposal
-	abandoned   string
-	cleanupDue  bool
-	lastSuccess time.Time
+	config        config.SubscriptionSnapshots
+	store         snapshotStore
+	starting      bool
+	pending       *proposal
+	abandoned     string
+	cleanupDue    bool
+	lastSuccess   time.Time
+	publication   *publication
+	refreshQueued bool
 }
 
 func newWorker(c config.SubscriptionSnapshots, store snapshotStore) *worker {
@@ -64,6 +66,10 @@ func (w *worker) refresh(ctx context.Context) error {
 func (w *worker) refreshSnapshot(ctx context.Context) error {
 	started := time.Now()
 	if w.pending != nil {
+		if w.publication != nil {
+			w.refreshQueued = true
+			return nil
+		}
 		return w.resolve(ctx)
 	}
 	previous, err := w.store.readHead(ctx)
@@ -75,7 +81,10 @@ func (w *worker) refreshSnapshot(ctx context.Context) error {
 	}
 	if w.abandoned != "" {
 		if err := w.deleteUnpublished(ctx, previous); err != nil {
-			return err
+			if !errors.Is(err, errCleanupDeferred) {
+				return err
+			}
+			log.Warn().Err(err).Str("snapshotId", w.abandoned).Msg("Subscription snapshot orphan cleanup deferred")
 		}
 	}
 	complete, err := w.complete(ctx, previous.Version)
@@ -112,6 +121,9 @@ func (w *worker) refreshSnapshot(ctx context.Context) error {
 	w.pending = &proposal{
 		previous: previous, next: proposeHead(previous, next, w.config.MinimumRetainedSnapshots),
 		started: started, reason: reason,
+	}
+	if w.publication != nil {
+		return nil
 	}
 	return w.resolve(ctx)
 }
@@ -167,6 +179,9 @@ func (w *worker) published(current head) error {
 	w.starting = false
 	w.cleanupDue = true
 	w.lastSuccess = time.Now().UTC()
+	if w.publication != nil {
+		w.publication.mongoPublished(current.Version)
+	}
 	log.Info().Str("snapshotId", current.Version.SnapshotID).Int64("documentCount", current.Version.DocumentCount).
 		Str("snapshotReason", string(reason)).
 		Str("sourceCollection", w.config.SourceCollection).Str("snapshotCollection", w.config.SnapshotCollection).
@@ -229,6 +244,10 @@ func (w *worker) cleanup(ctx context.Context) error {
 	if current.Version.SnapshotID == "" {
 		return errors.New("active head was reset to bootstrap; cleanup blocked")
 	}
+	protected, err := w.protectedZooKeeper(ctx)
+	if err != nil {
+		return err
+	}
 	for _, version := range current.RecentSnapshots {
 		complete, err := w.complete(ctx, version)
 		if err != nil {
@@ -242,7 +261,7 @@ func (w *worker) cleanup(ctx context.Context) error {
 		if _, err := canonicalID(value); err != nil {
 			return err
 		}
-		if containsSnapshot(current, value) {
+		if containsSnapshot(current, value) || w.protectedByZooKeeper(protected, value) {
 			return nil
 		}
 		return w.deleteVersion(ctx, current, value)
@@ -258,6 +277,13 @@ func (w *worker) cleanup(ctx context.Context) error {
 }
 
 func (w *worker) deleteVersion(ctx context.Context, expected head, id string) error {
+	protected, err := w.protectedZooKeeper(ctx)
+	if err != nil {
+		return err
+	}
+	if w.protectedByZooKeeper(protected, id) {
+		return errCleanupDeferred
+	}
 	for {
 		current, err := w.store.readHead(ctx)
 		if err != nil {
@@ -265,6 +291,13 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) er
 		}
 		if !sameHead(current, expected) || containsSnapshot(current, id) {
 			return errors.New("head or protected history changed during cleanup; deletion aborted")
+		}
+		latestProtection, err := w.protectedZooKeeper(ctx)
+		if err != nil {
+			return err
+		}
+		if !sameState(protected, latestProtection) || w.protectedByZooKeeper(latestProtection, id) {
+			return errors.Join(errCleanupDeferred, errors.New("ZooKeeper references changed during deletion"))
 		}
 		deleted, err := w.store.deleteBatch(ctx, id)
 		if err != nil {

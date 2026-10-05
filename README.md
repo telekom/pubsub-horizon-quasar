@@ -36,7 +36,7 @@ Quasar is the config-controller powering the Horizon ecosystem.
 ## Building Quasar
 ### Go build
 
-Assuming you have already installed [Go](https://go.dev/), simply run the following to build the executable:
+Install [Go](https://go.dev/) 1.26 or newer, then build the executable:
 ```bash
 go build
 ```
@@ -105,21 +105,28 @@ Quasar can be configured using environment variables and/or a configuration file
 | metrics.port                                            | QUASAR_METRICS_PORT                                      | int           | 8080                               | The port for exposing the metrics service.                                                                         |
 | metrics.timeout                                         | QUASAR_METRICS_TIMEOUT                                   | string        | 5s                                 | Timeout of HTTP connections to the metrics service.                                                                |
 | resources                                               | -                                                        | object (list) | []                                 | The custom resources that should be synchronized. See [configuring resources](#configuring-resources) for details. |
+| subscriptionSnapshots.enabled                           | QUASAR_SUBSCRIPTIONSNAPSHOTS_ENABLED                     | bool          | false                              | Enable the independent subscription snapshot worker in either mode.                                                |
+| subscriptionSnapshots.uri                               | QUASAR_SUBSCRIPTIONSNAPSHOTS_URI                         | string        | `""`                               | Dedicated MongoDB URI; required when enabled. Inject credentials through a secret.                                  |
+| subscriptionSnapshots.database                          | QUASAR_SUBSCRIPTIONSNAPSHOTS_DATABASE                    | string        | `""`                               | Explicit MongoDB database for source, snapshots and head; required when enabled.                                    |
+| subscriptionSnapshots.sourceCollection                  | QUASAR_SUBSCRIPTIONSNAPSHOTS_SOURCECOLLECTION            | string        | subscriptions.subscriber.horizon.telekom.de.v1 | MongoDB collection containing the source subscriptions.                                                  |
+| subscriptionSnapshots.snapshotCollection                | QUASAR_SUBSCRIPTIONSNAPSHOTS_SNAPSHOTCOLLECTION          | string        | subscriptions.subscriber.horizon.telekom.de.v1-snapshots | MongoDB collection containing versioned snapshot documents.                                     |
+| subscriptionSnapshots.headCollection                    | QUASAR_SUBSCRIPTIONSNAPSHOTS_HEADCOLLECTION              | string        | subscriptions.subscriber.horizon.telekom.de.v1-head | MongoDB collection containing the active head and recent snapshot history.                           |
+| subscriptionSnapshots.refreshInterval                   | QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHINTERVAL             | string        | 5m                                 | Source scan and retry interval; must be positive.                                                                  |
+| subscriptionSnapshots.minimumRetainedSnapshots          | QUASAR_SUBSCRIPTIONSNAPSHOTS_MINIMUMRETAINEDSNAPSHOTS    | int           | 3                                  | Number of recent versions retained in head history (3-100); ZooKeeper references can protect additional versions.   |
+| subscriptionSnapshots.refreshTimeout                    | QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHTIMEOUT              | string        | 60s                                | Timeout for active snapshot MongoDB work; excludes preload waiting.                                                |
+| subscriptionSnapshots.cleanupTimeout                    | QUASAR_SUBSCRIPTIONSNAPSHOTS_CLEANUPTIMEOUT              | string        | 60s                                | Timeout for snapshot cleanup; must be positive.                                                                   |
+| subscriptionSnapshots.maxSnapshotBytes                  | QUASAR_SUBSCRIPTIONSNAPSHOTS_MAXSNAPSHOTBYTES            | int64         | 67108864                           | Source BSON buffer limit in bytes (64 MiB); not a total RAM limit. Must be positive.                                |
+| subscriptionSnapshots.activationDelay                   | QUASAR_SUBSCRIPTIONSNAPSHOTS_ACTIVATIONDELAY             | string        | 60s                                | Minimum wait after confirmed ZooKeeper prepare; MongoDB fallback does not wait for it.                             |
+| subscriptionSnapshots.zookeeper.addresses               | QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_ADDRESSES         | string (list) | []                                 | ZooKeeper host:port addresses; required when enabled. ENV-only lists are comma-separated.                           |
+| subscriptionSnapshots.zookeeper.basePath                | QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_BASEPATH          | string        | /horizon/subscriptions             | Absolute non-system ZooKeeper base path for persistent prepared and activated nodes.                               |
+| subscriptionSnapshots.zookeeper.sessionTimeout          | QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_SESSIONTIMEOUT    | string        | 10s                                | Requested ZooKeeper session timeout; must be positive.                                                             |
 
-### MongoDB subscription snapshots
+### Subscription snapshots
 
 Quasar can publish versioned MongoDB subscription snapshots in both modes.
-The feature uses a separate client; existing stores, APIs and health checks remain unchanged.
-
-The MongoDB driver handles discovery and primary selection. The worker uses:
-
-- **Majority:** In a replica set, writes require acknowledgment from a majority of
-  members. Reads only return data acknowledged by that majority.
-- **Journaling:** Changes are recorded in the on-disk journal before acknowledgment
-  so they can be recovered after a crash.
-- **Primary reads:** Reads go to the primary, not to potentially lagging replicas.
-- **Causally consistent session:** Later reads see the worker's own acknowledged
-  changes and do not go back to older data states.
+ZooKeeper is required when enabled. Separate clients leave existing stores, APIs
+and health checks unchanged; MongoDB retains majority/journaled writes, primary
+reads and a causally consistent session.
 
 ```yaml
 subscriptionSnapshots:
@@ -134,37 +141,36 @@ subscriptionSnapshots:
   refreshTimeout: 60s
   cleanupTimeout: 60s
   maxSnapshotBytes: 67108864 # 64 MiB source BSON buffer limit, not total RAM usage.
+  activationDelay: 60s
+  zookeeper:
+    addresses: ["127.0.0.1:2181", "127.0.0.1:2182", "127.0.0.1:2183"]
+    basePath: /horizon/subscriptions
+    sessionTimeout: 10s
 ```
 
-**Behavior**
-- Logs enabled/disabled status on startup. When disabled, stored data remains unchanged.
-- When enabled, registers the snapshot shutdown hook before starting provisioning or watcher services.
-  MongoDB initialization and snapshot publishing start in the background immediately.
-  The API and health checks remain independent.
-- Deploy with one replica, autoscaling disabled and `Recreate` as the Kubernetes Deployment strategy
-  to avoid overlapping writers during regular rollouts. This briefly interrupts the API during updates.
-- Client creation and the initial MongoDB ping must succeed; otherwise Quasar exits.
-  Later snapshot processing errors are logged and retried.
-- Initializes validators and indexes on the snapshot/head collections and publishes
-  a full snapshot on every start.
-- After each publication, retains only the latest `minimumRetainedSnapshots` versions
-  and immediately removes other snapshots. The value must be between 3 and 100,
-  keeping the active snapshot and at least its two direct predecessors.
-- If cleanup fails or is interrupted, it is retried on the next refresh, including
-  when the source has not changed. Consumers should compare returned document counts
-  with the head's `documentCount` and reread the head if they differ.
-- Checks snapshot completeness by document count, not stored contents; published
-  snapshot documents are expected to remain unchanged.
-- Scans the source at each refresh interval and compares its SHA-256 hash with the head.
-  Unchanged data creates no revision unless the active snapshot needs repair.
-- Writes the full snapshot under a new `snapshotId`, then atomically updates the head
-  and `recentSnapshots` but only if the previously read head is still current.
-- Rechecks uncertain activations before creating another snapshot or running cleanup,
-  preventing duplicate publications and unsafe deletions.
-  Successful publication logs `snapshotReason`: `initial` (no active snapshot),
-  `snapshot_count_mismatch` (active document count differs from the head), `restart`
-  (startup with a complete active snapshot), or `source_changed` (new source hash
-  during normal operation), in that priority order. 
+**Normal:** Write the complete snapshot, confirm `prepared`, wait at least
+`activationDelay`, confirm the MongoDB head/history CAS, then confirm `activated`.
+Both persistent ZNodes contain exactly `snapshotId`, `sourceHash`, `documentCount`
+and `createdAt`, not subscription documents or history.
+
+**ZooKeeper unavailable:** Continue publishing MongoDB heads without the preload
+delay. Automatically finish any uncertain/fixed ZooKeeper candidate, then catch up
+to the latest confirmed head, without replaying every intermediate version.
+Unknown ZooKeeper references suspend deletion, not MongoDB publishing.
+
+Every startup creates a new snapshot; unchanged source data otherwise creates
+none unless the active document count needs repair. Cleanup preserves MongoDB
+history (3-100 versions), ZooKeeper references and unresolved candidates. Prolonged
+outages can therefore increase MongoDB storage. Initial MongoDB connection failure
+still terminates Quasar; later failures retry at `refreshInterval`.
+
+Use one replica, no autoscaling and `Recreate`; this is not distributed fencing.
+Local/integration ZNodes use unauthenticated `world:anyone` ACLs with all rights,
+not a production security policy.
+
+Environment-only addresses are comma-separated, e.g. `host-a:2181,[::1]:2181`.
+See [architecture and consumer contract](docs/subscription-snapshots.md) for
+recovery, time budgets, safe consumer fallback and rollback restrictions.
 
 ### Configuring resources
 The `resources` configuration option is a list of custom resources that should be synchronized. Each resource has the following fields:

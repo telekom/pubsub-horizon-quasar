@@ -6,6 +6,7 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -20,15 +21,17 @@ import (
 const shutdownTimeout = 10 * time.Second
 
 type service struct {
-	config   config.SubscriptionSnapshots
-	ctx      context.Context
-	cancel   context.CancelFunc
-	done     chan struct{}
-	stopOnce sync.Once
-	client   *mongo.Client
-	session  mongo.Session
-	store    *mongoStore
-	worker   *worker
+	config            config.SubscriptionSnapshots
+	ctx               context.Context
+	cancel            context.CancelFunc
+	done              chan struct{}
+	stopOnce          sync.Once
+	client            *mongo.Client
+	session           mongo.Session
+	store             *mongoStore
+	worker            *worker
+	zooKeeper         zooKeeperTransport
+	mongoRetryBlocked bool
 }
 
 // Start registers shutdown before starting the independent, sequential snapshot worker.
@@ -62,6 +65,9 @@ func logStartup(c config.SubscriptionSnapshots) {
 		Int64("maxSnapshotBytes", c.MaxSnapshotBytes).
 		Str("refreshTimeout", c.RefreshTimeout.String()).
 		Str("cleanupTimeout", c.CleanupTimeout.String()).
+		Str("activationDelay", c.ActivationDelay.String()).
+		Str("zookeeperBasePath", c.ZooKeeper.BasePath).
+		Str("zookeeperClient", "Shopify/zk").
 		Msg("Starting subscription snapshot worker")
 }
 
@@ -73,20 +79,93 @@ func newService(c config.SubscriptionSnapshots) *service {
 func (s *service) run() {
 	defer close(s.done)
 	defer s.disconnect()
+	s.zooKeeper = newZooKeeperClient(s.ctx, s.config.ZooKeeper, s.config.RefreshInterval)
 	refresh := time.NewTicker(s.config.RefreshInterval)
 	defer refresh.Stop()
-	s.loop(refresh.C)
+	s.loop(refresh.C, nil)
 }
 
-func (s *service) loop(refresh <-chan time.Time) {
+func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 	s.attemptRefresh()
+	wakeUsed := false
 	for {
+		var wake <-chan struct{}
+		var timer *time.Timer
+		var activation <-chan time.Time
+		if s.zooKeeper != nil {
+			wake = s.zooKeeper.events()
+		}
+		if s.worker != nil && s.worker.publication != nil {
+			p := s.worker.publication
+			var deadline time.Time
+			if !s.mongoRetryBlocked || p.pending != nil && p.pending.mongoConfirmed {
+				deadline = p.deadline()
+			}
+			if !deadline.IsZero() {
+				timer = time.NewTimer(max(time.Until(deadline), 0))
+				activation = timer.C
+			}
+		}
 		select {
 		case <-s.ctx.Done():
+			stopActivationTimer(timer)
 			return
 		case <-refresh:
+			stopActivationTimer(timer)
+			runLoopActions(actions)
+			wakeUsed = false
+			s.mongoRetryBlocked = false
+			if s.worker != nil && s.worker.publication != nil {
+				s.worker.publication.retryBlocked = false
+			}
 			s.attemptRefresh()
+		case <-activation:
+			runLoopActions(actions)
+			s.attemptPublication()
+			s.cleanupAfterPublication()
+		case <-wake:
+			stopActivationTimer(timer)
+			runLoopActions(actions)
+			wakeUsed = s.connectionWake(wakeUsed)
+		case action := <-actions:
+			stopActivationTimer(timer)
+			action()
 		}
+	}
+}
+
+func runLoopActions(actions <-chan func()) {
+	for {
+		select {
+		case action := <-actions:
+			action()
+		default:
+			return
+		}
+	}
+}
+
+func (s *service) connectionWake(wakeUsed bool) bool {
+	if s.worker == nil || s.worker.publication == nil {
+		return wakeUsed
+	}
+	switch {
+	case !s.zooKeeper.available():
+		s.worker.publication.degrade(zooKeeperError("session", errZooKeeperUnavailable))
+	case wakeUsed:
+		return wakeUsed
+	default:
+		wakeUsed = true
+		s.worker.publication.retryBlocked = false
+	}
+	s.attemptPublication()
+	s.cleanupAfterPublication()
+	return wakeUsed
+}
+
+func stopActivationTimer(timer *time.Timer) {
+	if timer != nil {
+		timer.Stop()
 	}
 }
 
@@ -107,6 +186,9 @@ func (s *service) initialize(ctx context.Context) error {
 			return err
 		}
 		s.worker = newWorker(s.config, s.store)
+	}
+	if s.zooKeeper != nil && s.worker.publication == nil {
+		s.worker.publication = newPublication(s.zooKeeper, s.config.ActivationDelay)
 	}
 	return nil
 }
@@ -146,6 +228,9 @@ func (s *service) attemptRefresh() {
 		err = s.withSession(ctx, s.worker.refreshSnapshot)
 	}
 	cancel()
+	if s.worker != nil && s.worker.publication != nil {
+		s.attemptPublication()
+	}
 	if err != nil {
 		s.logError("refresh", start, err)
 		if s.worker != nil && s.worker.cleanupDue && s.ctx.Err() == nil {
@@ -161,12 +246,85 @@ func (s *service) attemptRefresh() {
 	}
 }
 
+func (s *service) attemptPublication() {
+	p := s.worker.publication
+	if p == nil || s.ctx.Err() != nil {
+		return
+	}
+	if !p.retryBlocked {
+		s.attemptZooKeeper()
+	}
+	mongoPublished := false
+	if s.worker.pending != nil && s.worker.canPublishMongo() && !s.mongoRetryBlocked {
+		ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
+		start := time.Now()
+		err := s.withSession(ctx, s.worker.resolve)
+		cancel()
+		if err != nil {
+			s.mongoRetryBlocked = true
+			p.retryBlocked = true
+			s.logError("activate-mongo", start, err)
+			return
+		}
+		mongoPublished = true
+	}
+	if mongoPublished && p.pending == nil && !p.retryBlocked {
+		s.attemptZooKeeper()
+	}
+	if p.pending != nil && p.pending.mongoConfirmed && !p.retryBlocked &&
+		!p.pending.preparedAt.IsZero() && !time.Now().Before(p.pending.preparedAt.Add(p.delay)) {
+
+		s.attemptZooKeeper()
+	}
+	if s.worker.pending == nil && s.worker.refreshQueued {
+		s.worker.refreshQueued = false
+		s.attemptRefresh()
+	}
+}
+
+func (s *service) attemptZooKeeper() {
+	ctx, cancel := context.WithTimeout(s.ctx, min(zooKeeperIOTimeout, s.config.RefreshTimeout))
+	start := time.Now()
+	err := s.withSession(ctx, s.worker.progressZooKeeper)
+	cancel()
+	if err == nil {
+		return
+	}
+	p := s.worker.publication
+	p.degrade(err)
+	id := p.latest.SnapshotID
+	if p.pending != nil {
+		id = p.pending.value.SnapshotID
+	} else if s.worker.pending != nil {
+		id = s.worker.pending.next.Version.SnapshotID
+	}
+	category := zooKeeperErrorCategory(err)
+	var operationError *zooKeeperOperationError
+	if errors.As(err, &operationError) {
+		category = operationError.category
+	}
+	log.Error().Err(err).Str("operation", "zookeeper").Str("phase", p.phase()).
+		Str("snapshotId", id).Str("errorCategory", category).Dur("durationMs", time.Since(start)).
+		Msg("Subscription snapshot ZooKeeper operation failed")
+}
+
+func (s *service) cleanupAfterPublication() {
+	if s.worker != nil && s.worker.cleanupDue && s.ctx.Err() == nil {
+		s.attemptCleanup()
+	}
+}
+
 func (s *service) attemptCleanup() {
 	ctx, cancel := context.WithTimeout(s.ctx, s.config.CleanupTimeout)
 	start := time.Now()
 	err := s.withSession(ctx, s.worker.cleanupPending)
 	cancel()
 	if err != nil {
+		if errors.Is(err, errCleanupDeferred) {
+			log.Warn().Err(err).Str("operation", "cleanup").Dur("durationMs", time.Since(start)).
+				Msg("Subscription snapshot cleanup deferred")
+			return
+		}
 		s.logError("cleanup", start, err)
 	}
 }
@@ -191,11 +349,16 @@ func (s *service) shutdown() {
 }
 
 func (s *service) disconnect() {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if s.zooKeeper != nil {
+		if err := s.zooKeeper.close(ctx); err != nil {
+			log.Error().Err(err).Msg("Subscription snapshot ZooKeeper disconnect failed")
+		}
+	}
 	if s.client == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
 	if s.session != nil {
 		s.session.EndSession(ctx)
 	}

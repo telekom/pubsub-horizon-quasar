@@ -20,16 +20,28 @@ import (
 )
 
 const (
-	maxDocumentBytes = 16 * 1024 * 1024
-	writeBatchBytes  = 1024 * 1024
-	batchSize        = 500
+	maxDocumentBytes     = 16 * 1024 * 1024
+	writeBatchBytes      = 1024 * 1024
+	batchSize            = 500
+	fieldID              = "_id"
+	fieldSnapshotID      = "snapshotId"
+	fieldSubscriptionID  = "subscriptionId"
+	fieldSourceHash      = "sourceHash"
+	fieldDocumentCount   = "documentCount"
+	fieldCreatedAt       = "createdAt"
+	fieldRecentSnapshots = "recentSnapshots"
+	headID               = "head"
+	simpleCollation      = "simple"
+	schemaBSONType       = "bsonType"
+	schemaProperties     = "properties"
+	schemaString         = "string"
 )
 
 type descriptor struct {
-	SnapshotID    string    `bson:"snapshotId"`
-	SourceHash    string    `bson:"sourceHash"`
-	DocumentCount int64     `bson:"documentCount"`
-	CreatedAt     time.Time `bson:"createdAt"`
+	SnapshotID    string    `bson:"snapshotId"    json:"snapshotId"`
+	SourceHash    string    `bson:"sourceHash"    json:"sourceHash"`
+	DocumentCount int64     `bson:"documentCount" json:"documentCount"`
+	CreatedAt     time.Time `bson:"createdAt"     json:"createdAt"`
 }
 
 type head struct {
@@ -60,7 +72,7 @@ func (b *sourceBuffer) add(raw bson.Raw, limit int64) error {
 	if err := raw.Validate(); err != nil {
 		return errors.New("source contains invalid BSON")
 	}
-	id, ok := raw.Lookup("_id").StringValueOK()
+	id, ok := raw.Lookup(fieldID).StringValueOK()
 	if !ok {
 		return errors.New("source subscription _id must be a BSON string")
 	}
@@ -130,7 +142,7 @@ func wrapDocument(raw bson.Raw, snapshotID string) (bson.Raw, error) {
 	var id string
 	var idCount int
 	for _, element := range elements {
-		if element.Key() == "_id" {
+		if element.Key() == fieldID {
 			var ok bool
 			id, ok = element.Value().StringValueOK()
 			if !ok {
@@ -160,10 +172,10 @@ func wrapDocument(raw bson.Raw, snapshotID string) (bson.Raw, error) {
 
 func decodeHead(raw bson.Raw) (head, error) {
 	var result head
-	if raw.Lookup("_id").Type != bson.TypeString || raw.Lookup("_id").StringValue() != "head" {
+	if raw.Lookup(fieldID).Type != bson.TypeString || raw.Lookup(fieldID).StringValue() != headID {
 		return result, errors.New("head must have the string _id head")
 	}
-	history, ok := raw.Lookup("recentSnapshots").ArrayOK()
+	history, ok := raw.Lookup(fieldRecentSnapshots).ArrayOK()
 	if !ok {
 		return result, errors.New("head recentSnapshots must be a BSON array")
 	}
@@ -171,7 +183,7 @@ func decodeHead(raw bson.Raw) (head, error) {
 	if err != nil || len(values) > config.MaxRetainedSnapshots || len(raw) > maxDocumentBytes {
 		return result, errors.New("head history is invalid or exceeds its size limit")
 	}
-	result.ID = "head"
+	result.ID = headID
 	result.RecentSnapshots = make([]descriptor, 0, len(values))
 	seen := make(map[string]bool, len(values))
 	for _, value := range values {
@@ -185,9 +197,9 @@ func decodeHead(raw bson.Raw) (head, error) {
 		seen[item.SnapshotID] = true
 		result.RecentSnapshots = append(result.RecentSnapshots, item)
 	}
-	if raw.Lookup("snapshotId").Type == 0 {
-		if len(values) != 0 || raw.Lookup("sourceHash").Type != 0 ||
-			raw.Lookup("documentCount").Type != 0 || raw.Lookup("createdAt").Type != 0 {
+	if raw.Lookup(fieldSnapshotID).Type == 0 {
+		if len(values) != 0 || raw.Lookup(fieldSourceHash).Type != 0 ||
+			raw.Lookup(fieldDocumentCount).Type != 0 || raw.Lookup(fieldCreatedAt).Type != 0 {
 
 			return head{}, errors.New("bootstrap head must not contain active metadata or history")
 		}
@@ -206,8 +218,8 @@ func decodeHead(raw bson.Raw) (head, error) {
 
 func decodeDescriptor(value bson.RawValue) (descriptor, error) {
 	raw, ok := value.DocumentOK()
-	if !ok || raw.Lookup("snapshotId").Type != bson.TypeString || raw.Lookup("sourceHash").Type != bson.TypeString ||
-		raw.Lookup("documentCount").Type != bson.TypeInt64 || raw.Lookup("createdAt").Type != bson.TypeDateTime {
+	if !ok || raw.Lookup(fieldSnapshotID).Type != bson.TypeString || raw.Lookup(fieldSourceHash).Type != bson.TypeString ||
+		raw.Lookup(fieldDocumentCount).Type != bson.TypeInt64 || raw.Lookup(fieldCreatedAt).Type != bson.TypeDateTime {
 
 		return descriptor{}, errors.New("snapshot descriptor has missing fields or invalid BSON types")
 	}
@@ -215,17 +227,21 @@ func decodeDescriptor(value bson.RawValue) (descriptor, error) {
 	if err := bson.Unmarshal(raw, &result); err != nil {
 		return result, errors.New("cannot decode snapshot descriptor")
 	}
+	return result, validateDescriptor(result)
+}
+
+func validateDescriptor(result descriptor) error {
 	id, err := canonicalID(result.SnapshotID)
 	if err != nil {
-		return result, err
+		return err
 	}
 	digest, err := hex.DecodeString(result.SourceHash)
 	if err != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != result.SourceHash ||
 		result.DocumentCount < 0 || !result.CreatedAt.Equal(id.Timestamp()) {
 
-		return result, errors.New("snapshot descriptor has an invalid hash, count or creation time")
+		return errors.New("snapshot descriptor has an invalid hash, count or creation time")
 	}
-	return result, nil
+	return nil
 }
 
 func canonicalID(value string) (primitive.ObjectID, error) {
@@ -251,5 +267,5 @@ func proposeHead(previous head, next descriptor, retained int) head {
 	history := make([]descriptor, 0, min(retained, len(previous.RecentSnapshots)+1))
 	history = append(history, next)
 	history = append(history, previous.RecentSnapshots[:min(len(previous.RecentSnapshots), retained-1)]...)
-	return head{ID: "head", Version: next, RecentSnapshots: history}
+	return head{ID: headID, Version: next, RecentSnapshots: history}
 }
