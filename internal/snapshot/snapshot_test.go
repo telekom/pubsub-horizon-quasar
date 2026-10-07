@@ -497,6 +497,7 @@ func TestStartupLogging(t *testing.T) {
 			c.Enabled = enabled
 			c.URI = "mongodb://snapshot-user:test-password@localhost:27017/?authSource=private-auth"
 			c.RefreshInterval = 37 * time.Second
+			c.InitialRefreshDelay = 2 * time.Minute
 			c.MinimumRetainedSnapshots = 4
 			c.MaxSnapshotBytes = 33554432
 			c.RefreshTimeout = 7 * time.Second
@@ -512,6 +513,7 @@ func TestStartupLogging(t *testing.T) {
 					"snapshotCollection":"snapshots",
 					"headCollection":"heads",
 					"refreshInterval":"37s",
+					"initialRefreshDelay":"2m0s",
 					"minimumRetainedSnapshots":4,
 					"maxSnapshotBytes":33554432,
 					"refreshTimeout":"7s",

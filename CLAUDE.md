@@ -93,6 +93,7 @@ golangci-lint run --fix
 
 **Subscription Snapshots** (`internal/snapshot/`):
 - Independent sequential worker in both modes, with dedicated MongoDB and Shopify/zk v1.0.14 clients.
+- Startup always waits `initialRefreshDelay` (default `120s`, `0` disables) before the first source scan/snapshot, including MongoDB fallback. Connection/schema setup stays immediate; after startup, fallback skips only the activation delay.
 - Complete snapshot -> ZooKeeper `prepared` -> activation delay -> MongoDB head/history CAS -> ZooKeeper `activated`.
 - ZooKeeper outages leave MongoDB publication and HTTP readiness independent; bounded retries catch up to the latest confirmed head.
 - Cleanup protects both ZooKeeper references and uncertain candidates; see `docs/subscription-snapshots.md`.

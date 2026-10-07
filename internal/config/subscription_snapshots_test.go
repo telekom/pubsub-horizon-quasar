@@ -7,6 +7,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,10 +21,11 @@ func validSubscriptionSnapshots() SubscriptionSnapshots {
 	return SubscriptionSnapshots{
 		Enabled: true, URI: "mongodb://localhost:27017", Database: "integration-horizon-config",
 		SourceCollection: "source", SnapshotCollection: "snapshots", HeadCollection: "head",
-		RefreshInterval:          5 * time.Minute,
-		MinimumRetainedSnapshots: 3, RefreshTimeout: 2 * time.Minute, CleanupTimeout: 2 * time.Minute,
+		RefreshInterval:          300 * time.Second,
+		InitialRefreshDelay:      120 * time.Second,
+		MinimumRetainedSnapshots: 3, RefreshTimeout: 120 * time.Second, CleanupTimeout: 120 * time.Second,
 		MaxSnapshotBytes: 64 * 1024 * 1024,
-		ActivationDelay:  time.Minute,
+		ActivationDelay:  60 * time.Second,
 		ZooKeeper: SnapshotZooKeeper{
 			Addresses: []string{"localhost:2181"}, BasePath: "/horizon/subscriptions", SessionTimeout: 10 * time.Second,
 		},
@@ -100,6 +102,9 @@ func TestSubscriptionSnapshotsValidation(t *testing.T) {
 		{"collection collision", func(c *SubscriptionSnapshots) { c.HeadCollection = c.SourceCollection }, false},
 		{"namespace too long", func(c *SubscriptionSnapshots) { c.HeadCollection = strings.Repeat("x", 120) }, false},
 		{"refresh", func(c *SubscriptionSnapshots) { c.RefreshInterval = 0 }, false},
+		{"no initial delay", func(c *SubscriptionSnapshots) { c.InitialRefreshDelay = 0 }, true},
+		{"initial delay", func(c *SubscriptionSnapshots) { c.InitialRefreshDelay = 120 * time.Second }, true},
+		{"negative initial delay", func(c *SubscriptionSnapshots) { c.InitialRefreshDelay = -time.Second }, false},
 		{"refresh timeout", func(c *SubscriptionSnapshots) { c.RefreshTimeout = 0 }, false},
 		{"cleanup timeout", func(c *SubscriptionSnapshots) { c.CleanupTimeout = 0 }, false},
 		{"payload size", func(c *SubscriptionSnapshots) { c.MaxSnapshotBytes = 0 }, false},
@@ -139,8 +144,9 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	uri := "mongodb://snapshot-user:test-password@other-host:27017/?authSource=snapshot-auth"
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_URI", uri)
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_DATABASE", "test-horizon-config")
-	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHINTERVAL", "9m")
-	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHTIMEOUT", "3m")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHINTERVAL", "540s")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_INITIALREFRESHDELAY", "150s")
+	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_REFRESHTIMEOUT", "180s")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ACTIVATIONDELAY", "45s")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_ADDRESSES", "host-a:2181,[::1]:2182")
 	t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_ZOOKEEPER_BASEPATH", "/test/subscriptions")
@@ -155,14 +161,15 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	require.Equal(t, "snapshot-user", clientOptions.Auth.Username)
 	require.Equal(t, "test-password", clientOptions.Auth.Password)
 	require.Equal(t, "snapshot-auth", clientOptions.Auth.AuthSource)
-	require.Equal(t, 9*time.Minute, c.SubscriptionSnapshots.RefreshInterval)
-	require.Equal(t, 3*time.Minute, c.SubscriptionSnapshots.RefreshTimeout)
+	require.Equal(t, 540*time.Second, c.SubscriptionSnapshots.RefreshInterval)
+	require.Equal(t, 150*time.Second, c.SubscriptionSnapshots.InitialRefreshDelay)
+	require.Equal(t, 180*time.Second, c.SubscriptionSnapshots.RefreshTimeout)
 	require.Equal(t, 45*time.Second, c.SubscriptionSnapshots.ActivationDelay)
 	require.Equal(t, []string{"host-a:2181", "[::1]:2182"}, c.SubscriptionSnapshots.ZooKeeper.Addresses)
 	require.Equal(t, "/test/subscriptions", c.SubscriptionSnapshots.ZooKeeper.BasePath)
 	require.Equal(t, 12*time.Second, c.SubscriptionSnapshots.ZooKeeper.SessionTimeout)
 	require.Equal(t, 3, c.SubscriptionSnapshots.MinimumRetainedSnapshots)
-	require.Equal(t, time.Minute, c.SubscriptionSnapshots.CleanupTimeout)
+	require.Equal(t, 60*time.Second, c.SubscriptionSnapshots.CleanupTimeout)
 	require.Equal(t, int64(64*1024*1024), c.SubscriptionSnapshots.MaxSnapshotBytes)
 	require.Equal(t, "mongodb://localhost:27017", c.Store.Mongo.Uri)
 	require.Equal(t, "mongodb://localhost:27017", c.Fallback.Mongo.Uri)
@@ -178,10 +185,67 @@ func TestSubscriptionSnapshotsDisabledDefaults(t *testing.T) {
 	require.Empty(t, c.SubscriptionSnapshots.URI)
 	require.Empty(t, c.SubscriptionSnapshots.Database)
 	require.Empty(t, c.SubscriptionSnapshots.ZooKeeper.Addresses)
-	require.Equal(t, time.Minute, c.SubscriptionSnapshots.ActivationDelay)
+	require.Equal(t, 300*time.Second, c.SubscriptionSnapshots.RefreshInterval)
+	require.Equal(t, 120*time.Second, c.SubscriptionSnapshots.InitialRefreshDelay)
+	require.Equal(t, 60*time.Second, c.SubscriptionSnapshots.RefreshTimeout)
+	require.Equal(t, 60*time.Second, c.SubscriptionSnapshots.CleanupTimeout)
+	require.Equal(t, 60*time.Second, c.SubscriptionSnapshots.ActivationDelay)
 	require.Equal(t, "/horizon/subscriptions", c.SubscriptionSnapshots.ZooKeeper.BasePath)
 	require.Equal(t, 10*time.Second, c.SubscriptionSnapshots.ZooKeeper.SessionTimeout)
 	require.NoError(t, c.SubscriptionSnapshots.Validate())
+}
+
+func TestSubscriptionSnapshotsDurationDefaultsInSeconds(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	setDefaults()
+	filename := filepath.Join(t.TempDir(), "config.yml")
+	require.NoError(t, viper.SafeWriteConfigAs(filename))
+	persisted := viper.New()
+	persisted.SetConfigFile(filename)
+	require.NoError(t, persisted.ReadInConfig())
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{"subscriptionSnapshots.refreshInterval", "300s"},
+		{"subscriptionSnapshots.initialRefreshDelay", "120s"},
+		{"subscriptionSnapshots.refreshTimeout", "60s"},
+		{"subscriptionSnapshots.cleanupTimeout", "60s"},
+		{"subscriptionSnapshots.activationDelay", "60s"},
+		{"subscriptionSnapshots.zookeeper.sessionTimeout", "10s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			require.Equal(t, tt.want, viper.Get(tt.key))
+			require.Equal(t, tt.want, persisted.Get(tt.key))
+		})
+	}
+}
+
+func TestSubscriptionSnapshotsInitialRefreshDelayEnvironment(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  time.Duration
+	}{
+		{"zero", "0", 0},
+		{"zero seconds", "0s", 0},
+		{"seconds", "150s", 150 * time.Second},
+		{"legacy minute syntax", "2m30s", 150 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+			setDefaults()
+			viper.AutomaticEnv()
+			t.Setenv("QUASAR_SUBSCRIPTIONSNAPSHOTS_INITIALREFRESHDELAY", tt.value)
+			var c Configuration
+			require.NoError(t, viper.Unmarshal(&c))
+			require.Equal(t, tt.want, c.SubscriptionSnapshots.InitialRefreshDelay)
+		})
+	}
 }
 
 func TestSubscriptionSnapshotsZooKeeperValidation(t *testing.T) {

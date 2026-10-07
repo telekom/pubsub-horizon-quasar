@@ -32,6 +32,8 @@ type service struct {
 	worker            *worker
 	zooKeeper         zooKeeperTransport
 	mongoRetryBlocked bool
+
+	initialRefreshDeadline time.Time
 }
 
 // Start registers shutdown before starting the independent, sequential snapshot worker.
@@ -61,6 +63,7 @@ func logStartup(c config.SubscriptionSnapshots) {
 		Str("snapshotCollection", c.SnapshotCollection).
 		Str("headCollection", c.HeadCollection).
 		Str("refreshInterval", c.RefreshInterval.String()).
+		Str("initialRefreshDelay", c.InitialRefreshDelay.String()).
 		Int("minimumRetainedSnapshots", c.MinimumRetainedSnapshots).
 		Int64("maxSnapshotBytes", c.MaxSnapshotBytes).
 		Str("refreshTimeout", c.RefreshTimeout.String()).
@@ -86,6 +89,9 @@ func (s *service) run() {
 }
 
 func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
+	if s.config.InitialRefreshDelay > 0 {
+		s.initialRefreshDeadline = time.Now().Add(s.config.InitialRefreshDelay)
+	}
 	s.attemptRefresh()
 	wakeUsed := false
 	for {
@@ -95,16 +101,9 @@ func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 		if s.zooKeeper != nil {
 			wake = s.zooKeeper.events()
 		}
-		if s.worker != nil && s.worker.publication != nil {
-			p := s.worker.publication
-			var deadline time.Time
-			if !s.mongoRetryBlocked || p.pending != nil && p.pending.mongoConfirmed {
-				deadline = p.deadline()
-			}
-			if !deadline.IsZero() {
-				timer = time.NewTimer(max(time.Until(deadline), 0))
-				activation = timer.C
-			}
+		if deadline := s.nextDeadline(); !deadline.IsZero() {
+			timer = time.NewTimer(max(time.Until(deadline), 0))
+			activation = timer.C
 		}
 		select {
 		case <-s.ctx.Done():
@@ -114,14 +113,12 @@ func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 			stopActivationTimer(timer)
 			runLoopActions(actions)
 			wakeUsed = false
-			s.mongoRetryBlocked = false
-			if s.worker != nil && s.worker.publication != nil {
-				s.worker.publication.retryBlocked = false
-			}
-			s.attemptRefresh()
+			s.attemptPeriodicRefresh()
 		case <-activation:
 			runLoopActions(actions)
-			s.attemptPublication()
+			if s.attemptDeadline(refresh) {
+				wakeUsed = false
+			}
 			s.cleanupAfterPublication()
 		case <-wake:
 			stopActivationTimer(timer)
@@ -132,6 +129,46 @@ func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 			action()
 		}
 	}
+}
+
+func (s *service) nextDeadline() time.Time {
+	deadline := s.initialRefreshDeadline
+	if s.worker != nil && s.worker.publication != nil {
+		p := s.worker.publication
+		if !s.mongoRetryBlocked || p.pending != nil && p.pending.mongoConfirmed {
+			if next := p.deadline(); !next.IsZero() && (deadline.IsZero() || next.Before(deadline)) {
+				deadline = next
+			}
+		}
+	}
+	return deadline
+}
+
+func (s *service) attemptPeriodicRefresh() {
+	s.finishInitialRefreshDelay()
+	s.mongoRetryBlocked = false
+	if s.worker != nil && s.worker.publication != nil {
+		s.worker.publication.retryBlocked = false
+	}
+	s.attemptRefresh()
+}
+
+func (s *service) attemptDeadline(refresh <-chan time.Time) bool {
+	if !s.finishInitialRefreshDelay() {
+		s.attemptPublication()
+		return false
+	}
+	select {
+	case <-refresh:
+		s.attemptPeriodicRefresh()
+		return true
+	default:
+	}
+	if s.worker != nil && s.worker.publication != nil {
+		s.worker.publication.retryBlocked = false
+	}
+	s.attemptRefresh()
+	return false
 }
 
 func runLoopActions(actions <-chan func()) {
@@ -146,11 +183,12 @@ func runLoopActions(actions <-chan func()) {
 }
 
 func (s *service) connectionWake(wakeUsed bool) bool {
-	if s.worker == nil || s.worker.publication == nil {
+	if s.worker == nil || s.worker.publication == nil || s.initialRefreshWaiting() {
 		return wakeUsed
 	}
 	switch {
 	case !s.zooKeeper.available():
+		wakeUsed = false
 		s.worker.publication.degrade(zooKeeperError("session", errZooKeeperUnavailable))
 	case wakeUsed:
 		return wakeUsed
@@ -159,8 +197,22 @@ func (s *service) connectionWake(wakeUsed bool) bool {
 		s.worker.publication.retryBlocked = false
 	}
 	s.attemptPublication()
-	s.cleanupAfterPublication()
+	if s.zooKeeper.available() {
+		s.cleanupAfterPublication()
+	}
 	return wakeUsed
+}
+
+func (s *service) initialRefreshWaiting() bool {
+	return !s.initialRefreshDeadline.IsZero() && time.Now().Before(s.initialRefreshDeadline)
+}
+
+func (s *service) finishInitialRefreshDelay() bool {
+	if s.initialRefreshDeadline.IsZero() || time.Now().Before(s.initialRefreshDeadline) {
+		return false
+	}
+	s.initialRefreshDeadline = time.Time{}
+	return true
 }
 
 func stopActivationTimer(timer *time.Timer) {
@@ -224,7 +276,14 @@ func (s *service) attemptRefresh() {
 	ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
 	start := time.Now()
 	err := s.initialize(ctx)
+	if err == nil && s.initialRefreshWaiting() {
+		cancel()
+		log.Debug().Time("notBefore", s.initialRefreshDeadline).
+			Msg("Subscription snapshot initial refresh waiting for startup delay")
+		return
+	}
 	if err == nil {
+		s.finishInitialRefreshDelay()
 		err = s.withSession(ctx, s.worker.refreshSnapshot)
 	}
 	cancel()
@@ -248,7 +307,7 @@ func (s *service) attemptRefresh() {
 
 func (s *service) attemptPublication() {
 	p := s.worker.publication
-	if p == nil || s.ctx.Err() != nil {
+	if p == nil || s.ctx.Err() != nil || s.initialRefreshWaiting() {
 		return
 	}
 	if !p.retryBlocked {

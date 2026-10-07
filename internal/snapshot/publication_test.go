@@ -20,6 +20,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
+	"github.com/telekom/quasar/internal/config"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -95,6 +96,13 @@ func publicationService(t *testing.T, interval time.Duration) (*scheduledService
 	c := testConfig()
 	c.RefreshInterval = interval
 	c.RefreshTimeout = 30 * time.Second
+	return configuredPublicationService(t, c, store, transport), store, transport
+}
+
+func configuredPublicationService(
+	t *testing.T, c config.SubscriptionSnapshots, store *fakeStore, transport *fakeZooKeeper,
+) *scheduledService {
+	t.Helper()
 	s := &scheduledService{service: newService(c), actions: make(chan func(), 1)}
 	s.client, s.store, s.session = &mongo.Client{}, &mongoStore{}, &fakeSession{}
 	s.worker = newWorker(c, store)
@@ -102,13 +110,13 @@ func publicationService(t *testing.T, interval time.Duration) (*scheduledService
 	s.worker.publication = newPublication(transport, c.ActivationDelay)
 	go func() {
 		defer close(s.done)
-		refresh := time.NewTicker(interval)
+		refresh := time.NewTicker(c.RefreshInterval)
 		defer refresh.Stop()
 		s.loop(refresh.C, s.actions)
 	}()
 	t.Cleanup(s.shutdown)
 	synctest.Wait()
-	return s, store, transport
+	return s
 }
 
 func signalZooKeeper(f *fakeZooKeeper, online bool) {
@@ -192,9 +200,17 @@ func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 		s, store, z := publicationService(t, 20*time.Second)
 		b := z.nodes["prepared"].value
 		preparedAt := s.worker.publication.pending.preparedAt
+		headReads := 0
+		store.beforeHead = func(context.Context) error {
+			headReads++
+			return nil
+		}
 		signalZooKeeper(z, false)
 		synctest.Wait()
 		require.True(t, sameDescriptor(b, store.current.Version), "fallback must not wait for activation delay")
+		require.Equal(t, 1, headReads, "offline wake must read the head only for MongoDB publication, not cleanup")
+		require.True(t, s.worker.cleanupDue, "offline wake must leave cleanup pending")
+		store.beforeHead = nil
 		store.source[0] = sourceDocument(t, "a", "newer C")
 		s.advance(20 * time.Second)
 		synctest.Wait()
@@ -220,6 +236,104 @@ func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 		require.True(t, sameDescriptor(c, z.nodes["activated"].value))
 		require.True(t, sameDescriptor(g, z.nodes["prepared"].value))
 		require.True(t, sameDescriptor(g, store.current.Version))
+		s.shutdown()
+	})
+}
+
+func TestPublicationOfflineWakesDeferCleanupUntilRefresh(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s, store, z := publicationService(t, 300*time.Second)
+		s.advance(s.config.ActivationDelay)
+		synctest.Wait()
+		cleanups, sourceReads := store.cleanups, store.sourceReads
+		orphan := testDescriptor(time.Now().Add(-time.Hour), 1)
+		store.versions[orphan.SnapshotID] = 1
+		s.worker.cleanupDue = true
+		headReads := 0
+		store.beforeHead = func(context.Context) error {
+			headReads++
+			return nil
+		}
+		var output bytes.Buffer
+		previous := log.Logger
+		log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
+		t.Cleanup(func() { log.Logger = previous })
+		for range 10 {
+			signalZooKeeper(z, false)
+			synctest.Wait()
+		}
+		require.Zero(t, headReads, "offline SDK chatter must not trigger cleanup head reads")
+		require.NotContains(t, output.String(), "Subscription snapshot cleanup deferred")
+		require.True(t, s.worker.cleanupDue)
+		require.Equal(t, cleanups, store.cleanups)
+		require.Contains(t, store.versions, orphan.SnapshotID)
+
+		s.advance(s.config.RefreshInterval - s.config.ActivationDelay - time.Nanosecond)
+		synctest.Wait()
+		require.Zero(t, headReads, "cleanup must remain deferred until the refresh tick")
+		s.advance(time.Nanosecond)
+		synctest.Wait()
+		require.Equal(t, 2, headReads, "refresh and one cleanup retry each read the head")
+		require.Equal(t, sourceReads+1, store.sourceReads)
+		require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot cleanup deferred")))
+		require.True(t, s.worker.cleanupDue)
+		require.Equal(t, cleanups, store.cleanups)
+		require.Contains(t, store.versions, orphan.SnapshotID)
+
+		for range 10 {
+			signalZooKeeper(z, false)
+			synctest.Wait()
+		}
+		require.Equal(t, 2, headReads, "later offline events must not repeat the tick's cleanup attempt")
+		require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot cleanup deferred")))
+		s.shutdown()
+	})
+}
+
+func TestPublicationRecoveryAfterUsedWakeResumesCleanup(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s, store, z := publicationService(t, 300*time.Second)
+		s.advance(s.config.ActivationDelay)
+		synctest.Wait()
+		signalZooKeeper(z, true)
+		synctest.Wait()
+		cleanups, sourceReads := store.cleanups, store.sourceReads
+		inserts, activations := store.inserts, store.activations
+		orphan := testDescriptor(time.Now().Add(-time.Hour), 1)
+		store.versions[orphan.SnapshotID] = 1
+		s.worker.cleanupDue = true
+		signalZooKeeper(z, false)
+		synctest.Wait()
+		require.True(t, s.worker.cleanupDue)
+		require.True(t, s.worker.publication.degraded)
+		require.Equal(t, cleanups, store.cleanups)
+		require.Contains(t, store.versions, orphan.SnapshotID)
+
+		z.session++
+		signalZooKeeper(z, true)
+		synctest.Wait()
+		require.False(t, s.worker.cleanupDue, "recovery must not wait for the refresh tick after an earlier online wake")
+		require.False(t, s.worker.publication.degraded)
+		require.Equal(t, cleanups+1, store.cleanups)
+		require.NotContains(t, store.versions, orphan.SnapshotID)
+		require.Equal(t, sourceReads, store.sourceReads)
+		require.Equal(t, inserts, store.inserts)
+		require.Equal(t, activations, store.activations)
+		require.Len(t, z.writes, 2, "recovery of synchronized nodes must not rewrite them")
+
+		s.worker.cleanupDue = true
+		headReads := 0
+		store.beforeHead = func(context.Context) error {
+			headReads++
+			return nil
+		}
+		for range 10 {
+			signalZooKeeper(z, true)
+			synctest.Wait()
+		}
+		require.Zero(t, headReads, "repeated online events must still respect the consumed wake budget")
+		require.Equal(t, cleanups+1, store.cleanups)
+		require.True(t, s.worker.cleanupDue)
 		s.shutdown()
 	})
 }

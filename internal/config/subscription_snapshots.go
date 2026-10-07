@@ -27,6 +27,7 @@ type SubscriptionSnapshots struct {
 	SnapshotCollection       string            `mapstructure:"snapshotCollection"`
 	HeadCollection           string            `mapstructure:"headCollection"`
 	RefreshInterval          time.Duration     `mapstructure:"refreshInterval"`
+	InitialRefreshDelay      time.Duration     `mapstructure:"initialRefreshDelay"`
 	MinimumRetainedSnapshots int               `mapstructure:"minimumRetainedSnapshots"`
 	RefreshTimeout           time.Duration     `mapstructure:"refreshTimeout"`
 	CleanupTimeout           time.Duration     `mapstructure:"cleanupTimeout"`
@@ -42,6 +43,8 @@ type SnapshotZooKeeper struct {
 }
 
 func setSubscriptionSnapshotsDefaults() {
+	const defaultTimeout = "60s"
+
 	defaults := map[string]any{
 		"enabled":                  false,
 		"uri":                      "",
@@ -49,12 +52,13 @@ func setSubscriptionSnapshotsDefaults() {
 		"sourceCollection":         "subscriptions.subscriber.horizon.telekom.de.v1",
 		"snapshotCollection":       "subscriptions.subscriber.horizon.telekom.de.v1-snapshots",
 		"headCollection":           "subscriptions.subscriber.horizon.telekom.de.v1-head",
-		"refreshInterval":          "5m",
+		"refreshInterval":          "300s",
+		"initialRefreshDelay":      "120s",
 		"minimumRetainedSnapshots": 3,
-		"refreshTimeout":           "60s",
-		"cleanupTimeout":           "60s",
+		"refreshTimeout":           defaultTimeout,
+		"cleanupTimeout":           defaultTimeout,
 		"maxSnapshotBytes":         int64(64 * 1024 * 1024),
-		"activationDelay":          time.Minute,
+		"activationDelay":          "60s",
 		"zookeeper.addresses":      []string{},
 		"zookeeper.basePath":       "/horizon/subscriptions",
 		"zookeeper.sessionTimeout": "10s",
@@ -80,6 +84,9 @@ func (c SubscriptionSnapshots) Validate() error {
 	}
 	if c.RefreshInterval <= 0 || c.RefreshTimeout <= 0 || c.CleanupTimeout <= 0 {
 		return errors.New("subscriptionSnapshots refreshInterval, refreshTimeout and cleanupTimeout must be positive")
+	}
+	if c.InitialRefreshDelay < 0 {
+		return errors.New("subscriptionSnapshots.initialRefreshDelay must not be negative")
 	}
 	if c.MaxSnapshotBytes <= 0 {
 		return errors.New("subscriptionSnapshots.maxSnapshotBytes must be positive")
