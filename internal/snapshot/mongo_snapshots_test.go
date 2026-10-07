@@ -11,134 +11,179 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
-	"strings"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
-	"github.com/telekom/quasar/internal/config"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type fakeStore struct {
-	current      head
-	source       []bson.Raw
-	versions     map[string]int64
-	inserts      int
-	activations  int
-	deletions    []string
-	readError    error
-	sourceError  error
-	insertError  error
-	activation   func(string, head) (bool, error)
-	beforeDelete func()
-	sourceReads  int
-	cleanups     int
-	beforeHead   func(context.Context) error
-	beforeRead   func(context.Context) error
-}
+func testMongoCrashRecovery(t *testing.T, uri string) {
+	for _, phase := range []string{"mid-build", "before activation", "activation acknowledgement lost"} {
+		t.Run(phase, func(t *testing.T) {
+			client, store, w := mongoFixture(t, uri)
+			ctx := t.Context()
+			for range 3 {
+				require.NoError(t, newWorker(w.config, store).refresh(ctx))
+			}
+			before, err := store.readHead(ctx)
+			require.NoError(t, err)
+			var candidate string
+			faults := crashFaults(store, phase, &candidate)
+			crashed := newWorker(w.config, faults)
+			require.Error(t, crashed.refresh(ctx))
+			afterCrash, err := store.readHead(ctx)
+			require.NoError(t, err)
+			if phase == "activation acknowledgement lost" {
+				require.Equal(t, candidate, afterCrash.Version.SnapshotID)
+				require.Equal(t, before.Version, afterCrash.RecentSnapshots[1])
+			} else {
+				require.True(t, sameHead(before, afterCrash))
+			}
+			expectedRows := int64(3)
+			if phase == "mid-build" {
+				expectedRows = 1
+			}
+			rows, err := store.countSnapshot(ctx, candidate)
+			require.NoError(t, err)
+			require.Equal(t, expectedRows, rows)
 
-func testConfig() config.SubscriptionSnapshots {
-	return config.SubscriptionSnapshots{
-		Enabled: true, URI: "mongodb://localhost:27017", Database: "test-horizon-config",
-		SourceCollection: "subscriptions", SnapshotCollection: "snapshots", HeadCollection: "heads",
-		RefreshInterval:          time.Minute,
-		MinimumRetainedSnapshots: 3, RefreshTimeout: 10 * time.Second, CleanupTimeout: 2 * time.Minute,
-		MaxSnapshotBytes: 64 * 1024 * 1024,
-		ActivationDelay:  time.Minute,
-		ZooKeeper: config.SnapshotZooKeeper{
-			Addresses: []string{"localhost:2181"}, BasePath: "/horizon/subscriptions", SessionTimeout: 10 * time.Second,
-		},
+			// Lose all process-local proposal/orphan state while preserving only MongoDB data.
+			reopened := newMongoStore(client, w.config)
+			restarted := newWorker(w.config, reopened)
+			require.Error(t, restarted.cleanup(ctx))
+			require.NoError(t, restarted.refresh(ctx))
+			active, err := reopened.readHead(ctx)
+			require.NoError(t, err)
+			require.NotEqual(t, candidate, active.Version.SnapshotID)
+			require.Equal(t, afterCrash.RecentSnapshots[:2], active.RecentSnapshots[1:])
+			require.Equal(t, int64(3), active.Version.DocumentCount)
+			verifyRecoveredCleanup(t, restarted, reopened, candidate, phase == "activation acknowledgement lost")
+		})
 	}
 }
 
-func newFakeStore(t *testing.T) *fakeStore {
-	return &fakeStore{
-		current: head{ID: "head", RecentSnapshots: []descriptor{}},
-		source:  []bson.Raw{sourceDocument(t, "a", "initial")}, versions: make(map[string]int64),
-	}
-}
-
-func (f *fakeStore) readHead(ctx context.Context) (head, error) {
-	if f.beforeHead != nil {
-		if err := f.beforeHead(ctx); err != nil {
-			return head{}, err
+func crashFaults(store *mongoStore, phase string, candidate *string) *faultStore {
+	faults := &faultStore{snapshotStore: store}
+	faults.insert = func(ctx context.Context, id string, source *sourceBuffer) error {
+		*candidate = id
+		if phase == "mid-build" {
+			source = &sourceBuffer{documents: source.documents[:1]}
 		}
-	}
-	return f.current, f.readError
-}
-
-func (f *fakeStore) readSource(ctx context.Context, limit int64) (*sourceBuffer, error) {
-	f.sourceReads++
-	if f.beforeRead != nil {
-		if err := f.beforeRead(ctx); err != nil {
-			return nil, err
-		}
-	}
-	if f.sourceError != nil {
-		return nil, f.sourceError
-	}
-	buffer := newSourceBuffer()
-	for _, document := range f.source {
-		if err := buffer.add(document, limit); err != nil {
-			return nil, err
-		}
-	}
-	return buffer, nil
-}
-
-func (f *fakeStore) insertSnapshot(_ context.Context, id string, source *sourceBuffer) error {
-	f.inserts++
-	f.versions[id] = int64(len(source.documents))
-	return f.insertError
-}
-
-func (f *fakeStore) activate(_ context.Context, expected string, next head) (bool, error) {
-	f.activations++
-	if f.activation != nil {
-		return f.activation(expected, next)
-	}
-	return f.apply(expected, next), nil
-}
-
-func (f *fakeStore) apply(expected string, next head) bool {
-	if f.current.Version.SnapshotID != expected {
-		return false
-	}
-	f.current = next
-	return true
-}
-
-func (f *fakeStore) countSnapshot(_ context.Context, id string) (int64, error) {
-	return f.versions[id], nil
-}
-
-func (f *fakeStore) visitSnapshotIDs(_ context.Context, visit func(string) error) error {
-	f.cleanups++
-	var ids []string
-	for id := range f.versions {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	for _, id := range ids {
-		if err := visit(id); err != nil {
+		if err := store.insertSnapshot(ctx, id, source); err != nil {
 			return err
 		}
+		if phase != "activation acknowledgement lost" {
+			return context.Canceled
+		}
+		return nil
 	}
-	return nil
+	faults.cas = func(ctx context.Context, previous string, next head) (bool, error) {
+		matched, err := store.activate(ctx, previous, next)
+		if err != nil || !matched {
+			return matched, err
+		}
+		return false, context.DeadlineExceeded
+	}
+	return faults
 }
 
-func (f *fakeStore) deleteBatch(_ context.Context, id string) (int64, error) {
-	if f.beforeDelete != nil {
-		f.beforeDelete()
+func verifyRecoveredCleanup(t *testing.T, w *worker, store *mongoStore, candidate string, activated bool) {
+	t.Helper()
+	ctx := t.Context()
+	active, err := store.readHead(ctx)
+	require.NoError(t, err)
+	rows, err := store.countSnapshot(ctx, candidate)
+	require.NoError(t, err)
+	if activated {
+		require.Equal(t, int64(3), rows, "successfully activated predecessor must stay protected")
+	} else {
+		require.Zero(t, rows, "unpublished orphan is removed immediately after the new snapshot is activated")
+		require.False(t, containsSnapshot(active, candidate))
 	}
-	count := f.versions[id]
-	delete(f.versions, id)
-	f.deletions = append(f.deletions, id)
-	return count, nil
+	for _, version := range active.RecentSnapshots {
+		rows, err := store.countSnapshot(ctx, version.SnapshotID)
+		require.NoError(t, err)
+		require.Equal(t, version.DocumentCount, rows)
+	}
+}
+
+func testMongoInterruptedCleanup(t *testing.T, uri string) {
+	for _, lostAcknowledgement := range []bool{false, true} {
+		t.Run(strconv.FormatBool(lostAcknowledgement), func(t *testing.T) {
+			_, store, w := mongoFixture(t, uri)
+			ctx := t.Context()
+			require.NoError(t, w.refresh(ctx))
+			before, err := store.readHead(ctx)
+			require.NoError(t, err)
+			expired := primitive.NewObjectIDFromTimestamp(time.Now().Add(-8 * 24 * time.Hour)).Hex()
+			buffer := newSourceBuffer()
+			for i := range 2*batchSize + 5 {
+				buffer.documents = append(buffer.documents, sourceDocument(t, strconv.Itoa(i), "orphan"))
+			}
+			require.NoError(t, store.insertSnapshot(ctx, expired, buffer))
+			calls := 0
+			faults := &faultStore{snapshotStore: store}
+			faults.delete = func(ctx context.Context, id string) (int64, error) {
+				calls++
+				if !lostAcknowledgement && calls == 2 {
+					return 0, context.Canceled
+				}
+				count, err := store.deleteBatch(ctx, id)
+				if err == nil && lostAcknowledgement {
+					return 0, context.DeadlineExceeded
+				}
+				return count, err
+			}
+			w.store = faults
+			require.Error(t, w.cleanup(ctx))
+			remaining, err := store.countSnapshot(ctx, expired)
+			require.NoError(t, err)
+			require.Equal(t, int64(batchSize+5), remaining, "first batch deleted, remainder must be retryable")
+			afterFailure, err := store.readHead(ctx)
+			require.NoError(t, err)
+			require.True(t, sameHead(before, afterFailure))
+			w.store = store
+			require.NoError(t, w.cleanup(ctx))
+			remaining, err = store.countSnapshot(ctx, expired)
+			require.NoError(t, err)
+			require.Zero(t, remaining)
+			afterRetry, err := store.readHead(ctx)
+			require.NoError(t, err)
+			require.True(t, sameHead(before, afterRetry))
+			count, err := store.countSnapshot(ctx, before.Version.SnapshotID)
+			require.NoError(t, err)
+			require.Equal(t, before.Version.DocumentCount, count)
+		})
+	}
+}
+
+func TestMutationAfterSourceScanUsesBufferedDocuments(t *testing.T) {
+	ctx := t.Context()
+	store := newFakeStore(t)
+	original := sourceDocument(t, "a", "initial")
+	var published bson.Raw
+	faults := &faultStore{snapshotStore: store}
+	faults.insert = func(ctx context.Context, id string, source *sourceBuffer) error {
+		published = append(bson.Raw(nil), source.documents[0]...)
+		store.source[0] = sourceDocument(t, "a", "changed during build")
+		return store.insertSnapshot(ctx, id, source)
+	}
+	w := newWorker(testConfig(), faults)
+	require.NoError(t, w.refresh(ctx))
+	require.Equal(t, original, published)
+	initial := newSourceBuffer()
+	require.NoError(t, initial.add(original, 1024))
+	require.Equal(t, initial.sourceHash(), store.current.Version.SourceHash)
+	oldID := store.current.Version.SnapshotID
+	w.store = store
+	require.NoError(t, w.refresh(ctx))
+	require.NotEqual(t, oldID, store.current.Version.SnapshotID)
+	require.NotEqual(t, initial.sourceHash(), store.current.Version.SourceHash)
 }
 
 func TestRefreshAndRestart(t *testing.T) {
@@ -293,7 +338,7 @@ func TestRefreshFailurePreservesHead(t *testing.T) {
 			}
 			require.Error(t, w.refresh(context.Background()))
 			require.True(t, sameHead(old, store.current))
-			require.Nil(t, w.pending)
+			require.Nil(t, w.proposal)
 			if failure == "insert" {
 				orphan := w.abandoned
 				require.NotEmpty(t, orphan)
@@ -326,7 +371,7 @@ func TestUncertainActivation(t *testing.T) {
 				return false, context.DeadlineExceeded
 			}
 			require.Error(t, w.refresh(ctx))
-			require.NotNil(t, w.pending)
+			require.NotNil(t, w.proposal)
 			require.Error(t, w.cleanup(ctx))
 			require.Empty(t, store.deletions)
 			store.source[0] = sourceDocument(t, "a", "must not rebuild pending candidate")
@@ -344,7 +389,7 @@ func TestUncertainActivation(t *testing.T) {
 			require.True(t, sameHead(candidate, store.current))
 			require.Equal(t, 1, store.inserts)
 			require.Len(t, store.current.RecentSnapshots, 1)
-			require.Nil(t, w.pending)
+			require.Nil(t, w.proposal)
 		})
 	}
 }
@@ -458,96 +503,4 @@ func TestResetHeadDoesNotLoseHistory(t *testing.T) {
 	require.ErrorContains(t, w.cleanup(ctx), "reset to bootstrap")
 	require.Equal(t, 1, store.inserts)
 	require.Empty(t, store.deletions)
-}
-
-func TestDisabledServiceHasNoSideEffects(t *testing.T) {
-	var output bytes.Buffer
-	previousLogger := log.Logger
-	log.Logger = zerolog.New(&output)
-	t.Cleanup(func() { log.Logger = previousLogger })
-
-	require.NoError(t, Start(config.SubscriptionSnapshots{}))
-	require.JSONEq(t, `{"level":"info","enabled":false,"message":"Subscription snapshots disabled"}`, output.String())
-	output.Reset()
-	disabled := testConfig()
-	disabled.Enabled = false
-	disabled.URI = "mongodb+srv://example.invalid:27017/?journal=false"
-	require.NoError(t, Start(disabled), "disabled snapshots must not parse or connect to MongoDB")
-	require.JSONEq(t, `{"level":"info","enabled":false,"message":"Subscription snapshots disabled"}`, output.String())
-	output.Reset()
-	invalid := testConfig()
-	invalid.URI = ""
-	require.Error(t, Start(invalid))
-	require.Empty(t, output.String(), "invalid configuration must not announce startup")
-}
-
-func TestStartupLogging(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		name := "disabled"
-		if enabled {
-			name = "enabled"
-		}
-		t.Run(name, func(t *testing.T) {
-			var output bytes.Buffer
-			previousLogger := log.Logger
-			log.Logger = zerolog.New(&output)
-			t.Cleanup(func() { log.Logger = previousLogger })
-
-			c := testConfig()
-			c.Enabled = enabled
-			c.URI = "mongodb://snapshot-user:test-password@localhost:27017/?authSource=private-auth"
-			c.RefreshInterval = 37 * time.Second
-			c.InitialRefreshDelay = 2 * time.Minute
-			c.MinimumRetainedSnapshots = 4
-			c.MaxSnapshotBytes = 33554432
-			c.RefreshTimeout = 7 * time.Second
-			logStartup(c)
-
-			expected := `{"level":"info","enabled":false,"message":"Subscription snapshots disabled"}`
-			if enabled {
-				expected = `{
-					"level":"info",
-					"enabled":true,
-					"database":"test-horizon-config",
-					"sourceCollection":"subscriptions",
-					"snapshotCollection":"snapshots",
-					"headCollection":"heads",
-					"refreshInterval":"37s",
-					"initialRefreshDelay":"2m0s",
-					"minimumRetainedSnapshots":4,
-					"maxSnapshotBytes":33554432,
-					"refreshTimeout":"7s",
-					"cleanupTimeout":"2m0s",
-					"activationDelay":"1m0s",
-					"zookeeperBasePath":"/horizon/subscriptions",
-					"zookeeperClient":"Shopify/zk",
-					"message":"Starting subscription snapshot worker"
-				}`
-			}
-			require.JSONEq(t, expected, output.String())
-			require.Equal(t, 1, strings.Count(output.String(), "\n"), "startup must emit exactly one event")
-			for _, sensitive := range []string{c.URI, "snapshot-user", "test-password", "private-auth"} {
-				require.NotContains(t, output.String(), sensitive)
-			}
-		})
-	}
-}
-
-func TestServiceSchedulingAndCancellation(t *testing.T) {
-	s := newService(testConfig())
-	// A canceled context must stop a service even when no ticker ever fires.
-	s.cancel()
-	refresh := make(chan time.Time)
-	go func() {
-		defer close(s.done)
-		defer s.disconnect()
-		s.loop(refresh, nil)
-	}()
-	select {
-	case <-s.done:
-	case <-time.After(time.Second):
-		t.Fatal("worker did not stop on cancellation")
-	}
-	s.shutdown()
-	s.shutdown()
 }

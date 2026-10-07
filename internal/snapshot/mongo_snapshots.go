@@ -41,36 +41,24 @@ type proposal struct {
 }
 
 type worker struct {
-	config        config.SubscriptionSnapshots
-	store         snapshotStore
-	starting      bool
-	pending       *proposal
-	abandoned     string
-	cleanupDue    bool
-	lastSuccess   time.Time
-	publication   *publication
-	refreshQueued bool
+	config      config.SubscriptionSnapshots
+	store       snapshotStore
+	starting    bool
+	proposal    *proposal
+	abandoned   string
+	cleanupDue  bool
+	lastSuccess time.Time
+	publication *zooKeeperPublication
 }
 
 func newWorker(c config.SubscriptionSnapshots, store snapshotStore) *worker {
 	return &worker{config: c, store: store, starting: true}
 }
 
-func (w *worker) refresh(ctx context.Context) error {
-	if err := w.refreshSnapshot(ctx); err != nil {
-		return err
-	}
-	return w.cleanupPending(ctx)
-}
-
-func (w *worker) refreshSnapshot(ctx context.Context) error {
+func (w *worker) createSnapshot(ctx context.Context) error {
 	started := time.Now()
-	if w.pending != nil {
-		if w.publication != nil {
-			w.refreshQueued = true
-			return nil
-		}
-		return w.resolve(ctx)
+	if w.proposal != nil {
+		return errors.New("snapshot creation blocked until the open MongoDB proposal is resolved")
 	}
 	previous, err := w.store.readHead(ctx)
 	if err != nil {
@@ -87,7 +75,7 @@ func (w *worker) refreshSnapshot(ctx context.Context) error {
 			log.Warn().Err(err).Str("snapshotId", w.abandoned).Msg("Subscription snapshot orphan cleanup deferred")
 		}
 	}
-	complete, err := w.complete(ctx, previous.Version)
+	complete, err := snapshotComplete(ctx, w.store, previous.Version)
 	if err != nil {
 		return err
 	}
@@ -118,14 +106,11 @@ func (w *worker) refreshSnapshot(ctx context.Context) error {
 		w.abandoned = next.SnapshotID
 		return err
 	}
-	w.pending = &proposal{
+	w.proposal = &proposal{
 		previous: previous, next: proposeHead(previous, next, w.config.MinimumRetainedSnapshots),
 		started: started, reason: reason,
 	}
-	if w.publication != nil {
-		return nil
-	}
-	return w.resolve(ctx)
+	return nil
 }
 
 func (w *worker) resolve(ctx context.Context) error {
@@ -133,7 +118,7 @@ func (w *worker) resolve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	candidate := w.pending
+	candidate := w.proposal
 	if current.Version.SnapshotID == candidate.next.Version.SnapshotID {
 		return w.confirmProposal(current)
 	}
@@ -166,16 +151,16 @@ func (w *worker) resolve(ctx context.Context) error {
 }
 
 func (w *worker) confirmProposal(current head) error {
-	if !sameHead(current, w.pending.next) {
+	if !sameHead(current, w.proposal.next) {
 		return errors.New("activated candidate has unexpected metadata or history; cleanup blocked")
 	}
 	return w.published(current)
 }
 
 func (w *worker) published(current head) error {
-	duration := time.Since(w.pending.started)
-	reason := w.pending.reason
-	w.pending = nil
+	duration := time.Since(w.proposal.started)
+	reason := w.proposal.reason
+	w.proposal = nil
 	w.starting = false
 	w.cleanupDue = true
 	w.lastSuccess = time.Now().UTC()
@@ -201,11 +186,11 @@ func (w *worker) cleanupPending(ctx context.Context) error {
 	return nil
 }
 
-func (w *worker) complete(ctx context.Context, version descriptor) (bool, error) {
+func snapshotComplete(ctx context.Context, store snapshotStore, version descriptor) (bool, error) {
 	if version.SnapshotID == "" {
 		return false, nil
 	}
-	count, err := w.store.countSnapshot(ctx, version.SnapshotID)
+	count, err := store.countSnapshot(ctx, version.SnapshotID)
 	return count == version.DocumentCount, err
 }
 
@@ -234,7 +219,7 @@ func (w *worker) deleteUnpublished(ctx context.Context, current head) error {
 
 func (w *worker) cleanup(ctx context.Context) error {
 	started := time.Now()
-	if w.starting || w.pending != nil {
+	if w.starting || w.proposal != nil {
 		return errors.New("cleanup blocked until this process has acknowledged its activation")
 	}
 	current, err := w.store.readHead(ctx)
@@ -249,7 +234,7 @@ func (w *worker) cleanup(ctx context.Context) error {
 		return err
 	}
 	for _, version := range current.RecentSnapshots {
-		complete, err := w.complete(ctx, version)
+		complete, err := snapshotComplete(ctx, w.store, version)
 		if err != nil {
 			return err
 		}
@@ -261,7 +246,7 @@ func (w *worker) cleanup(ctx context.Context) error {
 		if _, err := canonicalID(value); err != nil {
 			return err
 		}
-		if containsSnapshot(current, value) || w.protectedByZooKeeper(protected, value) {
+		if containsSnapshot(current, value) || w.publication.protects(protected, value) {
 			return nil
 		}
 		return w.deleteVersion(ctx, current, value)
@@ -281,7 +266,7 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) er
 	if err != nil {
 		return err
 	}
-	if w.protectedByZooKeeper(protected, id) {
+	if w.publication.protects(protected, id) {
 		return errCleanupDeferred
 	}
 	for {
@@ -296,9 +281,10 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) er
 		if err != nil {
 			return err
 		}
-		if !sameState(protected, latestProtection) || w.protectedByZooKeeper(latestProtection, id) {
+		if !sameState(protected, latestProtection) || w.publication.protects(latestProtection, id) {
 			return errors.Join(errCleanupDeferred, errors.New("ZooKeeper references changed during deletion"))
 		}
+
 		deleted, err := w.store.deleteBatch(ctx, id)
 		if err != nil {
 			return err
@@ -307,4 +293,24 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) er
 			return nil
 		}
 	}
+}
+
+func (w *worker) proposedSnapshot() descriptor {
+	if w.proposal == nil {
+		return descriptor{}
+	}
+	return w.proposal.next.Version
+}
+
+func (w *worker) progressZooKeeper(ctx context.Context) error {
+	return w.publication.progress(ctx, w.store, w.proposedSnapshot(), w.starting)
+}
+
+func (w *worker) protectedZooKeeper(ctx context.Context) (zState, error) {
+	if w.publication == nil {
+		return zState{}, nil
+	}
+	readCtx, cancel := context.WithTimeout(ctx, min(zooKeeperIOTimeout, w.config.CleanupTimeout))
+	defer cancel()
+	return w.publication.protection(readCtx, w.store, w.proposal != nil)
 }

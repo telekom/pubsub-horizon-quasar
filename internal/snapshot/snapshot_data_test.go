@@ -16,27 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func marshal(t *testing.T, value any) bson.Raw {
-	t.Helper()
-	raw, err := bson.Marshal(value)
-	require.NoError(t, err)
-	return raw
-}
-
-func sourceDocument(t *testing.T, id, value string) bson.Raw {
-	t.Helper()
-	return marshal(t, bson.D{
-		{Key: "_id", Value: id}, {Key: "spec", Value: bson.D{{Key: "value", Value: value}}},
-	})
-}
-
-func testDescriptor(at time.Time, count int64) descriptor {
-	id := primitive.NewObjectIDFromTimestamp(at)
-	return descriptor{
-		SnapshotID: id.Hex(), SourceHash: strings.Repeat("a", 64), DocumentCount: count, CreatedAt: id.Timestamp(),
-	}
-}
-
 func TestSourceBuffer(t *testing.T) {
 	raw := sourceDocument(t, "a", "first")
 	original := append(bson.Raw(nil), raw...)

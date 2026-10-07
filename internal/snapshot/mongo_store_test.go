@@ -7,22 +7,202 @@
 package snapshot
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"github.com/telekom/quasar/internal/test"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readconcern"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
+
+func configureTestFailpoint(t *testing.T, client *mongo.Client, name string, mode any, data bson.D) (int64, func()) {
+	t.Helper()
+	var result struct {
+		Count int64 `bson:"count"`
+	}
+	command := bson.D{{Key: "configureFailPoint", Value: name}, {Key: "mode", Value: mode}}
+	if data != nil {
+		command = append(command, bson.E{Key: "data", Value: data})
+	}
+	require.NoError(t, client.Database("admin").RunCommand(t.Context(), command).Decode(&result))
+	var once sync.Once
+	disable := func() {
+		once.Do(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			require.NoError(t, client.Database("admin").RunCommand(ctx, bson.D{
+				{Key: "configureFailPoint", Value: name}, {Key: "mode", Value: "off"},
+			}).Err())
+		})
+	}
+	t.Cleanup(disable)
+	return result.Count, disable
+}
+
+func waitForTestFailpoint(t *testing.T, client *mongo.Client, name string, previousCount int64) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	require.NoError(t, client.Database("admin").RunCommand(ctx, bson.D{
+		{Key: "waitForFailPoint", Value: name},
+		{Key: "timesEntered", Value: previousCount + 1},
+		{Key: "maxTimeMS", Value: 8000},
+	}).Err())
+}
+
+func pauseSecondaryReplication(t *testing.T, client *mongo.Client) func() {
+	t.Helper()
+	var hello struct {
+		Hosts   []string `bson:"hosts"`
+		Primary string   `bson:"primary"`
+	}
+	require.NoError(t, client.Database("admin").RunCommand(t.Context(), bson.D{{Key: "hello", Value: 1}}).Decode(&hello))
+	var releases []func()
+	for _, host := range hello.Hosts {
+		if host == hello.Primary {
+			continue
+		}
+		direct, err := mongo.Connect(t.Context(), options.Client().
+			ApplyURI("mongodb://"+host+"/?directConnection=true").SetServerSelectionTimeout(5*time.Second))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			require.NoError(t, direct.Disconnect(ctx))
+		})
+		count, release := configureTestFailpoint(t, direct, "rsSyncApplyStop", "alwaysOn", nil)
+		waitForTestFailpoint(t, direct, "rsSyncApplyStop", count)
+		releases = append(releases, release)
+	}
+	require.Len(t, releases, 2, "both secondaries must pause to hold back majority visibility")
+	return func() {
+		for _, release := range releases {
+			release()
+		}
+	}
+}
+
+func testMongoDelayedVisibility(t *testing.T, uri string) {
+	client, store, w := mongoFixture(t, uri)
+	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
+	defer cancel()
+	s := &service{client: client, store: store}
+	require.NoError(t, s.withSession(ctx, w.refresh))
+	t.Cleanup(func() { s.session.EndSession(context.Background()) })
+	before, err := store.readHead(ctx)
+	require.NoError(t, err)
+	_, err = store.source.ReplaceOne(ctx, bson.D{{Key: "_id", Value: "a"}}, sourceDocument(t, "a", "new source"))
+	require.NoError(t, err)
+	release := pauseSecondaryReplication(t, client)
+
+	result := make(chan error, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		result <- s.withSession(ctx, w.refresh)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-finished:
+		case <-time.After(10 * time.Second):
+			t.Error("blocked publication did not stop")
+		}
+	})
+	local, err := store.snapshots.Clone(options.Collection().SetReadConcern(readconcern.Local()))
+	require.NoError(t, err)
+	var candidate struct {
+		ID string `bson:"snapshotId"`
+	}
+	require.Eventually(t, func() bool {
+		err := local.FindOne(ctx, bson.D{{Key: "snapshotId", Value: bson.D{
+			{Key: "$ne", Value: before.Version.SnapshotID},
+		}}}).Decode(&candidate)
+		return err == nil
+	}, 5*time.Second, 10*time.Millisecond)
+	localCount, err := local.CountDocuments(ctx, bson.D{{Key: "snapshotId", Value: candidate.ID}})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), localCount, "inserts have reached the primary")
+	majorityCount, err := store.countSnapshot(ctx, candidate.ID)
+	require.NoError(t, err)
+	require.Zero(t, majorityCount, "uncommitted candidate must remain invisible to majority readers")
+	unchanged, err := store.readHead(ctx)
+	require.NoError(t, err)
+	require.True(t, sameHead(before, unchanged), "head must not advance before majority insert acknowledgement")
+	select {
+	case err := <-result:
+		t.Fatalf("publication finished before replication resumed: %v", err)
+	default:
+	}
+	release()
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("publication failed to finish after replication resumed")
+	}
+	require.NoError(t, s.withSession(ctx, func(sessionCtx context.Context) error {
+		active, err := store.readHead(sessionCtx)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, candidate.ID, active.Version.SnapshotID)
+		complete, err := readCompleteSnapshot(sessionCtx, store, active, func() {})
+		require.True(t, complete, "causal majority reader must observe a complete activated snapshot")
+		return err
+	}))
+}
+
+func testMongoInflightShutdown(t *testing.T, uri string) {
+	existingClient, store, w := mongoFixture(t, uri)
+	ctx := t.Context()
+	c := w.config
+	c.RefreshTimeout = 2 * time.Minute
+	s := newService(c)
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetAppName("snapshot-shutdown-test"))
+	require.NoError(t, err)
+	s.client = client
+	require.NoError(t, s.initialize(ctx))
+	require.NoError(t, s.withSession(ctx, s.worker.refresh))
+	before, err := store.readHead(ctx)
+	require.NoError(t, err)
+	count, _ := configureTestFailpoint(t, existingClient, "failCommand", bson.D{{Key: "times", Value: 1}}, bson.D{
+		{Key: "failCommands", Value: bson.A{"find"}},
+		{Key: "appName", Value: "snapshot-shutdown-test"},
+		{Key: "blockConnection", Value: true},
+		{Key: "blockTimeMS", Value: 15000},
+	})
+	t.Cleanup(s.shutdown)
+	go s.run()
+	waitForTestFailpoint(t, existingClient, "failCommand", count)
+	start := time.Now()
+	s.shutdown()
+	require.Less(t, time.Since(start), shutdownTimeout)
+	select {
+	case <-s.done:
+	default:
+		t.Fatal("shutdown returned without completing client disconnection")
+	}
+	require.ErrorIs(t, client.Ping(ctx, nil), mongo.ErrClientDisconnected)
+	require.NoError(t, existingClient.Ping(ctx, nil), "unrelated connection must remain usable")
+	after, err := store.readHead(ctx)
+	require.NoError(t, err)
+	require.True(t, sameHead(before, after))
+}
 
 func TestMongoStoreConcerns(t *testing.T) {
 	c := testConfig()
@@ -38,33 +218,11 @@ func TestMongoStoreConcerns(t *testing.T) {
 	require.Equal(t, c.HeadCollection, store.heads.Name())
 }
 
-func mongoFixture(t *testing.T, uri string) (*mongo.Client, *mongoStore, *worker) {
-	t.Helper()
-	c := testConfig()
-	c.URI = uri
-	c.Database = "snapshots_" + primitive.NewObjectID().Hex()
-	c.RefreshTimeout = 20 * time.Second
-	client, err := mongo.Connect(t.Context(), options.Client().ApplyURI(uri).SetServerSelectionTimeout(20*time.Second))
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		require.NoError(t, client.Database(c.Database).Drop(ctx))
-		require.NoError(t, client.Disconnect(ctx))
-	})
-	store := newMongoStore(client, c)
-	_, err = store.source.InsertMany(t.Context(), []any{
-		sourceDocument(t, "c", "third"), sourceDocument(t, "a", "first"), sourceDocument(t, "b", "second"),
-	})
-	require.NoError(t, err)
-	require.NoError(t, store.setup(t.Context()))
-	return client, store, newWorker(c, store)
-}
-
 func TestMongoIntegration(t *testing.T) {
 	uri := test.SetupMongoReplicaSet(t)
 	t.Run("independent client and shutdown", func(t *testing.T) { testMongoServiceLifecycle(t, uri) })
 	t.Run("setup retry after successful connection", func(t *testing.T) { testMongoSetupRetry(t, uri) })
+	t.Run("refresh duration includes initialization", func(t *testing.T) { testMongoRefreshInitializationDuration(t, uri) })
 	t.Run("persistent session", func(t *testing.T) { testMongoSession(t, uri) })
 	t.Run("publication and schema", func(t *testing.T) { testMongoPublication(t, uri) })
 	t.Run("missing source and head", func(t *testing.T) { testMongoMissingMetadata(t, uri) })
@@ -80,6 +238,48 @@ func TestMongoIntegration(t *testing.T) {
 		t.Run("majority and uncertain writes", func(t *testing.T) { testMongoUncertainWrites(t, uri) })
 		t.Run("primary failover", func(t *testing.T) { testMongoFailover(t, uri) })
 	})
+}
+
+func testMongoRefreshInitializationDuration(t *testing.T, uri string) {
+	client, store, w := mongoFixture(t, uri)
+	_, disable := configureTestFailpoint(t, client, "failCommand", bson.D{{Key: "times", Value: 1}}, bson.D{
+		{Key: "failCommands", Value: bson.A{"create"}},
+		{Key: "blockConnection", Value: true},
+		{Key: "blockTimeMS", Value: 1000},
+	})
+	defer disable()
+	var output bytes.Buffer
+	previous := log.Logger
+	log.Logger = zerolog.New(&output)
+	t.Cleanup(func() { log.Logger = previous })
+	s := newService(w.config)
+	defer s.cancel()
+	s.client, s.store = client, store
+	defer func() {
+		if s.session != nil {
+			s.session.EndSession(t.Context())
+		}
+	}()
+	s.attemptRefresh()
+	require.NotNil(t, s.worker)
+	require.False(t, s.worker.lastSuccess.IsZero())
+	var refreshEntry, publicationEntry map[string]any
+	for _, entry := range serviceLogMessages(t, output.Bytes()) {
+		switch entry["message"] {
+		case "Subscription snapshot refresh completed":
+			refreshEntry = entry
+		case "Subscription snapshot published":
+			publicationEntry = entry
+		}
+	}
+	require.NotNil(t, refreshEntry)
+	require.NotNil(t, publicationEntry)
+	refreshDuration, refreshOK := refreshEntry["durationMs"].(float64)
+	publicationDuration, publicationOK := publicationEntry["durationMs"].(float64)
+	require.True(t, refreshOK)
+	require.True(t, publicationOK)
+	require.GreaterOrEqual(t, refreshDuration, publicationDuration+1000,
+		"refresh starts before schema initialization; snapshot publication starts afterwards")
 }
 
 func testMongoSession(t *testing.T, uri string) {
@@ -437,7 +637,7 @@ func testMongoUncertainWrites(t *testing.T, uri string) {
 		{Key: "failCommands", Value: bson.A{"insert"}}, {Key: "errorCode", Value: 121},
 	})
 	require.Error(t, s.withSession(ctx, w.refresh))
-	require.Nil(t, w.pending, "failed insertion batches must not send an activation")
+	require.Nil(t, w.proposal, "failed insertion batches must not send an activation")
 	unchanged, err := store.readHead(ctx)
 	require.NoError(t, err)
 	require.True(t, sameHead(old, unchanged))
@@ -446,8 +646,8 @@ func testMongoUncertainWrites(t *testing.T, uri string) {
 		{Key: "writeConcernError", Value: bson.D{{Key: "code", Value: 64}, {Key: "errmsg", Value: "test lost acknowledgement"}}},
 	})
 	require.Error(t, s.withSession(ctx, w.refresh))
-	require.NotNil(t, w.pending)
-	candidate := w.pending.next
+	require.NotNil(t, w.proposal)
+	candidate := w.proposal.next
 	require.Error(t, w.cleanup(ctx))
 	require.NoError(t, s.withSession(ctx, w.refresh))
 	confirmed, err := store.readHead(ctx)

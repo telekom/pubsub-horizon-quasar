@@ -42,95 +42,127 @@ type zCandidate struct {
 	operation      *zOperation
 }
 
-type publication struct {
-	transport      zooKeeperTransport
-	delay          time.Duration
-	observed       *zState
-	pending        *zCandidate
-	latest         descriptor
-	degraded       bool
-	firstActivated bool
-	retryBlocked   bool
-	seenPrepared   bool
-	seenActivated  bool
+type zooKeeperPublication struct {
+	transport           zooKeeperTransport
+	delay               time.Duration
+	observed            *zState
+	candidate           *zCandidate
+	latestConfirmedHead descriptor
+	degraded            bool
+	firstActivated      bool
+	retryBlocked        bool
+	seenPrepared        bool
+	seenActivated       bool
 }
 
-func newPublication(transport zooKeeperTransport, delay time.Duration) *publication {
-	return &publication{transport: transport, delay: delay}
+func newZooKeeperPublication(transport zooKeeperTransport, delay time.Duration) *zooKeeperPublication {
+	return &zooKeeperPublication{transport: transport, delay: delay}
 }
 
-func (p *publication) deadline() time.Time {
-	if p.pending == nil || p.pending.preparedAt.IsZero() || p.retryBlocked {
+func (p *zooKeeperPublication) nextDeadline(mongoRetryBlocked bool) time.Time {
+	if p.candidate == nil || p.candidate.preparedAt.IsZero() || p.retryBlocked {
 		return time.Time{}
 	}
-	return p.pending.preparedAt.Add(p.delay)
+	if mongoRetryBlocked && !p.candidate.mongoConfirmed {
+		return time.Time{}
+	}
+	return p.candidate.preparedAt.Add(p.delay)
 }
 
-func (p *publication) phase() string {
-	if p.pending == nil {
+func (p *zooKeeperPublication) allowRetry() {
+	p.retryBlocked = false
+}
+
+func (p *zooKeeperPublication) blockRetry() {
+	p.retryBlocked = true
+}
+
+func (p *zooKeeperPublication) canRetry() bool {
+	return !p.retryBlocked
+}
+
+func (p *zooKeeperPublication) needsPreparation() bool {
+	return p.candidate == nil && p.canRetry()
+}
+
+func (p *zooKeeperPublication) activationDue() bool {
+	return p.candidate != nil && p.candidate.mongoConfirmed && p.canRetry() &&
+		!p.candidate.preparedAt.IsZero() && !time.Now().Before(p.candidate.preparedAt.Add(p.delay))
+}
+
+func (p *zooKeeperPublication) snapshotID(proposed descriptor) string {
+	if p.candidate != nil {
+		return p.candidate.value.SnapshotID
+	}
+	if proposed.SnapshotID != "" {
+		return proposed.SnapshotID
+	}
+	return p.latestConfirmedHead.SnapshotID
+}
+
+func (p *zooKeeperPublication) phase() string {
+	if p.candidate == nil {
 		return "reconcile"
 	}
-	if p.pending.operation != nil {
-		return p.pending.operation.name
+	if p.candidate.operation != nil {
+		return p.candidate.operation.name
 	}
-	if p.pending.preparedAt.IsZero() {
+	if p.candidate.preparedAt.IsZero() {
 		return preparedNode
 	}
 	return activatedNode
 }
 
-func (p *publication) degrade(err error) {
+func (p *zooKeeperPublication) degrade(err error) {
 	if !p.degraded {
-		log.Warn().Err(err).Str("phase", p.phase()).Str("snapshotId", p.latest.SnapshotID).
+		log.Warn().Err(err).Str("phase", p.phase()).Str("snapshotId", p.latestConfirmedHead.SnapshotID).
 			Msg("Subscription snapshots continuing with MongoDB fallback")
 	}
 	p.degraded = true
 	p.retryBlocked = true
 }
 
-func (p *publication) mongoPublished(value descriptor) {
-	p.latest = value
-	if p.pending != nil && sameDescriptor(p.pending.value, value) {
-		p.pending.mongoConfirmed = true
+func (p *zooKeeperPublication) mongoPublished(value descriptor) {
+	p.latestConfirmedHead = value
+	if p.candidate != nil && sameDescriptor(p.candidate.value, value) {
+		p.candidate.mongoConfirmed = true
 	}
 }
 
-func (w *worker) canPublishMongo() bool {
-	p := w.publication
+func (p *zooKeeperPublication) mongoAllowed(proposed descriptor) bool {
 	if p == nil || p.degraded {
 		return true
 	}
-	return p.pending != nil && w.pending != nil &&
-		sameDescriptor(p.pending.value, w.pending.next.Version) &&
-		!p.pending.preparedAt.IsZero() && !time.Now().Before(p.pending.preparedAt.Add(p.delay))
+	return p.candidate != nil && proposed.SnapshotID != "" &&
+		sameDescriptor(p.candidate.value, proposed) &&
+		!p.candidate.preparedAt.IsZero() && !time.Now().Before(p.candidate.preparedAt.Add(p.delay))
 }
 
-func (w *worker) progressZooKeeper(ctx context.Context) error {
-	p := w.publication
+func (p *zooKeeperPublication) progress(ctx context.Context, store snapshotStore, proposed descriptor, starting bool) error {
 	if !p.transport.available() {
 		return zooKeeperError("session", errZooKeeperUnavailable)
 	}
-	if err := w.readPublicationState(ctx); err != nil {
+	if err := p.readState(ctx, store); err != nil {
 		return err
 	}
-	if p.pending == nil {
-		if err := w.selectZooKeeperCandidate(ctx); err != nil {
+	if p.candidate == nil {
+		if err := p.selectCandidate(ctx, store, proposed, starting); err != nil {
 			return err
 		}
 	}
-	if p.pending == nil {
+	if p.candidate == nil {
 		return nil
 	}
-	if p.pending.preparedAt.IsZero() {
+	if p.candidate.preparedAt.IsZero() {
 		return p.writeNode(ctx, preparedNode)
 	}
-	if !p.observed.prepared.exists || !sameDescriptor(p.observed.prepared.value, p.pending.value) {
+	if !p.observed.prepared.exists || !sameDescriptor(p.observed.prepared.value, p.candidate.value) {
 		return integrityError("prepared does not match the fixed ZooKeeper candidate")
 	}
-	if time.Now().Before(p.pending.preparedAt.Add(p.delay)) || !p.pending.mongoConfirmed {
+	if time.Now().Before(p.candidate.preparedAt.Add(p.delay)) || !p.candidate.mongoConfirmed {
 		return nil
 	}
-	complete, err := w.complete(ctx, p.pending.value)
+	complete, err := snapshotComplete(ctx, store, p.candidate.value)
 	if err != nil {
 		return err
 	}
@@ -140,35 +172,34 @@ func (w *worker) progressZooKeeper(ctx context.Context) error {
 	if err := p.writeNode(ctx, activatedNode); err != nil {
 		return err
 	}
-	if err := w.selectZooKeeperCandidate(ctx); err != nil {
+	if err := p.selectCandidate(ctx, store, proposed, starting); err != nil {
 		return err
 	}
-	if p.pending != nil {
+	if p.candidate != nil {
 		return p.writeNode(ctx, preparedNode)
 	}
 	return nil
 }
 
-func (w *worker) selectZooKeeperCandidate(ctx context.Context) error {
-	p := w.publication
-	if w.starting && (w.pending == nil || p.degraded) {
+func (p *zooKeeperPublication) selectCandidate(ctx context.Context, store snapshotStore, proposed descriptor, starting bool) error {
+	if starting && (proposed.SnapshotID == "" || p.degraded) {
 		return nil
 	}
 	var value descriptor
 	confirmed := false
-	if w.pending != nil && !p.degraded {
-		value = w.pending.next.Version
+	if proposed.SnapshotID != "" && !p.degraded {
+		value = proposed
 	} else {
-		current, err := w.store.readHead(ctx)
+		current, err := store.readHead(ctx)
 		if err != nil {
 			return err
 		}
 		value = current.Version
-		if p.latest.SnapshotID != "" && !sameDescriptor(value, p.latest) {
+		if p.latestConfirmedHead.SnapshotID != "" && !sameDescriptor(value, p.latestConfirmedHead) {
 			return integrityError("MongoDB head is not a confirmed publication of this worker")
 		}
 		confirmed = true
-		p.latest = value
+		p.latestConfirmedHead = value
 	}
 	if value.SnapshotID == "" {
 		return nil
@@ -179,29 +210,28 @@ func (w *worker) selectZooKeeperCandidate(ctx context.Context) error {
 				Msg("Subscription snapshots returned to synchronized publication")
 		}
 		p.degraded = false
-		if w.pending == nil {
+		if proposed.SnapshotID == "" {
 			return nil
 		}
-		value = w.pending.next.Version
+		value = proposed
 		confirmed = false
 	}
-	complete, err := w.complete(ctx, value)
+	complete, err := snapshotComplete(ctx, store, value)
 	if err != nil {
 		return err
 	}
 	if !complete {
 		return integrityError("ZooKeeper publication target is incomplete")
 	}
-	p.pending = &zCandidate{value: value, started: time.Now(), mongoConfirmed: confirmed}
+	p.candidate = &zCandidate{value: value, started: time.Now(), mongoConfirmed: confirmed}
 	if p.degraded {
-		log.Info().Str("snapshotId", value.SnapshotID).Str("mongoSnapshotId", p.latest.SnapshotID).
+		log.Info().Str("snapshotId", value.SnapshotID).Str("mongoSnapshotId", p.latestConfirmedHead.SnapshotID).
 			Msg("Subscription snapshot ZooKeeper catch-up started")
 	}
 	return nil
 }
 
-func (w *worker) readPublicationState(ctx context.Context) error {
-	p := w.publication
+func (p *zooKeeperPublication) readState(ctx context.Context, store snapshotStore) error {
 	prepared, err := p.transport.read(ctx, preparedNode)
 	if err != nil {
 		return err
@@ -223,7 +253,7 @@ func (w *worker) readPublicationState(ctx context.Context) error {
 	}
 	for _, node := range []zNode{prepared, activated} {
 		if node.exists {
-			complete, err := w.complete(ctx, node.value)
+			complete, err := snapshotComplete(ctx, store, node.value)
 			if err != nil {
 				return err
 			}
@@ -236,7 +266,7 @@ func (w *worker) readPublicationState(ctx context.Context) error {
 	return nil
 }
 
-func (p *publication) observeNode(name string, node zNode) {
+func (p *zooKeeperPublication) observeNode(name string, node zNode) {
 	if p.observed == nil {
 		p.observed = &zState{}
 	}
@@ -249,7 +279,7 @@ func (p *publication) observeNode(name string, node zNode) {
 	}
 }
 
-func (p *publication) checkNode(name string, current zNode) error {
+func (p *zooKeeperPublication) checkNode(name string, current zNode) error {
 	if p.observed == nil || name == preparedNode && !p.seenPrepared || name == activatedNode && !p.seenActivated {
 		return nil
 	}
@@ -260,9 +290,9 @@ func (p *publication) checkNode(name string, current zNode) error {
 	if sameNode(previous, current) {
 		return nil
 	}
-	if p.pending != nil && p.pending.operation != nil && p.pending.operation.name == name {
-		operation := p.pending.operation
-		if sameNode(operation.expected, current) || matchesWrite(current, operation.expected, p.pending.value) {
+	if p.candidate != nil && p.candidate.operation != nil && p.candidate.operation.name == name {
+		operation := p.candidate.operation
+		if sameNode(operation.expected, current) || matchesWrite(current, operation.expected, p.candidate.value) {
 			return nil
 		}
 	}
@@ -279,22 +309,22 @@ func matchesWrite(current, expected zNode, value descriptor) bool {
 	return current.czxid == expected.czxid && current.version == expected.version+1
 }
 
-func (p *publication) confirmReadBack() {
-	if p.pending == nil || p.pending.operation == nil {
+func (p *zooKeeperPublication) confirmReadBack() {
+	if p.candidate == nil || p.candidate.operation == nil {
 		return
 	}
-	operation := p.pending.operation
+	operation := p.candidate.operation
 	current := p.observed.prepared
 	if operation.name == activatedNode {
 		current = p.observed.activated
 	}
-	if matchesWrite(current, operation.expected, p.pending.value) {
+	if matchesWrite(current, operation.expected, p.candidate.value) {
 		p.confirmNode(operation.name)
 	}
 }
 
-func (p *publication) writeNode(ctx context.Context, name string) error {
-	candidate := p.pending
+func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error {
+	candidate := p.candidate
 	current := p.observed.prepared
 	if name == activatedNode {
 		current = p.observed.activated
@@ -314,7 +344,7 @@ func (p *publication) writeNode(ctx context.Context, name string) error {
 			operation.uncertain = true
 		}
 		if outcome == writeNotExecuted && !operation.uncertain && name == preparedNode && candidate.preparedAt.IsZero() {
-			p.pending = nil
+			p.candidate = nil
 		}
 		return err
 	}
@@ -331,8 +361,8 @@ func (p *publication) writeNode(ctx context.Context, name string) error {
 	return nil
 }
 
-func (p *publication) confirmNode(name string) {
-	candidate := p.pending
+func (p *zooKeeperPublication) confirmNode(name string) {
+	candidate := p.candidate
 	candidate.operation = nil
 	if name == preparedNode {
 		if candidate.preparedAt.IsZero() {
@@ -346,28 +376,22 @@ func (p *publication) confirmNode(name string) {
 	log.Info().Str("snapshotId", candidate.value.SnapshotID).Int64("documentCount", candidate.value.DocumentCount).
 		Dur("durationMs", time.Since(candidate.started)).
 		Msg("Subscription snapshot ZooKeeper activated")
-	p.pending = nil
+	p.candidate = nil
 	p.firstActivated = true
 }
 
-func (w *worker) protectedZooKeeper(ctx context.Context) (zState, error) {
-	p := w.publication
-	if p == nil {
-		return zState{}, nil
-	}
-	if !p.firstActivated || p.pending != nil || w.pending != nil {
+func (p *zooKeeperPublication) protection(ctx context.Context, store snapshotStore, proposalPending bool) (zState, error) {
+	if !p.firstActivated || p.candidate != nil || proposalPending {
 		return zState{}, errCleanupDeferred
 	}
-	readCtx, cancel := context.WithTimeout(ctx, min(zooKeeperIOTimeout, w.config.CleanupTimeout))
-	defer cancel()
-	if err := w.readPublicationState(readCtx); err != nil {
+	if err := p.readState(ctx, store); err != nil {
 		return zState{}, errors.Join(errCleanupDeferred, err)
 	}
 	if !p.observed.activated.exists || !p.observed.prepared.exists {
 		return zState{}, errors.Join(errCleanupDeferred, integrityError("ZooKeeper protection references are missing"))
 	}
-	if p.latest.SnapshotID != "" {
-		complete, err := w.complete(ctx, p.latest)
+	if p.latestConfirmedHead.SnapshotID != "" {
+		complete, err := snapshotComplete(ctx, store, p.latestConfirmedHead)
 		if err != nil {
 			return zState{}, errors.Join(errCleanupDeferred, err)
 		}
@@ -378,8 +402,8 @@ func (w *worker) protectedZooKeeper(ctx context.Context) (zState, error) {
 	return *p.observed, nil
 }
 
-func (w *worker) protectedByZooKeeper(state zState, id string) bool {
+func (p *zooKeeperPublication) protects(state zState, id string) bool {
 	return state.prepared.exists && state.prepared.value.SnapshotID == id ||
 		state.activated.exists && state.activated.value.SnapshotID == id ||
-		w.publication != nil && w.publication.latest.SnapshotID == id
+		p != nil && p.latestConfirmedHead.SnapshotID == id
 }

@@ -21,23 +21,7 @@ import (
 	"github.com/telekom/quasar/internal/config"
 	"github.com/telekom/quasar/internal/test"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-func testZooKeeperClient(t *testing.T, addresses []string) *zooKeeperClient {
-	t.Helper()
-	client := newZooKeeperClient(t.Context(), config.SnapshotZooKeeper{
-		Addresses: addresses, BasePath: "/quasar-test/" + primitive.NewObjectID().Hex(),
-		SessionTimeout: 3 * time.Second,
-	}, 100*time.Millisecond)
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-		require.NoError(t, client.close(ctx))
-	})
-	require.Eventually(t, client.available, 30*time.Second, 10*time.Millisecond)
-	return client
-}
 
 func TestZooKeeperIntegration(t *testing.T) {
 	ensemble := test.SetupZooKeeper(t)
@@ -167,7 +151,7 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	_, store, w := mongoFixture(t, uri)
 	client := testZooKeeperClient(t, ensemble.Addresses)
 	w.config.ActivationDelay = 100 * time.Millisecond
-	w.publication = newPublication(client, w.config.ActivationDelay)
+	w.publication = newZooKeeperPublication(client, w.config.ActivationDelay)
 	advance := func() {
 		t.Helper()
 		w.publication.retryBlocked = false
@@ -177,7 +161,7 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 		if err != nil {
 			w.publication.degrade(err)
 		}
-		if w.pending != nil && w.canPublishMongo() {
+		if w.proposal != nil && w.publication.mongoAllowed(w.proposedSnapshot()) {
 			require.NoError(t, w.resolve(ctx))
 		}
 	}
@@ -186,8 +170,8 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	time.Sleep(w.config.ActivationDelay)
 	advance()
 	advance()
-	require.Nil(t, w.pending)
-	require.Nil(t, w.publication.pending)
+	require.Nil(t, w.proposal)
+	require.Nil(t, w.publication.candidate)
 	a := w.publication.observed.activated.value
 	ensemble.Pause(t, 0)
 	_, err := store.source.ReplaceOne(t.Context(), bson.D{{Key: "_id", Value: "a"}}, sourceDocument(t, "a", "one member down"))
@@ -197,7 +181,7 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	time.Sleep(w.config.ActivationDelay)
 	advance()
 	advance()
-	require.Nil(t, w.pending, "one failed member must not prevent normal publication")
+	require.Nil(t, w.proposal, "one failed member must not prevent normal publication")
 	ensemble.Pause(t, 1)
 	ensemble.Pause(t, 2)
 	require.Eventually(t, func() bool { return !client.available() }, 15*time.Second, 20*time.Millisecond)
@@ -207,7 +191,7 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 		require.NoError(t, err)
 		require.NoError(t, w.refreshSnapshot(t.Context()))
 		advance()
-		require.Nil(t, w.pending, "MongoDB heads must continue while quorum is lost")
+		require.Nil(t, w.proposal, "MongoDB heads must continue while quorum is lost")
 		require.Error(t, w.cleanupPending(t.Context()))
 	}
 	current, err := store.readHead(t.Context())
@@ -221,7 +205,7 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	time.Sleep(w.config.ActivationDelay)
 	advance()
 	advance()
-	require.Nil(t, w.publication.pending)
+	require.Nil(t, w.publication.candidate)
 	require.True(t, sameDescriptor(latest, w.publication.observed.activated.value))
 	after, err := store.readHead(t.Context())
 	require.NoError(t, err)

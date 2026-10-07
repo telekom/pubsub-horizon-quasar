@@ -20,6 +20,15 @@ import (
 
 const shutdownTimeout = 10 * time.Second
 
+type workCause uint8
+
+const (
+	refreshWork workCause = iota
+	deadlineWork
+	connectionWork
+	publicationWork
+)
+
 type service struct {
 	config            config.SubscriptionSnapshots
 	ctx               context.Context
@@ -32,6 +41,7 @@ type service struct {
 	worker            *worker
 	zooKeeper         zooKeeperTransport
 	mongoRetryBlocked bool
+	refreshRequested  bool
 
 	initialRefreshDeadline time.Time
 }
@@ -93,7 +103,7 @@ func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 		s.initialRefreshDeadline = time.Now().Add(s.config.InitialRefreshDelay)
 	}
 	s.attemptRefresh()
-	wakeUsed := false
+	recoveryWakeUsed := false
 	for {
 		var wake <-chan struct{}
 		var timer *time.Timer
@@ -112,18 +122,17 @@ func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 		case <-refresh:
 			stopActivationTimer(timer)
 			runLoopActions(actions)
-			wakeUsed = false
+			recoveryWakeUsed = false
 			s.attemptPeriodicRefresh()
 		case <-activation:
 			runLoopActions(actions)
 			if s.attemptDeadline(refresh) {
-				wakeUsed = false
+				recoveryWakeUsed = false
 			}
-			s.cleanupAfterPublication()
 		case <-wake:
 			stopActivationTimer(timer)
 			runLoopActions(actions)
-			wakeUsed = s.connectionWake(wakeUsed)
+			recoveryWakeUsed = s.connectionWake(recoveryWakeUsed)
 		case action := <-actions:
 			stopActivationTimer(timer)
 			action()
@@ -135,10 +144,8 @@ func (s *service) nextDeadline() time.Time {
 	deadline := s.initialRefreshDeadline
 	if s.worker != nil && s.worker.publication != nil {
 		p := s.worker.publication
-		if !s.mongoRetryBlocked || p.pending != nil && p.pending.mongoConfirmed {
-			if next := p.deadline(); !next.IsZero() && (deadline.IsZero() || next.Before(deadline)) {
-				deadline = next
-			}
+		if next := p.nextDeadline(s.mongoRetryBlocked); !next.IsZero() && (deadline.IsZero() || next.Before(deadline)) {
+			deadline = next
 		}
 	}
 	return deadline
@@ -148,14 +155,14 @@ func (s *service) attemptPeriodicRefresh() {
 	s.finishInitialRefreshDelay()
 	s.mongoRetryBlocked = false
 	if s.worker != nil && s.worker.publication != nil {
-		s.worker.publication.retryBlocked = false
+		s.worker.publication.allowRetry()
 	}
 	s.attemptRefresh()
 }
 
 func (s *service) attemptDeadline(refresh <-chan time.Time) bool {
 	if !s.finishInitialRefreshDelay() {
-		s.attemptPublication()
+		s.runCycle(deadlineWork)
 		return false
 	}
 	select {
@@ -165,7 +172,7 @@ func (s *service) attemptDeadline(refresh <-chan time.Time) bool {
 	default:
 	}
 	if s.worker != nil && s.worker.publication != nil {
-		s.worker.publication.retryBlocked = false
+		s.worker.publication.allowRetry()
 	}
 	s.attemptRefresh()
 	return false
@@ -182,25 +189,22 @@ func runLoopActions(actions <-chan func()) {
 	}
 }
 
-func (s *service) connectionWake(wakeUsed bool) bool {
+func (s *service) connectionWake(recoveryWakeUsed bool) bool {
 	if s.worker == nil || s.worker.publication == nil || s.initialRefreshWaiting() {
-		return wakeUsed
+		return recoveryWakeUsed
 	}
 	switch {
 	case !s.zooKeeper.available():
-		wakeUsed = false
+		recoveryWakeUsed = false
 		s.worker.publication.degrade(zooKeeperError("session", errZooKeeperUnavailable))
-	case wakeUsed:
-		return wakeUsed
+	case recoveryWakeUsed:
+		return recoveryWakeUsed
 	default:
-		wakeUsed = true
-		s.worker.publication.retryBlocked = false
+		recoveryWakeUsed = true
+		s.worker.publication.allowRetry()
 	}
-	s.attemptPublication()
-	if s.zooKeeper.available() {
-		s.cleanupAfterPublication()
-	}
-	return wakeUsed
+	s.runCycle(connectionWork)
+	return recoveryWakeUsed
 }
 
 func (s *service) initialRefreshWaiting() bool {
@@ -240,7 +244,7 @@ func (s *service) initialize(ctx context.Context) error {
 		s.worker = newWorker(s.config, s.store)
 	}
 	if s.zooKeeper != nil && s.worker.publication == nil {
-		s.worker.publication = newPublication(s.zooKeeper, s.config.ActivationDelay)
+		s.worker.publication = newZooKeeperPublication(s.zooKeeper, s.config.ActivationDelay)
 	}
 	return nil
 }
@@ -273,71 +277,103 @@ func (s *service) withSession(ctx context.Context, action func(context.Context) 
 }
 
 func (s *service) attemptRefresh() {
+	s.runCycle(refreshWork)
+}
+
+func (s *service) runCycle(cause workCause) {
+	refresh := cause == refreshWork
+	cleanupEligible := cause == refreshWork || cause == deadlineWork
+	for {
+		var start time.Time
+		var err error
+		if refresh {
+			if s.worker != nil && s.worker.proposal != nil && s.worker.publication != nil {
+				s.refreshRequested = true
+			} else {
+				start, err = s.refreshStep()
+				if start.IsZero() {
+					return
+				}
+				cleanupEligible = true
+			}
+		}
+		s.publicationStep()
+		if !start.IsZero() {
+			s.logRefresh(start, err)
+		}
+		if s.worker == nil || s.worker.proposal != nil || !s.refreshRequested || s.ctx.Err() != nil {
+			break
+		}
+		s.refreshRequested = false
+		refresh = true
+	}
+	if cleanupEligible || cause == connectionWork && s.zooKeeper.available() {
+		s.cleanupAfterPublication()
+	}
+}
+
+func (s *service) refreshStep() (time.Time, error) {
 	ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
+	defer cancel()
 	start := time.Now()
 	err := s.initialize(ctx)
 	if err == nil && s.initialRefreshWaiting() {
-		cancel()
 		log.Debug().Time("notBefore", s.initialRefreshDeadline).
 			Msg("Subscription snapshot initial refresh waiting for startup delay")
-		return
+		return time.Time{}, nil
 	}
 	if err == nil {
 		s.finishInitialRefreshDelay()
-		err = s.withSession(ctx, s.worker.refreshSnapshot)
+		if s.worker.proposal == nil {
+			err = s.withSession(ctx, s.worker.createSnapshot)
+		}
+		if err == nil && s.worker.publication == nil && s.worker.proposal != nil {
+			err = s.withSession(ctx, s.worker.resolve)
+		}
 	}
-	cancel()
-	if s.worker != nil && s.worker.publication != nil {
-		s.attemptPublication()
-	}
+	return start, err
+}
+
+func (s *service) logRefresh(start time.Time, err error) {
 	if err != nil {
 		s.logError("refresh", start, err)
-		if s.worker != nil && s.worker.cleanupDue && s.ctx.Err() == nil {
-			s.attemptCleanup()
-		}
 		return
 	}
 	log.Info().Dur("durationMs", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
 		Str("snapshotCollection", s.config.SnapshotCollection).Str("headCollection", s.config.HeadCollection).
 		Time("lastSuccess", s.worker.lastSuccess).Msg("Subscription snapshot refresh completed")
-	if s.worker.cleanupDue {
-		s.attemptCleanup()
-	}
 }
 
-func (s *service) attemptPublication() {
+func (s *service) publicationStep() {
+	if s.worker == nil {
+		return
+	}
 	p := s.worker.publication
 	if p == nil || s.ctx.Err() != nil || s.initialRefreshWaiting() {
 		return
 	}
-	if !p.retryBlocked {
+	if p.canRetry() {
 		s.attemptZooKeeper()
 	}
 	mongoPublished := false
-	if s.worker.pending != nil && s.worker.canPublishMongo() && !s.mongoRetryBlocked {
+	if s.worker.proposal != nil && p.mongoAllowed(s.worker.proposedSnapshot()) && !s.mongoRetryBlocked {
 		ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
 		start := time.Now()
 		err := s.withSession(ctx, s.worker.resolve)
 		cancel()
 		if err != nil {
 			s.mongoRetryBlocked = true
-			p.retryBlocked = true
+			p.blockRetry()
 			s.logError("activate-mongo", start, err)
 			return
 		}
 		mongoPublished = true
 	}
-	if mongoPublished && p.pending == nil && !p.retryBlocked {
+	if mongoPublished && p.needsPreparation() {
 		s.attemptZooKeeper()
 	}
-	if p.pending != nil && p.pending.mongoConfirmed && !p.retryBlocked &&
-		!p.pending.preparedAt.IsZero() && !time.Now().Before(p.pending.preparedAt.Add(p.delay)) {
-
+	if p.activationDue() {
 		s.attemptZooKeeper()
-	}
-	if s.worker.pending == nil && s.worker.refreshQueued {
-		s.worker.refreshQueued = false
-		s.attemptRefresh()
 	}
 }
 
@@ -351,12 +387,7 @@ func (s *service) attemptZooKeeper() {
 	}
 	p := s.worker.publication
 	p.degrade(err)
-	id := p.latest.SnapshotID
-	if p.pending != nil {
-		id = p.pending.value.SnapshotID
-	} else if s.worker.pending != nil {
-		id = s.worker.pending.next.Version.SnapshotID
-	}
+	id := p.snapshotID(s.worker.proposedSnapshot())
 	category := zooKeeperErrorCategory(err)
 	var operationError *zooKeeperOperationError
 	if errors.As(err, &operationError) {

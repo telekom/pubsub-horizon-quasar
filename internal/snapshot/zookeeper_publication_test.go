@@ -20,112 +20,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
-	"github.com/telekom/quasar/internal/config"
 	"go.mongodb.org/mongo-driver/mongo"
 )
-
-type fakeZooKeeper struct {
-	online      bool
-	session     int64
-	nodes       map[string]zNode
-	wake        chan struct{}
-	writes      []string
-	beforeRead  func(context.Context, string) error
-	beforeWrite func(context.Context, string, descriptor, zNode) (writeOutcome, error)
-}
-
-func newFakeZooKeeper() *fakeZooKeeper {
-	return &fakeZooKeeper{online: true, session: 1, nodes: make(map[string]zNode), wake: make(chan struct{}, 1)}
-}
-
-func (f *fakeZooKeeper) available() bool             { return f.online }
-func (f *fakeZooKeeper) events() <-chan struct{}     { return f.wake }
-func (f *fakeZooKeeper) close(context.Context) error { return nil }
-
-func (f *fakeZooKeeper) read(ctx context.Context, name string) (zNode, error) {
-	if !f.online {
-		return zNode{}, zooKeeperError("read", errZooKeeperUnavailable)
-	}
-	if f.beforeRead != nil {
-		if err := f.beforeRead(ctx, name); err != nil {
-			return zNode{}, err
-		}
-	}
-	node := f.nodes[name]
-	node.session = f.session
-	return node, nil
-}
-
-func (f *fakeZooKeeper) write(ctx context.Context, name string, value descriptor, expected zNode) (zNode, writeOutcome, error) {
-	if !f.online {
-		return zNode{}, writeNotExecuted, zooKeeperError("write", errZooKeeperUnavailable)
-	}
-	if f.beforeWrite != nil {
-		outcome, err := f.beforeWrite(ctx, name, value, expected)
-		if err != nil {
-			return zNode{}, outcome, err
-		}
-	}
-	node, err := f.apply(name, value, expected)
-	if err != nil {
-		return zNode{}, writeNotExecuted, err
-	}
-	return node, writeConfirmed, nil
-}
-
-func (f *fakeZooKeeper) apply(name string, value descriptor, expected zNode) (zNode, error) {
-	current := f.nodes[name]
-	if !sameNode(expected, current) {
-		return zNode{}, zk.ErrBadVersion
-	}
-	next := zNode{exists: true, value: value, session: f.session}
-	if current.exists {
-		next.czxid, next.version = current.czxid, current.version+1
-	} else {
-		next.czxid = int64(len(f.writes) + 1)
-	}
-	f.nodes[name] = next
-	f.writes = append(f.writes, name)
-	return next, nil
-}
-
-func publicationService(t *testing.T, interval time.Duration) (*scheduledService, *fakeStore, *fakeZooKeeper) {
-	t.Helper()
-	store := newFakeStore(t)
-	transport := newFakeZooKeeper()
-	c := testConfig()
-	c.RefreshInterval = interval
-	c.RefreshTimeout = 30 * time.Second
-	return configuredPublicationService(t, c, store, transport), store, transport
-}
-
-func configuredPublicationService(
-	t *testing.T, c config.SubscriptionSnapshots, store *fakeStore, transport *fakeZooKeeper,
-) *scheduledService {
-	t.Helper()
-	s := &scheduledService{service: newService(c), actions: make(chan func(), 1)}
-	s.client, s.store, s.session = &mongo.Client{}, &mongoStore{}, &fakeSession{}
-	s.worker = newWorker(c, store)
-	s.zooKeeper = transport
-	s.worker.publication = newPublication(transport, c.ActivationDelay)
-	go func() {
-		defer close(s.done)
-		refresh := time.NewTicker(c.RefreshInterval)
-		defer refresh.Stop()
-		s.loop(refresh.C, s.actions)
-	}()
-	t.Cleanup(s.shutdown)
-	synctest.Wait()
-	return s
-}
-
-func signalZooKeeper(f *fakeZooKeeper, online bool) {
-	f.online = online
-	select {
-	case f.wake <- struct{}{}:
-	default:
-	}
-}
 
 func TestPublicationNormalTimerAndOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -154,8 +50,8 @@ func TestPublicationNormalTimerAndOrder(t *testing.T) {
 		require.True(t, sameDescriptor(candidate, z.nodes["activated"].value))
 		require.Equal(t, []string{"prepared", "activated"}, z.writes)
 		require.Equal(t, 1, store.cleanups)
-		require.Nil(t, s.worker.pending)
-		require.Nil(t, s.worker.publication.pending)
+		require.Nil(t, s.worker.proposal)
+		require.Nil(t, s.worker.publication.candidate)
 		s.shutdown()
 	})
 }
@@ -199,7 +95,7 @@ func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 20*time.Second)
 		b := z.nodes["prepared"].value
-		preparedAt := s.worker.publication.pending.preparedAt
+		preparedAt := s.worker.publication.candidate.preparedAt
 		headReads := 0
 		store.beforeHead = func(context.Context) error {
 			headReads++
@@ -216,7 +112,7 @@ func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 		synctest.Wait()
 		c := store.current.Version
 		require.NotEqual(t, b.SnapshotID, c.SnapshotID)
-		require.Equal(t, preparedAt, s.worker.publication.pending.preparedAt)
+		require.Equal(t, preparedAt, s.worker.publication.candidate.preparedAt)
 		z.session++
 		signalZooKeeper(z, true)
 		synctest.Wait()
@@ -230,7 +126,7 @@ func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 		synctest.Wait()
 		g := store.current.Version
 		require.NotEqual(t, c.SnapshotID, g.SnapshotID)
-		require.True(t, sameDescriptor(c, s.worker.publication.pending.value))
+		require.True(t, sameDescriptor(c, s.worker.publication.candidate.value))
 		s.advance(40 * time.Second)
 		synctest.Wait()
 		require.True(t, sameDescriptor(c, z.nodes["activated"].value))
@@ -355,7 +251,7 @@ func testUncertainZooKeeperWrite(t *testing.T, name string, applied bool) {
 	store := newFakeStore(t)
 	z := newFakeZooKeeper()
 	w := newWorker(testConfig(), store)
-	w.publication = newPublication(z, time.Minute)
+	w.publication = newZooKeeperPublication(z, time.Minute)
 	require.NoError(t, w.refreshSnapshot(t.Context()))
 	var original zNode
 	z.beforeWrite = func(_ context.Context, node string, value descriptor, expected zNode) (writeOutcome, error) {
@@ -376,8 +272,8 @@ func testUncertainZooKeeperWrite(t *testing.T, name string, applied bool) {
 	}
 	require.ErrorIs(t, w.progressZooKeeper(t.Context()), context.DeadlineExceeded)
 	w.publication.degrade(context.DeadlineExceeded)
-	candidate := w.publication.pending.value
-	if w.pending != nil {
+	candidate := w.publication.candidate.value
+	if w.proposal != nil {
 		require.NoError(t, w.resolve(t.Context()))
 	}
 	success := w.lastSuccess
@@ -390,7 +286,7 @@ func testUncertainZooKeeperWrite(t *testing.T, name string, applied bool) {
 	}
 	require.NoError(t, w.progressZooKeeper(t.Context()))
 	if name == "prepared" {
-		require.Equal(t, time.Now(), w.publication.pending.preparedAt)
+		require.Equal(t, time.Now(), w.publication.candidate.preparedAt)
 		time.Sleep(time.Minute)
 		require.NoError(t, w.progressZooKeeper(t.Context()))
 	}
@@ -455,7 +351,7 @@ func TestPublicationPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 		s := newService(c)
 		s.client, s.store, s.session = &mongo.Client{}, &mongoStore{}, &fakeSession{}
 		s.worker = newWorker(c, store)
-		s.worker.publication = newPublication(z, time.Minute)
+		s.worker.publication = newZooKeeperPublication(z, time.Minute)
 		z.beforeWrite = func(ctx context.Context, _ string, _ descriptor, _ zNode) (writeOutcome, error) {
 			<-ctx.Done()
 			return writeUncertain, ctx.Err()
@@ -468,8 +364,8 @@ func TestPublicationPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 		s.attemptRefresh()
 		require.Equal(t, 5*time.Second, time.Since(start))
 		require.Equal(t, 1, store.activations)
-		require.NotNil(t, s.worker.publication.pending)
-		require.Nil(t, s.worker.pending)
+		require.NotNil(t, s.worker.publication.candidate)
+		require.Nil(t, s.worker.proposal)
 		s.cancel()
 	})
 }
@@ -515,12 +411,12 @@ func TestPublicationStartupAbandonsOldPrepare(t *testing.T) {
 		z.nodes["prepared"] = zNode{exists: true, version: 1, czxid: 1, value: b}
 		z.nodes["activated"] = zNode{exists: true, version: 0, czxid: 2, value: a}
 		w := newWorker(testConfig(), store)
-		w.publication = newPublication(z, time.Minute)
+		w.publication = newZooKeeperPublication(z, time.Minute)
 		require.NoError(t, w.progressZooKeeper(t.Context()))
 		require.Empty(t, z.writes, "startup must not release the old MongoDB head")
 		require.NoError(t, w.refreshSnapshot(t.Context()))
 		require.NoError(t, w.progressZooKeeper(t.Context()))
-		c := w.pending.next.Version
+		c := w.proposal.next.Version
 		require.NotEqual(t, b.SnapshotID, c.SnapshotID)
 		require.True(t, sameDescriptor(c, z.nodes["prepared"].value))
 		require.True(t, sameDescriptor(a, z.nodes["activated"].value))
@@ -555,10 +451,10 @@ func TestPublicationDelayedPreviousProcessWrites(t *testing.T) {
 		z.nodes[activatedNode] = zNode{exists: true, version: 5, czxid: 2, value: a}
 		oldPrepared, oldActivated := z.nodes[preparedNode], z.nodes[activatedNode]
 		w := newWorker(testConfig(), store)
-		w.publication = newPublication(z, time.Minute)
+		w.publication = newZooKeeperPublication(z, time.Minute)
 		require.NoError(t, w.refreshSnapshot(t.Context()))
 		require.NoError(t, w.progressZooKeeper(t.Context()))
-		c := w.pending.next.Version
+		c := w.proposal.next.Version
 		_, err := z.apply(preparedNode, b, oldPrepared)
 		require.ErrorIs(t, err, zk.ErrBadVersion, "late prepare must not replace startup C")
 		time.Sleep(time.Minute)
@@ -579,14 +475,14 @@ func TestPublicationRejectedRetryKeepsUncertainOriginalWrite(t *testing.T) {
 		store := newFakeStore(t)
 		z := newFakeZooKeeper()
 		w := newWorker(testConfig(), store)
-		w.publication = newPublication(z, time.Minute)
+		w.publication = newZooKeeperPublication(z, time.Minute)
 		require.NoError(t, w.refreshSnapshot(t.Context()))
 		z.beforeWrite = func(context.Context, string, descriptor, zNode) (writeOutcome, error) {
 			return writeUncertain, context.DeadlineExceeded
 		}
 		require.ErrorIs(t, w.progressZooKeeper(t.Context()), context.DeadlineExceeded)
-		original := *w.publication.pending.operation
-		b := w.publication.pending.value
+		original := *w.publication.candidate.operation
+		b := w.publication.candidate.value
 		w.publication.degrade(context.DeadlineExceeded)
 		require.NoError(t, w.resolve(t.Context()))
 		store.source[0] = sourceDocument(t, "a", "newer confirmed head")
@@ -597,9 +493,9 @@ func TestPublicationRejectedRetryKeepsUncertainOriginalWrite(t *testing.T) {
 			return writeNotExecuted, zk.ErrBadVersion
 		}
 		require.ErrorIs(t, w.progressZooKeeper(t.Context()), zk.ErrBadVersion)
-		require.True(t, w.publication.pending.operation.uncertain)
-		require.True(t, sameDescriptor(b, w.publication.pending.value))
-		require.True(t, sameNode(original.expected, w.publication.pending.operation.expected))
+		require.True(t, w.publication.candidate.operation.uncertain)
+		require.True(t, sameDescriptor(b, w.publication.candidate.value))
+		require.True(t, sameNode(original.expected, w.publication.candidate.operation.expected))
 		require.ErrorIs(t, w.cleanupPending(t.Context()), errCleanupDeferred)
 		require.Empty(t, store.deletions)
 		_, err := z.apply(preparedNode, b, original.expected)
@@ -607,7 +503,7 @@ func TestPublicationRejectedRetryKeepsUncertainOriginalWrite(t *testing.T) {
 		z.session++
 		z.beforeWrite = nil
 		require.NoError(t, w.progressZooKeeper(t.Context()))
-		require.Equal(t, time.Now(), w.publication.pending.preparedAt)
+		require.Equal(t, time.Now(), w.publication.candidate.preparedAt)
 		time.Sleep(time.Minute)
 		require.NoError(t, w.progressZooKeeper(t.Context()))
 		require.True(t, sameDescriptor(b, z.nodes[activatedNode].value))
@@ -650,7 +546,7 @@ func TestPublicationAccessRecoveryWithoutWake(t *testing.T) {
 func TestPublicationMongoFailureAndFlappingAreRateLimited(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 5*time.Minute)
-		preparedAt := s.worker.publication.pending.preparedAt
+		preparedAt := s.worker.publication.candidate.preparedAt
 		store.activation = func(string, head) (bool, error) { return false, context.DeadlineExceeded }
 		s.advance(time.Minute)
 		synctest.Wait()
@@ -665,7 +561,7 @@ func TestPublicationMongoFailureAndFlappingAreRateLimited(t *testing.T) {
 		}
 		require.Equal(t, 1, store.activations, "connection chatter must not retry MongoDB CAS")
 		require.Len(t, z.writes, 1)
-		require.Equal(t, preparedAt, s.worker.publication.pending.preparedAt)
+		require.Equal(t, preparedAt, s.worker.publication.candidate.preparedAt)
 		store.activation = nil
 		s.advance(4 * time.Minute)
 		synctest.Wait()
@@ -695,9 +591,9 @@ func TestPublicationAllDeletionPathsProtectExternalHistoryReferences(t *testing.
 			z.nodes[name] = node
 			w := newWorker(testConfig(), store)
 			w.starting = false
-			w.publication = newPublication(z, time.Minute)
+			w.publication = newZooKeeperPublication(z, time.Minute)
 			w.publication.firstActivated = true
-			w.publication.latest = store.current.Version
+			w.publication.latestConfirmedHead = store.current.Version
 			require.ErrorIs(t, w.deleteVersion(t.Context(), store.current, old.SnapshotID), errCleanupDeferred)
 			w.abandoned = old.SnapshotID
 			require.ErrorIs(t, w.deleteUnpublished(t.Context(), store.current), errCleanupDeferred)
@@ -715,7 +611,7 @@ func TestPublicationDeferredOrphanDoesNotBlockSourceAndIsEventuallyDeleted(t *te
 		z := newFakeZooKeeper()
 		z.online = false
 		w := newWorker(testConfig(), store)
-		w.publication = newPublication(z, time.Minute)
+		w.publication = newZooKeeperPublication(z, time.Minute)
 		store.insertError = context.DeadlineExceeded
 		require.ErrorIs(t, w.refreshSnapshot(t.Context()), context.DeadlineExceeded)
 		orphan := w.abandoned
@@ -813,10 +709,10 @@ func TestPublicationStartupWaitsForItsOwnConfirmedMongoHead(t *testing.T) {
 		z.nodes[preparedNode] = zNode{exists: true, czxid: 1, value: b}
 		z.nodes[activatedNode] = zNode{exists: true, czxid: 2, value: a}
 		w := newWorker(testConfig(), store)
-		w.publication = newPublication(z, time.Minute)
+		w.publication = newZooKeeperPublication(z, time.Minute)
 		w.publication.degraded = true
 		require.NoError(t, w.refreshSnapshot(t.Context()))
-		c := w.pending.next.Version
+		c := w.proposal.next.Version
 		store.activation = func(string, head) (bool, error) { return false, context.DeadlineExceeded }
 		require.ErrorIs(t, w.resolve(t.Context()), context.DeadlineExceeded)
 		require.NoError(t, w.progressZooKeeper(t.Context()))
@@ -843,14 +739,14 @@ func TestPublicationCatchUpRequiresConfirmedMongoHead(t *testing.T) {
 			z := newFakeZooKeeper()
 			z.nodes[preparedNode] = zNode{exists: true, czxid: 1, value: a}
 			z.nodes[activatedNode] = zNode{exists: true, czxid: 2, value: a}
-			w.publication = newPublication(z, time.Minute)
-			w.publication.latest = a
+			w.publication = newZooKeeperPublication(z, time.Minute)
+			w.publication.latestConfirmedHead = a
 			w.publication.degraded = true
 			w.publication.firstActivated = true
 			store.source[0] = sourceDocument(t, "a", "new proposal")
 			require.NoError(t, w.refreshSnapshot(t.Context()))
 			if ownProposal {
-				store.current = w.pending.next
+				store.current = w.proposal.next
 			} else {
 				unknown := testDescriptor(time.Now(), 1)
 				store.versions[unknown.SnapshotID] = unknown.DocumentCount
@@ -880,7 +776,7 @@ func TestPublicationInsertMustBeCompleteIncludingEmptySnapshot(t *testing.T) {
 				store := newFakeStore(t)
 				z := newFakeZooKeeper()
 				w := newWorker(testConfig(), store)
-				w.publication = newPublication(z, time.Minute)
+				w.publication = newZooKeeperPublication(z, time.Minute)
 				switch scenario {
 				case "empty":
 					store.source = nil

@@ -97,6 +97,8 @@ golangci-lint run --fix
 - Complete snapshot -> ZooKeeper `prepared` -> activation delay -> MongoDB head/history CAS -> ZooKeeper `activated`.
 - ZooKeeper outages leave MongoDB publication and HTTP readiness independent; bounded retries catch up to the latest confirmed head.
 - Cleanup protects both ZooKeeper references and uncertain candidates; see `docs/subscription-snapshots.md`.
+- `service.go` owns the iterative event cycle and coalesced `refreshRequested`; `mongo_snapshots.go` owns the MongoDB `proposal`, and `zookeeper_publication.go` owns its independent fixed `candidate` and `latestConfirmedHead`.
+- Each eligible event cycle attempts regular cleanup at most once; orphan deletion remains separate. Queuing alone emits no refresh-completed log; actual refresh duration still starts before initialization and ends after direct publication attempts, before regular cleanup.
 - Runtime remains a static Go binary on `scratch`; ZooKeeper test/server containers alone require Java.
 
 **Reconciliation** (`internal/reconciliation/`):

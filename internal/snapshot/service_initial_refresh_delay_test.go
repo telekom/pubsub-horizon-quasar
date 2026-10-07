@@ -332,7 +332,7 @@ func TestInitialRefreshDelayExpiredBeforeFirstRefresh(t *testing.T) {
 		<-done
 		synctest.Wait()
 		require.True(t, s.initialRefreshDeadline.IsZero())
-		require.False(t, s.worker.refreshQueued, "a late first refresh must consume the startup deadline")
+		require.False(t, s.refreshRequested, "a late first refresh must consume the startup deadline")
 		require.Equal(t, 1, store.sourceReads)
 		require.Equal(t, []string{preparedNode}, z.writes)
 		s.advance(c.ActivationDelay)
@@ -384,10 +384,10 @@ func TestInitialRefreshDelayPreservesUncertainMongoCAS(t *testing.T) {
 		store.activation = func(string, head) (bool, error) { return false, context.DeadlineExceeded }
 		c := initialRefreshTestConfig()
 		s := configuredPublicationService(t, c, store, z)
-		require.Nil(t, s.worker.pending)
+		require.Nil(t, s.worker.proposal)
 		s.advance(c.InitialRefreshDelay)
 		synctest.Wait()
-		require.NotNil(t, s.worker.pending)
+		require.NotNil(t, s.worker.proposal)
 		signalZooKeeper(z, true)
 		synctest.Wait()
 		s.advance(time.Minute)

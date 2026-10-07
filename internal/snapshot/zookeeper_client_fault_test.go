@@ -300,7 +300,7 @@ func TestZooKeeperDNSRecoveryWhileMongoDBContinues(t *testing.T) {
 	})
 	store := newFakeStore(t)
 	w := newWorker(testConfig(), store)
-	w.publication = newPublication(client, time.Millisecond)
+	w.publication = newZooKeeperPublication(client, time.Millisecond)
 	require.NoError(t, w.refreshSnapshot(t.Context()))
 	require.Error(t, w.progressZooKeeper(t.Context()))
 	w.publication.degrade(errZooKeeperUnavailable)
