@@ -23,6 +23,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"github.com/telekom/quasar/internal/config"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func TestSchedulingRefreshAndCleanupAfterPublication(t *testing.T) {
@@ -153,15 +154,18 @@ func TestCleanupFailureIsLoggedAndRetriedOnNextRefresh(t *testing.T) {
 		t.Cleanup(func() { log.Logger = previousLogger })
 		s.attemptRefresh()
 		lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
-		require.Len(t, lines, 2)
+		require.Len(t, lines, 1)
 		var entry map[string]any
-		require.NoError(t, json.Unmarshal(lines[1], &entry))
+		require.NoError(t, json.Unmarshal(lines[0], &entry))
+		require.Equal(t, "Subscription snapshot operation failed", entry["message"])
+		require.Equal(t, "error", entry["level"])
 		require.Equal(t, "cleanup", entry["operation"])
 		require.True(t, s.worker.cleanupDue)
 
 		output.Reset()
 		s.worker.store = store
 		s.attemptRefresh()
+		require.Empty(t, output.String(), "successful cleanup and unchanged scans are silent at INFO")
 		require.False(t, s.worker.cleanupDue)
 		require.NotContains(t, store.versions, orphan.SnapshotID)
 		s.shutdown()
@@ -223,24 +227,97 @@ func TestPublicationLoggingDurationMs(t *testing.T) {
 		}
 		var output bytes.Buffer
 		previousLogger := log.Logger
-		log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
+		log.Logger = zerolog.New(&output).Level(zerolog.DebugLevel)
 		t.Cleanup(func() { log.Logger = previousLogger })
 
 		require.NoError(t, newWorker(testConfig(), store).refresh(t.Context()))
 
 		lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
-		require.Len(t, lines, 2, "publication and immediate cleanup each emit one log event")
+		require.Len(t, lines, 3, "creation, publication and immediate cleanup each emit one log event")
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(lines[0], &created))
+		require.Equal(t, "Subscription snapshot created", created["message"])
+		require.Equal(t, "info", created["level"])
+		require.Equal(t, float64(1000), created["durationMs"])
 		var publication map[string]any
-		require.NoError(t, json.Unmarshal(lines[0], &publication))
+		require.NoError(t, json.Unmarshal(lines[1], &publication))
 		require.Equal(t, "Subscription snapshot published", publication["message"])
 		require.Equal(t, float64(1000), publication["durationMs"])
 		require.NotContains(t, publication, "duration")
 		require.Equal(t, store.current.Version.SnapshotID, publication["snapshotId"])
 		require.Equal(t, "initial", publication["snapshotReason"])
 		var cleanup map[string]any
-		require.NoError(t, json.Unmarshal(lines[1], &cleanup))
+		require.NoError(t, json.Unmarshal(lines[2], &cleanup))
 		require.Equal(t, "Subscription snapshot cleanup completed", cleanup["message"])
+		require.Equal(t, "debug", cleanup["level"])
+		require.Equal(t, float64(0), cleanup["deletedDocuments"])
 	})
+}
+
+func TestSnapshotServiceFailureLogging(t *testing.T) {
+	tests := []struct {
+		name      string
+		mutate    func(*fakeStore, *fakeZooKeeper)
+		operation string
+		created   int
+	}{
+		{"scan", func(store *fakeStore, _ *fakeZooKeeper) { store.sourceError = context.DeadlineExceeded }, "refresh", 0},
+		{"insert", func(store *fakeStore, _ *fakeZooKeeper) { store.insertError = context.DeadlineExceeded }, "refresh", 0},
+		{"MongoDB publication", func(store *fakeStore, _ *fakeZooKeeper) {
+			store.activation = func(string, head) (bool, error) { return false, context.DeadlineExceeded }
+		}, "activate-mongo", 1},
+		{"ZooKeeper preparation", func(_ *fakeStore, z *fakeZooKeeper) {
+			z.beforeWrite = func(context.Context, string, descriptor, zNode) (writeOutcome, error) {
+				return writeUncertain, context.DeadlineExceeded
+			}
+		}, "zookeeper", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				store, z := newFakeStore(t), newFakeZooKeeper()
+				tt.mutate(store, z)
+				c := testConfig()
+				c.ActivationDelay = 0
+				s := newService(c)
+				defer s.cancel()
+				s.client, s.store, s.session = &mongo.Client{}, &mongoStore{}, &fakeSession{}
+				s.worker = newWorker(c, store)
+				s.zooKeeper = z
+				var output bytes.Buffer
+				previous := log.Logger
+				log.Logger = zerolog.New(&output)
+				t.Cleanup(func() { log.Logger = previous })
+
+				s.attemptRefresh()
+
+				require.Equal(t, tt.created, bytes.Count(output.Bytes(), []byte("Subscription snapshot created")))
+				require.NotContains(t, output.String(), "Subscription snapshot source unchanged")
+				require.NotContains(t, output.String(), "Subscription snapshot ZooKeeper activated")
+				errorsLogged := 0
+				for _, entry := range serviceLogMessages(t, output.Bytes()) {
+					if entry["level"] == "error" && entry["operation"] == tt.operation {
+						errorsLogged++
+						require.IsType(t, float64(0), entry["durationMs"])
+					}
+				}
+				require.Equal(t, 1, errorsLogged)
+				switch tt.operation {
+				case "refresh":
+					require.Nil(t, s.worker.proposal)
+					require.Zero(t, store.activations)
+				case "activate-mongo":
+					require.NotNil(t, s.worker.proposal)
+					require.Empty(t, store.current.Version.SnapshotID)
+					require.NotContains(t, output.String(), "Subscription snapshot published")
+				default:
+					require.Nil(t, s.worker.proposal)
+					require.NotEmpty(t, store.current.Version.SnapshotID, "ZooKeeper failures preserve MongoDB fallback")
+					require.Contains(t, output.String(), "Subscription snapshot published")
+				}
+			})
+		})
+	}
 }
 
 const snapshotTestURIEnv = "QUASAR_TEST_SNAPSHOT_URI"
@@ -438,6 +515,7 @@ func TestQueuedRefreshContinuesPublicationInSameCycle(t *testing.T) {
 				require.Equal(t, 1, store.sourceReads)
 				require.Equal(t, 1, store.inserts)
 				require.Zero(t, bytes.Count(output.Bytes(), []byte("Subscription snapshot refresh completed")))
+				require.Empty(t, serviceLogMessages(t, output.Bytes()), "queued ticks perform no snapshot work")
 				output.Reset()
 				if fallback {
 					signalZooKeeper(z, false)
@@ -450,7 +528,8 @@ func TestQueuedRefreshContinuesPublicationInSameCycle(t *testing.T) {
 				require.False(t, s.refreshRequested)
 				require.Equal(t, 2, store.sourceReads, "all queued ticks coalesce into one inline scan")
 				require.Equal(t, 2, store.inserts)
-				require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot refresh completed")))
+				require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot created")))
+				serviceLogMessages(t, output.Bytes())
 				require.Equal(t, 1, regularCleanupAttempts(output.Bytes()), "include blocked/deferred attempts, not just deletions")
 				require.True(t, s.worker.cleanupDue)
 				if fallback {
@@ -517,12 +596,14 @@ func TestQueuedRefreshDoesNotRepeatFailedOrUnchangedScan(t *testing.T) {
 				require.Equal(t, 1, store.activations)
 				require.Equal(t, 1, regularCleanupAttempts(output.Bytes()))
 				require.False(t, s.worker.cleanupDue)
-				completed := 1
+				unchanged := 1
 				if failed {
-					completed = 0
+					unchanged = 0
 					require.Contains(t, output.String(), `"operation":"refresh"`)
 				}
-				require.Equal(t, completed, bytes.Count(output.Bytes(), []byte("Subscription snapshot refresh completed")))
+				require.Equal(t, unchanged, bytes.Count(output.Bytes(), []byte("Subscription snapshot source unchanged")))
+				require.Zero(t, bytes.Count(output.Bytes(), []byte("Subscription snapshot created")))
+				serviceLogMessages(t, output.Bytes())
 				s.advance(time.Nanosecond)
 				synctest.Wait()
 				require.Equal(t, 2, store.sourceReads)
@@ -661,12 +742,13 @@ func TestFollowUpPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 		require.True(t, candidate.preparedAt.IsZero())
 		require.True(t, candidate.operation.uncertain)
 		require.Equal(t, 1, regularCleanupAttempts(output.Bytes()))
-		require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot refresh completed")))
+		require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot created")))
+		serviceLogMessages(t, output.Bytes())
 		s.shutdown()
 	})
 }
 
-func TestRefreshCompletionDurationAndCleanupOrder(t *testing.T) {
+func TestSnapshotCreationDurationAndCleanupOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
 		c := testConfig()
@@ -690,10 +772,8 @@ func TestRefreshCompletionDurationAndCleanupOrder(t *testing.T) {
 		previous := log.Logger
 		log.Logger = zerolog.New(&output)
 		t.Cleanup(func() { log.Logger = previous })
-		store.beforeHead = func(context.Context) error {
-			if bytes.Contains(output.Bytes(), []byte("Subscription snapshot refresh completed")) {
-				time.Sleep(5 * time.Second)
-			}
+		store.beforeCleanup = func(context.Context) error {
+			time.Sleep(5 * time.Second)
 			return nil
 		}
 		start := time.Now()
@@ -701,15 +781,17 @@ func TestRefreshCompletionDurationAndCleanupOrder(t *testing.T) {
 		require.Equal(t, 14*time.Second, time.Since(start))
 		messages := serviceLogMessages(t, output.Bytes())
 		require.Equal(t, []string{
-			"Subscription snapshot ZooKeeper prepared", "Subscription snapshot published",
-			"Subscription snapshot ZooKeeper activated", "Subscription snapshot refresh completed",
+			"Subscription snapshot created", "Subscription snapshot ZooKeeper prepared",
+			"Subscription snapshot published", "Subscription snapshot ZooKeeper activated",
 			"Subscription snapshot cleanup completed",
 		}, messageNames(messages))
-		require.Equal(t, float64(3000), messages[0]["durationMs"])
-		require.Equal(t, float64(5000), messages[1]["durationMs"])
-		require.Equal(t, float64(7000), messages[2]["durationMs"])
-		require.Equal(t, float64(9000), messages[3]["durationMs"], "source plus direct publication, excluding cleanup")
+		require.Equal(t, float64(2000), messages[0]["durationMs"], "exclude publication and cleanup")
+		require.Equal(t, float64(3000), messages[1]["durationMs"])
+		require.Equal(t, float64(5000), messages[2]["durationMs"])
+		require.Equal(t, float64(7000), messages[3]["durationMs"])
 		require.Equal(t, float64(5000), messages[4]["durationMs"])
+		require.Equal(t, "debug", messages[4]["level"])
+		require.Equal(t, float64(0), messages[4]["deletedDocuments"])
 		s.shutdown()
 	})
 }
@@ -745,14 +827,14 @@ func TestFollowUpRefreshHasOwnDurationWindow(t *testing.T) {
 		require.Equal(t, 2, store.sourceReads)
 		require.Equal(t, 1, store.activations)
 		require.True(t, sameDescriptor(a, store.current.Version))
-		var completed []map[string]any
+		var created []map[string]any
 		for _, entry := range serviceLogMessages(t, output.Bytes()) {
-			if entry["message"] == "Subscription snapshot refresh completed" {
-				completed = append(completed, entry)
+			if entry["message"] == "Subscription snapshot created" {
+				created = append(created, entry)
 			}
 		}
-		require.Len(t, completed, 1)
-		require.Equal(t, float64(5000), completed[0]["durationMs"], "exclude A's timer, CAS and activation time")
+		require.Len(t, created, 1)
+		require.Equal(t, float64(2000), created[0]["durationMs"], "exclude A's timer, CAS, activation and B's prepare")
 		require.Equal(t, 1, regularCleanupAttempts(output.Bytes()))
 		require.True(t, sameDescriptor(s.worker.proposal.next.Version, z.nodes[preparedNode].value))
 		s.shutdown()

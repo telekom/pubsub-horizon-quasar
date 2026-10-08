@@ -594,7 +594,9 @@ func TestPublicationAllDeletionPathsProtectExternalHistoryReferences(t *testing.
 			w.publication = newZooKeeperPublication(z, time.Minute)
 			w.publication.firstActivated = true
 			w.publication.latestConfirmedHead = store.current.Version
-			require.ErrorIs(t, w.deleteVersion(t.Context(), store.current, old.SnapshotID), errCleanupDeferred)
+			deleted, err := w.deleteVersion(t.Context(), store.current, old.SnapshotID)
+			require.ErrorIs(t, err, errCleanupDeferred)
+			require.Zero(t, deleted)
 			w.abandoned = old.SnapshotID
 			require.ErrorIs(t, w.deleteUnpublished(t.Context(), store.current), errCleanupDeferred)
 			require.NoError(t, w.cleanup(t.Context()))
@@ -671,21 +673,25 @@ func TestPublicationStructuredPhaseLogs(t *testing.T) {
 			require.True(t, ok)
 			messages[message] = append(messages[message], entry)
 			switch message {
-			case "Subscription snapshot ZooKeeper prepared", "Subscription snapshot published", "Subscription snapshot ZooKeeper activated":
+			case "Subscription snapshot created", "Subscription snapshot ZooKeeper prepared",
+				"Subscription snapshot published", "Subscription snapshot ZooKeeper activated":
 				ordered = append(ordered, message)
 			}
 		}
 		require.Equal(t, []string{
-			"Subscription snapshot ZooKeeper prepared", "Subscription snapshot published", "Subscription snapshot ZooKeeper activated",
+			"Subscription snapshot created", "Subscription snapshot ZooKeeper prepared",
+			"Subscription snapshot published", "Subscription snapshot ZooKeeper activated",
 		}, ordered)
 		id := store.current.Version.SnapshotID
 		for _, message := range ordered {
 			require.Len(t, messages[message], 1)
+			require.Equal(t, "info", messages[message][0]["level"])
 			require.Equal(t, id, messages[message][0]["snapshotId"])
 		}
 		require.Equal(t, float64(0), messages[ordered[0]][0]["durationMs"])
-		require.Equal(t, float64(60000), messages[ordered[1]][0]["durationMs"])
+		require.Equal(t, float64(0), messages[ordered[1]][0]["durationMs"])
 		require.Equal(t, float64(60000), messages[ordered[2]][0]["durationMs"])
+		require.Equal(t, float64(60000), messages[ordered[3]][0]["durationMs"])
 		failure := messages["Subscription snapshot ZooKeeper operation failed"][0]
 		require.Equal(t, activatedNode, failure["phase"])
 		require.Equal(t, "access", failure["errorCategory"])
@@ -693,6 +699,10 @@ func TestPublicationStructuredPhaseLogs(t *testing.T) {
 		require.Contains(t, failure, "durationMs")
 		require.Len(t, messages["Subscription snapshot cleanup deferred"], 1)
 		require.Len(t, messages["Subscription snapshot cleanup completed"], 1)
+		require.Equal(t, "debug", messages["Subscription snapshot cleanup completed"][0]["level"])
+		require.Equal(t, float64(0), messages["Subscription snapshot cleanup completed"][0]["deletedDocuments"])
+		require.NotContains(t, messages, "Subscription snapshot refresh completed")
+		require.NotContains(t, messages, "Subscription snapshot refresh attempt finished")
 		require.Len(t, messages["Subscription snapshots continuing with MongoDB fallback"], 1)
 		require.Len(t, messages["Subscription snapshots returned to synchronized publication"], 1)
 	})

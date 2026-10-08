@@ -298,8 +298,8 @@ func (s *service) runCycle(cause workCause) {
 			}
 		}
 		s.publicationStep()
-		if !start.IsZero() {
-			s.logRefresh(start, err)
+		if err != nil {
+			s.logError("refresh", start, err)
 		}
 		if s.worker == nil || s.worker.proposal != nil || !s.refreshRequested || s.ctx.Err() != nil {
 			break
@@ -332,16 +332,6 @@ func (s *service) refreshStep() (time.Time, error) {
 		}
 	}
 	return start, err
-}
-
-func (s *service) logRefresh(start time.Time, err error) {
-	if err != nil {
-		s.logError("refresh", start, err)
-		return
-	}
-	log.Info().Dur("durationMs", time.Since(start)).Str("sourceCollection", s.config.SourceCollection).
-		Str("snapshotCollection", s.config.SnapshotCollection).Str("headCollection", s.config.HeadCollection).
-		Time("lastSuccess", s.worker.lastSuccess).Msg("Subscription snapshot refresh completed")
 }
 
 func (s *service) publicationStep() {

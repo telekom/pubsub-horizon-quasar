@@ -27,7 +27,12 @@ import (
 
 func serviceLogMessages(t *testing.T, output []byte) []map[string]any {
 	t.Helper()
+	require.NotContains(t, string(output), "Subscription snapshot refresh completed")
+	require.NotContains(t, string(output), "Subscription snapshot refresh attempt finished")
 	var entries []map[string]any
+	if len(bytes.TrimSpace(output)) == 0 {
+		return entries
+	}
 	for _, line := range bytes.Split(bytes.TrimSpace(output), []byte("\n")) {
 		var entry map[string]any
 		require.NoError(t, json.Unmarshal(line, &entry))
@@ -261,21 +266,22 @@ func runScheduledService(t *testing.T, store *fakeStore, refreshInterval time.Du
 }
 
 type fakeStore struct {
-	current      head
-	source       []bson.Raw
-	versions     map[string]int64
-	inserts      int
-	activations  int
-	deletions    []string
-	readError    error
-	sourceError  error
-	insertError  error
-	activation   func(string, head) (bool, error)
-	beforeDelete func()
-	sourceReads  int
-	cleanups     int
-	beforeHead   func(context.Context) error
-	beforeRead   func(context.Context) error
+	current       head
+	source        []bson.Raw
+	versions      map[string]int64
+	inserts       int
+	activations   int
+	deletions     []string
+	readError     error
+	sourceError   error
+	insertError   error
+	activation    func(string, head) (bool, error)
+	beforeDelete  func()
+	sourceReads   int
+	cleanups      int
+	beforeHead    func(context.Context) error
+	beforeRead    func(context.Context) error
+	beforeCleanup func(context.Context) error
 }
 
 func testConfig() config.SubscriptionSnapshots {
@@ -376,8 +382,13 @@ func (f *fakeStore) countSnapshot(_ context.Context, id string) (int64, error) {
 	return f.versions[id], nil
 }
 
-func (f *fakeStore) visitSnapshotIDs(_ context.Context, visit func(string) error) error {
+func (f *fakeStore) visitSnapshotIDs(ctx context.Context, visit func(string) error) error {
 	f.cleanups++
+	if f.beforeCleanup != nil {
+		if err := f.beforeCleanup(ctx); err != nil {
+			return err
+		}
+	}
 	var ids []string
 	for id := range f.versions {
 		ids = append(ids, id)

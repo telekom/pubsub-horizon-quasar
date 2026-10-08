@@ -228,3 +228,32 @@ func TestZooKeeperLogsRedactSDKContent(t *testing.T) {
 		require.NotContains(t, output.String(), sensitive)
 	}
 }
+
+func TestZooKeeperSDKLogLevels(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		level slog.Level
+		want  zerolog.Level
+	}{
+		{"debug", slog.LevelDebug, zerolog.DebugLevel},
+		{"info", slog.LevelInfo, zerolog.InfoLevel},
+		{"warn", slog.LevelWarn, zerolog.WarnLevel},
+		{"error", slog.LevelError, zerolog.ErrorLevel},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, zooKeeperLogLevel(tt.level))
+			var output bytes.Buffer
+			handler := &zooKeeperLogHandler{logger: zerolog.New(&output).Level(zerolog.DebugLevel)}
+			logger := slog.New(handler)
+			logger.Log(t.Context(), tt.level, "private-payload", "password", "never-log-secret")
+			entries := serviceLogMessages(t, output.Bytes())
+			require.Equal(t, []string{"ZooKeeper SDK transport event"}, messageNames(entries))
+			require.Equal(t, tt.name, entries[0]["level"])
+			require.Equal(t, "zookeeper-sdk", entries[0]["source"])
+			require.NotContains(t, output.String(), "private-payload")
+			require.NotContains(t, output.String(), "never-log-secret")
+			filtered := &zooKeeperLogHandler{logger: zerolog.New(&output).Level(zerolog.WarnLevel)}
+			require.Equal(t, tt.level >= slog.LevelWarn, filtered.Enabled(t.Context(), tt.level))
+		})
+	}
+}

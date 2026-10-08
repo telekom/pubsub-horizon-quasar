@@ -222,7 +222,7 @@ func TestMongoIntegration(t *testing.T) {
 	uri := test.SetupMongoReplicaSet(t)
 	t.Run("independent client and shutdown", func(t *testing.T) { testMongoServiceLifecycle(t, uri) })
 	t.Run("setup retry after successful connection", func(t *testing.T) { testMongoSetupRetry(t, uri) })
-	t.Run("refresh duration includes initialization", func(t *testing.T) { testMongoRefreshInitializationDuration(t, uri) })
+	t.Run("result durations exclude initialization", func(t *testing.T) { testMongoResultInitializationDuration(t, uri) })
 	t.Run("persistent session", func(t *testing.T) { testMongoSession(t, uri) })
 	t.Run("publication and schema", func(t *testing.T) { testMongoPublication(t, uri) })
 	t.Run("missing source and head", func(t *testing.T) { testMongoMissingMetadata(t, uri) })
@@ -240,7 +240,7 @@ func TestMongoIntegration(t *testing.T) {
 	})
 }
 
-func testMongoRefreshInitializationDuration(t *testing.T, uri string) {
+func testMongoResultInitializationDuration(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	_, disable := configureTestFailpoint(t, client, "failCommand", bson.D{{Key: "times", Value: 1}}, bson.D{
 		{Key: "failCommands", Value: bson.A{"create"}},
@@ -260,26 +260,46 @@ func testMongoRefreshInitializationDuration(t *testing.T, uri string) {
 			s.session.EndSession(t.Context())
 		}
 	}()
+	started := time.Now()
 	s.attemptRefresh()
+	elapsed := time.Since(started)
 	require.NotNil(t, s.worker)
 	require.False(t, s.worker.lastSuccess.IsZero())
-	var refreshEntry, publicationEntry map[string]any
+	var createdEntry, publicationEntry map[string]any
+	var createdLogs, publicationLogs int
 	for _, entry := range serviceLogMessages(t, output.Bytes()) {
 		switch entry["message"] {
-		case "Subscription snapshot refresh completed":
-			refreshEntry = entry
+		case "Subscription snapshot created":
+			createdEntry = entry
+			createdLogs++
 		case "Subscription snapshot published":
 			publicationEntry = entry
+			publicationLogs++
 		}
 	}
-	require.NotNil(t, refreshEntry)
+	require.Equal(t, 1, createdLogs)
+	require.Equal(t, 1, publicationLogs)
+	require.NotNil(t, createdEntry)
 	require.NotNil(t, publicationEntry)
-	refreshDuration, refreshOK := refreshEntry["durationMs"].(float64)
+	createdDuration, createdOK := createdEntry["durationMs"].(float64)
 	publicationDuration, publicationOK := publicationEntry["durationMs"].(float64)
-	require.True(t, refreshOK)
+	require.True(t, createdOK)
 	require.True(t, publicationOK)
-	require.GreaterOrEqual(t, refreshDuration, publicationDuration+1000,
-		"refresh starts before schema initialization; snapshot publication starts afterwards")
+	require.GreaterOrEqual(t, float64(elapsed)/float64(time.Millisecond), publicationDuration+1000,
+		"schema initialization is outside the snapshot and publication durations")
+	require.GreaterOrEqual(t, publicationDuration, createdDuration)
+	require.Equal(t, "info", createdEntry["level"])
+
+	output.Reset()
+	started = time.Now()
+	s.attemptRefresh()
+	elapsed = time.Since(started)
+	entries := serviceLogMessages(t, output.Bytes())
+	require.Equal(t, []string{"Subscription snapshot source unchanged"}, messageNames(entries))
+	require.Equal(t, "debug", entries[0]["level"])
+	unchangedDuration, ok := entries[0]["durationMs"].(float64)
+	require.True(t, ok)
+	require.LessOrEqual(t, unchangedDuration, float64(elapsed)/float64(time.Millisecond))
 }
 
 func testMongoSession(t *testing.T, uri string) {

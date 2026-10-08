@@ -84,7 +84,10 @@ func (w *worker) createSnapshot(ctx context.Context) error {
 		return err
 	}
 	if !w.starting && complete && previous.Version.SourceHash == source.sourceHash() {
-		log.Debug().Int64("documentCount", previous.Version.DocumentCount).Msg("Subscription snapshot source unchanged")
+		log.Debug().Str("snapshotId", previous.Version.SnapshotID).Int64("documentCount", previous.Version.DocumentCount).
+			Str("sourceCollection", w.config.SourceCollection).Str("snapshotCollection", w.config.SnapshotCollection).
+			Str("headCollection", w.config.HeadCollection).Dur("durationMs", time.Since(started)).
+			Time("lastSuccess", w.lastSuccess).Msg("Subscription snapshot source unchanged")
 		return nil
 	}
 	reason := reasonSourceChanged
@@ -110,6 +113,11 @@ func (w *worker) createSnapshot(ctx context.Context) error {
 		previous: previous, next: proposeHead(previous, next, w.config.MinimumRetainedSnapshots),
 		started: started, reason: reason,
 	}
+	log.Info().Str("snapshotId", next.SnapshotID).Int64("documentCount", next.DocumentCount).
+		Str("snapshotReason", string(reason)).
+		Str("sourceCollection", w.config.SourceCollection).Str("snapshotCollection", w.config.SnapshotCollection).
+		Str("headCollection", w.config.HeadCollection).Dur("durationMs", time.Since(started)).
+		Msg("Subscription snapshot created")
 	return nil
 }
 
@@ -210,7 +218,7 @@ func (w *worker) deleteUnpublished(ctx context.Context, current head) error {
 	if containsSnapshot(current, w.abandoned) {
 		return errors.New("unpublished candidate unexpectedly appears in head history; cleanup blocked")
 	}
-	if err := w.deleteVersion(ctx, current, w.abandoned); err != nil {
+	if _, err := w.deleteVersion(ctx, current, w.abandoned); err != nil {
 		return err
 	}
 	w.abandoned = ""
@@ -242,6 +250,7 @@ func (w *worker) cleanup(ctx context.Context) error {
 			return errors.New("protected snapshot is incomplete; cleanup blocked")
 		}
 	}
+	var deletedDocuments int64
 	if err := w.store.visitSnapshotIDs(ctx, func(value string) error {
 		if _, err := canonicalID(value); err != nil {
 			return err
@@ -249,11 +258,13 @@ func (w *worker) cleanup(ctx context.Context) error {
 		if containsSnapshot(current, value) || w.publication.protects(protected, value) {
 			return nil
 		}
-		return w.deleteVersion(ctx, current, value)
+		deleted, err := w.deleteVersion(ctx, current, value)
+		deletedDocuments += deleted
+		return err
 	}); err != nil {
 		return err
 	}
-	log.Info().Dur("durationMs", time.Since(started)).
+	log.Debug().Dur("durationMs", time.Since(started)).Int64("deletedDocuments", deletedDocuments).
 		Str("sourceCollection", w.config.SourceCollection).
 		Str("snapshotCollection", w.config.SnapshotCollection).
 		Str("headCollection", w.config.HeadCollection).
@@ -261,36 +272,38 @@ func (w *worker) cleanup(ctx context.Context) error {
 	return nil
 }
 
-func (w *worker) deleteVersion(ctx context.Context, expected head, id string) error {
+func (w *worker) deleteVersion(ctx context.Context, expected head, id string) (int64, error) {
 	protected, err := w.protectedZooKeeper(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if w.publication.protects(protected, id) {
-		return errCleanupDeferred
+		return 0, errCleanupDeferred
 	}
+	var deletedDocuments int64
 	for {
 		current, err := w.store.readHead(ctx)
 		if err != nil {
-			return err
+			return deletedDocuments, err
 		}
 		if !sameHead(current, expected) || containsSnapshot(current, id) {
-			return errors.New("head or protected history changed during cleanup; deletion aborted")
+			return deletedDocuments, errors.New("head or protected history changed during cleanup; deletion aborted")
 		}
 		latestProtection, err := w.protectedZooKeeper(ctx)
 		if err != nil {
-			return err
+			return deletedDocuments, err
 		}
 		if !sameState(protected, latestProtection) || w.publication.protects(latestProtection, id) {
-			return errors.Join(errCleanupDeferred, errors.New("ZooKeeper references changed during deletion"))
+			return deletedDocuments, errors.Join(errCleanupDeferred, errors.New("ZooKeeper references changed during deletion"))
 		}
 
 		deleted, err := w.store.deleteBatch(ctx, id)
 		if err != nil {
-			return err
+			return deletedDocuments, err
 		}
+		deletedDocuments += deleted
 		if deleted == 0 {
-			return nil
+			return deletedDocuments, nil
 		}
 	}
 }

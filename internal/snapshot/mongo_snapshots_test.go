@@ -13,6 +13,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -140,7 +141,12 @@ func testMongoInterruptedCleanup(t *testing.T, uri string) {
 				return count, err
 			}
 			w.store = faults
+			var output bytes.Buffer
+			previous := log.Logger
+			log.Logger = zerolog.New(&output)
+			t.Cleanup(func() { log.Logger = previous })
 			require.Error(t, w.cleanup(ctx))
+			require.Empty(t, output.String(), "a failed or unacknowledged batch must not complete cleanup")
 			remaining, err := store.countSnapshot(ctx, expired)
 			require.NoError(t, err)
 			require.Equal(t, int64(batchSize+5), remaining, "first batch deleted, remainder must be retryable")
@@ -149,6 +155,10 @@ func testMongoInterruptedCleanup(t *testing.T, uri string) {
 			require.True(t, sameHead(before, afterFailure))
 			w.store = store
 			require.NoError(t, w.cleanup(ctx))
+			entries := serviceLogMessages(t, output.Bytes())
+			require.Equal(t, []string{"Subscription snapshot cleanup completed"}, messageNames(entries))
+			require.Equal(t, float64(batchSize+5), entries[0]["deletedDocuments"],
+				"retry counts only the remaining acknowledged deletions")
 			remaining, err = store.countSnapshot(ctx, expired)
 			require.NoError(t, err)
 			require.Zero(t, remaining)
@@ -202,6 +212,143 @@ func TestRefreshAndRestart(t *testing.T) {
 	require.Equal(t, first.Version, store.current.RecentSnapshots[1])
 }
 
+func TestSnapshotUnchangedResultLogging(t *testing.T) {
+	for _, tt := range []struct {
+		name           string
+		level          zerolog.Level
+		cleanupPending bool
+	}{
+		{"debug", zerolog.DebugLevel, false},
+		{"debug with cleanup", zerolog.DebugLevel, true},
+		{"info", zerolog.InfoLevel, false},
+		{"info with cleanup", zerolog.InfoLevel, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				store := newFakeStore(t)
+				w := newWorker(testConfig(), store)
+				require.NoError(t, w.refresh(t.Context()))
+				before, lastSuccess := store.current, w.lastSuccess
+				w.cleanupDue = tt.cleanupPending
+				store.beforeHead = func(context.Context) error {
+					time.Sleep(time.Second)
+					return nil
+				}
+				store.beforeRead = func(context.Context) error {
+					time.Sleep(2 * time.Second)
+					return nil
+				}
+				store.beforeCleanup = func(context.Context) error {
+					time.Sleep(5 * time.Second)
+					return nil
+				}
+				var output bytes.Buffer
+				previous := log.Logger
+				log.Logger = zerolog.New(&output).Level(tt.level)
+				t.Cleanup(func() { log.Logger = previous })
+
+				require.NoError(t, w.refresh(t.Context()))
+
+				require.True(t, sameHead(before, store.current))
+				require.Equal(t, lastSuccess, w.lastSuccess, "an unchanged scan is not a publication")
+				require.Equal(t, 1, store.inserts)
+				require.False(t, w.cleanupDue)
+				cleanups := 1
+				if tt.cleanupPending {
+					cleanups++
+				}
+				require.Equal(t, cleanups, store.cleanups)
+				entries := serviceLogMessages(t, output.Bytes())
+				if tt.level == zerolog.InfoLevel {
+					require.Empty(t, entries)
+					return
+				}
+				want := []string{"Subscription snapshot source unchanged"}
+				if tt.cleanupPending {
+					want = append(want, "Subscription snapshot cleanup completed")
+				}
+				require.Equal(t, want, messageNames(entries))
+				require.Equal(t, "debug", entries[0]["level"])
+				require.Equal(t, before.Version.SnapshotID, entries[0]["snapshotId"])
+				require.Equal(t, float64(before.Version.DocumentCount), entries[0]["documentCount"])
+				require.Equal(t, "subscriptions", entries[0]["sourceCollection"])
+				require.Equal(t, "snapshots", entries[0]["snapshotCollection"])
+				require.Equal(t, "heads", entries[0]["headCollection"])
+				require.Equal(t, float64(3000), entries[0]["durationMs"])
+				require.Equal(t, lastSuccess.Format(zerolog.TimeFieldFormat), entries[0]["lastSuccess"])
+				require.Len(t, entries[0], 9)
+				if tt.cleanupPending {
+					require.Equal(t, float64(6000), entries[1]["durationMs"])
+					require.Equal(t, float64(0), entries[1]["deletedDocuments"])
+				}
+			})
+		})
+	}
+}
+
+func TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork(t *testing.T) {
+	for _, orphanPending := range []bool{false, true} {
+		t.Run(strconv.FormatBool(orphanPending), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				store := newFakeStore(t)
+				w := newWorker(testConfig(), store)
+				require.NoError(t, w.refresh(t.Context()))
+				before := store.current
+				store.source[0] = sourceDocument(t, "a", "changed")
+				store.beforeRead = func(context.Context) error {
+					time.Sleep(2 * time.Second)
+					return nil
+				}
+				w.store = &faultStore{
+					snapshotStore: store,
+					insert: func(ctx context.Context, id string, source *sourceBuffer) error {
+						time.Sleep(3 * time.Second)
+						return store.insertSnapshot(ctx, id, source)
+					},
+					delete: func(ctx context.Context, id string) (int64, error) {
+						if store.versions[id] > 0 {
+							time.Sleep(4 * time.Second)
+						}
+						return store.deleteBatch(ctx, id)
+					},
+				}
+				orphan := testDescriptor(time.Now(), 11)
+				if orphanPending {
+					w.abandoned = orphan.SnapshotID
+					store.versions[orphan.SnapshotID] = orphan.DocumentCount
+				}
+				var output bytes.Buffer
+				previous := log.Logger
+				log.Logger = zerolog.New(&output)
+				t.Cleanup(func() { log.Logger = previous })
+
+				require.NoError(t, w.createSnapshot(t.Context()))
+
+				entries := serviceLogMessages(t, output.Bytes())
+				require.Equal(t, []string{"Subscription snapshot created"}, messageNames(entries))
+				require.True(t, sameHead(before, store.current), "creation is not head publication")
+				require.NotNil(t, w.proposal)
+				duration := float64(5000)
+				if orphanPending {
+					duration += 4000
+					require.NotContains(t, store.versions, orphan.SnapshotID)
+					require.Contains(t, store.deletions, orphan.SnapshotID)
+				}
+				require.Empty(t, w.abandoned)
+				require.Equal(t, w.proposal.next.Version.SnapshotID, entries[0]["snapshotId"])
+				require.Equal(t, "source_changed", entries[0]["snapshotReason"])
+				require.Equal(t, duration, entries[0]["durationMs"])
+				output.Reset()
+				time.Sleep(time.Minute)
+				require.NoError(t, w.resolve(t.Context()))
+				entries = serviceLogMessages(t, output.Bytes())
+				require.Equal(t, []string{"Subscription snapshot published"}, messageNames(entries))
+				require.Equal(t, duration+60000, entries[0]["durationMs"], "publication retains the original proposal start")
+			})
+		})
+	}
+}
+
 func TestPublicationReason(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -248,7 +395,7 @@ func TestPublicationReason(t *testing.T) {
 			t.Cleanup(func() { log.Logger = previousLogger })
 
 			assertCleanupResult(t, w.refresh(ctx), tt.cleanupBlocked)
-			assertPublicationLogs(t, output.Bytes(), store.current, tt.want, tt.cleanupBlocked)
+			assertPublicationLogs(t, output.Bytes(), store.current, tt.want)
 
 			output.Reset()
 			assertCleanupResult(t, w.refresh(ctx), tt.cleanupBlocked)
@@ -266,24 +413,24 @@ func assertCleanupResult(t *testing.T, err error, blocked bool) {
 	require.NoError(t, err)
 }
 
-func assertPublicationLogs(t *testing.T, output []byte, current head, reason publicationReason, cleanupBlocked bool) {
+func assertPublicationLogs(t *testing.T, output []byte, current head, reason publicationReason) {
 	t.Helper()
-	lines := bytes.Split(bytes.TrimSpace(output), []byte("\n"))
-	wantLines := 2
-	if cleanupBlocked {
-		wantLines = 1
+	entries := serviceLogMessages(t, output)
+	require.Equal(t, []string{"Subscription snapshot created", "Subscription snapshot published"}, messageNames(entries))
+	for _, entry := range entries {
+		require.Equal(t, "info", entry["level"])
+		require.Equal(t, string(reason), entry["snapshotReason"])
+		require.Equal(t, current.Version.SnapshotID, entry["snapshotId"])
+		require.Equal(t, float64(current.Version.DocumentCount), entry["documentCount"])
+		require.Equal(t, "subscriptions", entry["sourceCollection"])
+		require.Equal(t, "snapshots", entry["snapshotCollection"])
+		require.Equal(t, "heads", entry["headCollection"])
+		require.IsType(t, float64(0), entry["durationMs"])
+		require.NotContains(t, entry, "startup")
+		require.NotContains(t, entry, "sourceHashChanged")
+		require.NotContains(t, entry, "activeSnapshotComplete")
 	}
-	require.Len(t, lines, wantLines)
-	var entry map[string]any
-	require.NoError(t, json.Unmarshal(lines[0], &entry), "expected publish log first")
-	require.Equal(t, "Subscription snapshot published", entry["message"])
-	require.Equal(t, string(reason), entry["snapshotReason"])
-	require.Equal(t, current.Version.SnapshotID, entry["snapshotId"])
-	require.Equal(t, float64(current.Version.DocumentCount), entry["documentCount"])
-	require.Contains(t, entry, "durationMs")
-	require.NotContains(t, entry, "startup")
-	require.NotContains(t, entry, "sourceHashChanged")
-	require.NotContains(t, entry, "activeSnapshotComplete")
+	require.Len(t, entries[0], 9, "created has exactly the agreed result fields, level and message")
 }
 
 func TestSourceChangesAndRepair(t *testing.T) {
@@ -336,7 +483,12 @@ func TestRefreshFailurePreservesHead(t *testing.T) {
 			case "insert":
 				store.insertError = errors.New("failed batch")
 			}
+			var output bytes.Buffer
+			previous := log.Logger
+			log.Logger = zerolog.New(&output)
+			t.Cleanup(func() { log.Logger = previous })
 			require.Error(t, w.refresh(context.Background()))
+			require.Empty(t, output.String(), "failed snapshot work must not claim creation or an unchanged source")
 			require.True(t, sameHead(old, store.current))
 			require.Nil(t, w.proposal)
 			if failure == "insert" {
@@ -382,9 +534,11 @@ func TestUncertainActivation(t *testing.T) {
 			t.Cleanup(func() { log.Logger = previousLogger })
 			require.NoError(t, w.refresh(ctx))
 			lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
-			require.Len(t, lines, 2)
+			require.Len(t, lines, 1)
 			var entry map[string]any
 			require.NoError(t, json.Unmarshal(lines[0], &entry))
+			require.Equal(t, "Subscription snapshot published", entry["message"])
+			require.Equal(t, "info", entry["level"])
 			require.Equal(t, string(reasonInitial), entry["snapshotReason"])
 			require.True(t, sameHead(candidate, store.current))
 			require.Equal(t, 1, store.inserts)
@@ -422,9 +576,11 @@ func TestDelayedPreRestartActivation(t *testing.T) {
 	t.Cleanup(func() { log.Logger = previousLogger })
 	require.NoError(t, restarted.refresh(ctx))
 	lines := bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))
-	require.Len(t, lines, 2)
+	require.Len(t, lines, 1)
 	var entry map[string]any
 	require.NoError(t, json.Unmarshal(lines[0], &entry))
+	require.Equal(t, "Subscription snapshot published", entry["message"])
+	require.Equal(t, "info", entry["level"])
 	require.Equal(t, string(reasonInitial), entry["snapshotReason"])
 	require.Equal(t, candidateID, store.current.Version.SnapshotID)
 	require.Equal(t, delayed.next.Version, store.current.RecentSnapshots[1])
@@ -464,6 +620,144 @@ func TestCleanupRetainsOnlyHeadHistory(t *testing.T) {
 		require.Len(t, store.versions, expectedVersions,
 			"only snapshots protected by the active head history should remain")
 	}
+}
+
+func TestCleanupLoggingCountsConfirmedDocuments(t *testing.T) {
+	tests := []struct {
+		name      string
+		documents []int64
+		failure   string
+	}{
+		{name: "no deletions"},
+		{name: "multiple versions and batches", documents: []int64{2*batchSize + 5, 7}},
+		{name: "failed second batch", documents: []int64{2*batchSize + 5, 7}, failure: "rejected"},
+		{name: "lost first acknowledgement", documents: []int64{2*batchSize + 5, 7}, failure: "uncertain"},
+		{name: "protection changes after first batch", documents: []int64{2*batchSize + 5}, failure: "deferred"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeStore(t)
+			w := newWorker(testConfig(), store)
+			require.NoError(t, w.refresh(t.Context()))
+			protected := store.current
+			var total int64
+			var ids []string
+			for _, count := range tt.documents {
+				id := testDescriptor(time.Now(), count).SnapshotID
+				ids = append(ids, id)
+				store.versions[id] = count
+				total += count
+			}
+			w.cleanupDue = true
+			w.store = batchedCleanupFaults(store, w, tt.failure)
+			var output bytes.Buffer
+			previous := log.Logger
+			log.Logger = zerolog.New(&output).Level(zerolog.DebugLevel)
+			t.Cleanup(func() { log.Logger = previous })
+
+			err := w.cleanupPending(t.Context())
+			if tt.failure != "" {
+				require.Error(t, err)
+				if tt.failure == "deferred" {
+					require.ErrorIs(t, err, errCleanupDeferred)
+					w.publication = nil
+				} else {
+					require.ErrorIs(t, err, context.DeadlineExceeded)
+				}
+				require.True(t, w.cleanupDue)
+				require.NotContains(t, output.String(), "Subscription snapshot cleanup completed")
+				require.Equal(t, total-int64(batchSize), countTestVersions(store, ids))
+				require.True(t, sameHead(protected, store.current))
+				require.Equal(t, protected.Version.DocumentCount, store.versions[protected.Version.SnapshotID])
+				output.Reset()
+				require.NoError(t, w.cleanupPending(t.Context()))
+				total -= int64(batchSize)
+			} else {
+				require.NoError(t, err)
+			}
+			entries := serviceLogMessages(t, output.Bytes())
+			require.Equal(t, []string{"Subscription snapshot cleanup completed"}, messageNames(entries))
+			require.Equal(t, "debug", entries[0]["level"])
+			require.Equal(t, float64(total), entries[0]["deletedDocuments"])
+			require.Equal(t, "subscriptions", entries[0]["sourceCollection"])
+			require.Equal(t, "snapshots", entries[0]["snapshotCollection"])
+			require.Equal(t, "heads", entries[0]["headCollection"])
+			require.IsType(t, float64(0), entries[0]["durationMs"])
+			require.False(t, w.cleanupDue)
+			for _, id := range ids {
+				require.NotContains(t, store.versions, id)
+			}
+			require.True(t, sameHead(protected, store.current))
+			require.Equal(t, protected.Version.DocumentCount, store.versions[protected.Version.SnapshotID])
+		})
+	}
+}
+
+func batchedCleanupFaults(store *fakeStore, w *worker, failure string) *faultStore {
+	calls := 0
+	return &faultStore{snapshotStore: store, delete: func(_ context.Context, id string) (int64, error) {
+		calls++
+		if failure == "rejected" && calls == 2 {
+			return 0, context.DeadlineExceeded
+		}
+		deleted := min(store.versions[id], int64(batchSize))
+		store.versions[id] -= deleted
+		if store.versions[id] == 0 {
+			delete(store.versions, id)
+		}
+		if deleted > 0 {
+			store.deletions = append(store.deletions, id)
+		}
+		switch {
+		case failure == "uncertain" && calls == 1:
+			return deleted, context.DeadlineExceeded
+		case failure == "deferred" && calls == 1:
+			z := newFakeZooKeeper()
+			z.online = false
+			w.publication = newZooKeeperPublication(z, time.Minute)
+		}
+		return deleted, nil
+	}}
+}
+
+func countTestVersions(store *fakeStore, ids []string) int64 {
+	var total int64
+	for _, id := range ids {
+		total += store.versions[id]
+	}
+	return total
+}
+
+func TestCleanupLoggingExcludesSeparateOrphanDeletion(t *testing.T) {
+	store := newFakeStore(t)
+	w := newWorker(testConfig(), store)
+	require.NoError(t, w.refresh(t.Context()))
+	protected := store.current.Version
+	orphan := testDescriptor(time.Now(), 11)
+	regular := testDescriptor(time.Now(), 7)
+	w.abandoned = orphan.SnapshotID
+	store.versions[orphan.SnapshotID] = orphan.DocumentCount
+	store.versions[regular.SnapshotID] = regular.DocumentCount
+	store.source[0] = sourceDocument(t, "a", "changed")
+	var output bytes.Buffer
+	previous := log.Logger
+	log.Logger = zerolog.New(&output)
+	t.Cleanup(func() { log.Logger = previous })
+
+	require.NoError(t, w.refresh(t.Context()))
+
+	require.Empty(t, w.abandoned)
+	require.NotContains(t, store.versions, orphan.SnapshotID)
+	require.NotContains(t, store.versions, regular.SnapshotID)
+	require.Contains(t, store.deletions, orphan.SnapshotID)
+	require.Contains(t, store.deletions, regular.SnapshotID)
+	require.Contains(t, store.versions, protected.SnapshotID)
+	require.Equal(t, protected, store.current.RecentSnapshots[1])
+	entries := serviceLogMessages(t, output.Bytes())
+	require.Equal(t, []string{
+		"Subscription snapshot created", "Subscription snapshot published", "Subscription snapshot cleanup completed",
+	}, messageNames(entries))
+	require.Equal(t, float64(7), entries[2]["deletedDocuments"], "exclude the eleven separately deleted orphan rows")
 }
 
 func TestCleanupIntegrityAndHeadRecheck(t *testing.T) {
