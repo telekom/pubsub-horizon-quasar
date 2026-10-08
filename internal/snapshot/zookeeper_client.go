@@ -379,22 +379,29 @@ func zooKeeperLogLevel(level slog.Level) zerolog.Level {
 }
 
 func (h *zooKeeperLogHandler) Handle(_ context.Context, record slog.Record) error {
-	var category string
-	// SDK records may contain wire payloads; forward only error categories and severity.
-	addCategory := func(attr slog.Attr) {
-		if err, ok := attr.Value.Any().(error); ok {
-			category = zooKeeperErrorCategory(err)
+	var sdkError error
+	var addError func(slog.Attr)
+	addError = func(attr slog.Attr) {
+		value := attr.Value.Resolve()
+		if value.Kind() == slog.KindGroup {
+			for _, nested := range value.Group() {
+				addError(nested)
+			}
+			return
+		}
+		if attr.Key == "error" {
+			sdkError, _ = value.Any().(error)
 		}
 	}
 	for _, attr := range h.attrs {
-		addCategory(attr)
+		addError(attr)
 	}
 	record.Attrs(func(attr slog.Attr) bool {
-		addCategory(attr)
+		addError(attr)
 		return true
 	})
 	h.logger.WithLevel(zooKeeperLogLevel(record.Level)).Str("source", "zookeeper-sdk").
-		Str("errorCategory", category).Msg("ZooKeeper SDK transport event")
+		Err(sdkError).Msg(record.Message)
 	return nil
 }
 

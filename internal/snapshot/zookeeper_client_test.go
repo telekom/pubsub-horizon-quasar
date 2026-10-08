@@ -11,7 +11,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"net"
+	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -214,17 +218,21 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	require.NoError(t, w.cleanupPending(t.Context()))
 }
 
-func TestZooKeeperLogsRedactSDKContent(t *testing.T) {
+func TestZooKeeperSDKLogsDiscardNonErrorAttributes(t *testing.T) {
 	var output bytes.Buffer
 	handler := &zooKeeperLogHandler{logger: zerolog.New(&output)}
 	logger := slog.New(handler).With("password", "never-log-secret").WithGroup("wire")
-	logger.ErrorContext(t.Context(), "payload-secret", "payload", `{"subscription":"private"}`,
-		"error", errors.New("credential-secret"))
+	logger.ErrorContext(t.Context(), "recv loop terminated", "payload", `{"subscription":"private"}`,
+		"error", errors.New("socket read failed"))
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &record))
-	require.Equal(t, "ZooKeeper SDK transport event", record["message"])
-	require.Equal(t, "other", record["errorCategory"])
-	for _, sensitive := range []string{"never-log-secret", "payload-secret", "private", "credential-secret"} {
+	require.Equal(t, "recv loop terminated", record["message"])
+	require.Equal(t, "error", record["level"])
+	require.Equal(t, "zookeeper-sdk", record["source"])
+	require.Equal(t, "socket read failed", record["error"])
+	require.NotContains(t, record, "errorCategory")
+	require.Len(t, record, 4, "only message, level, source and the original error are forwarded")
+	for _, sensitive := range []string{"never-log-secret", "private", "password", "payload", "wire"} {
 		require.NotContains(t, output.String(), sensitive)
 	}
 }
@@ -245,15 +253,177 @@ func TestZooKeeperSDKLogLevels(t *testing.T) {
 			var output bytes.Buffer
 			handler := &zooKeeperLogHandler{logger: zerolog.New(&output).Level(zerolog.DebugLevel)}
 			logger := slog.New(handler)
-			logger.Log(t.Context(), tt.level, "private-payload", "password", "never-log-secret")
+			logger.Log(t.Context(), tt.level, "connected", "password", "never-log-secret")
 			entries := serviceLogMessages(t, output.Bytes())
-			require.Equal(t, []string{"ZooKeeper SDK transport event"}, messageNames(entries))
+			require.Equal(t, []string{"connected"}, messageNames(entries))
 			require.Equal(t, tt.name, entries[0]["level"])
 			require.Equal(t, "zookeeper-sdk", entries[0]["source"])
-			require.NotContains(t, output.String(), "private-payload")
+			require.NotContains(t, entries[0], "errorCategory")
+			require.NotContains(t, entries[0], "error")
 			require.NotContains(t, output.String(), "never-log-secret")
 			filtered := &zooKeeperLogHandler{logger: zerolog.New(&output).Level(zerolog.WarnLevel)}
 			require.Equal(t, tt.level >= slog.LevelWarn, filtered.Enabled(t.Context(), tt.level))
+		})
+	}
+}
+
+func TestZooKeeperSDKLogMessages(t *testing.T) {
+	for _, tt := range []struct {
+		message string
+		err     error
+	}{
+		{"connected", nil},
+		{"authenticated", nil},
+		{"re-submitting credentials after reconnect", nil},
+		{"send loop terminated", nil},
+		{"a new SDK message", nil},
+		{"recv loop terminated", io.EOF},
+	} {
+		t.Run(tt.message, func(t *testing.T) {
+			var output bytes.Buffer
+			logger := slog.New(&zooKeeperLogHandler{logger: zerolog.New(&output)})
+			logger.InfoContext(t.Context(), tt.message, "error", tt.err,
+				"server", "private-server:2181", "id", 123, "timeout", 10000, "count", 0)
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+			require.Equal(t, tt.message, entry["message"])
+			require.Equal(t, "info", entry["level"])
+			require.Equal(t, "zookeeper-sdk", entry["source"])
+			require.NotContains(t, entry, "errorCategory")
+			if tt.err == nil {
+				require.NotContains(t, entry, "error")
+				require.Len(t, entry, 3)
+			} else {
+				require.Equal(t, tt.err.Error(), entry["error"])
+				require.Len(t, entry, 4)
+			}
+			require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("\n")), "one record produces one immediate log")
+			require.NotContains(t, output.String(), "private-server")
+		})
+	}
+}
+
+func TestZooKeeperSDKLogErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"EOF", io.EOF},
+		{"wrapped EOF", &net.OpError{Op: "read", Net: "tcp", Err: io.EOF}},
+		{"network timeout", &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}},
+		{"connection reset", &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}},
+		{"network address", &net.OpError{
+			Op:   "read",
+			Net:  "tcp",
+			Addr: &net.TCPAddr{IP: net.IPv4(192, 0, 2, 20), Port: 2181},
+			Err:  io.EOF,
+		}},
+		{"cancelled", context.Canceled},
+		{"deadline exceeded", context.DeadlineExceeded},
+		{"missing", zk.ErrNoNode},
+		{"exists", zk.ErrNodeExists},
+		{"version conflict", zk.ErrBadVersion},
+		{"access", zk.ErrNoAuth},
+		{"unavailable", zk.ErrConnectionClosed},
+		{"unknown", errors.New("unexpected transport failure")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			logger := slog.New(&zooKeeperLogHandler{logger: zerolog.New(&output)})
+			logger.InfoContext(t.Context(), "recv loop terminated", "error", tt.err)
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+			require.Equal(t, "recv loop terminated", entry["message"])
+			require.Equal(t, "info", entry["level"])
+			require.Equal(t, "zookeeper-sdk", entry["source"])
+			require.Equal(t, tt.err.Error(), entry["error"])
+			var networkError *net.OpError
+			if errors.As(tt.err, &networkError) && networkError.Addr != nil {
+				require.Contains(t, entry["error"], networkError.Addr.String())
+			}
+			require.NotContains(t, entry, "errorCategory")
+			require.Len(t, entry, 4)
+		})
+	}
+}
+
+type zooKeeperSDKLogValuer struct {
+	value slog.Value
+}
+
+func (v zooKeeperSDKLogValuer) LogValue() slog.Value {
+	return v.value
+}
+
+func TestZooKeeperSDKLogAttributeHandling(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		log       func(*slog.Logger)
+		errorText string
+	}{
+		{"no attributes", func(logger *slog.Logger) {
+			logger.InfoContext(t.Context(), "connected")
+		}, ""},
+		{"inherited error", func(logger *slog.Logger) {
+			logger.With("error", io.EOF, "password", "private-password").InfoContext(t.Context(), "recv loop terminated")
+		}, "EOF"},
+		{"nested error", func(logger *slog.Logger) {
+			logger.LogAttrs(t.Context(), slog.LevelInfo, "recv loop terminated",
+				slog.Group("wire", slog.Group("nested", slog.Any("error", io.EOF), slog.String("password", "private-password"))))
+		}, "EOF"},
+		{"last error in group wins", func(logger *slog.Logger) {
+			logger.LogAttrs(t.Context(), slog.LevelInfo, "recv loop terminated",
+				slog.Group("wire", slog.Any("error", io.EOF), slog.Any("error", context.Canceled)))
+		}, context.Canceled.Error()},
+		{"log valuer error", func(logger *slog.Logger) {
+			logger.InfoContext(t.Context(), "recv loop terminated",
+				"error", zooKeeperSDKLogValuer{value: slog.AnyValue(io.EOF)})
+		}, "EOF"},
+		{"log valuer group", func(logger *slog.Logger) {
+			logger.InfoContext(t.Context(), "recv loop terminated", "wire", zooKeeperSDKLogValuer{
+				value: slog.GroupValue(slog.Any("error", io.EOF), slog.String("password", "private-password")),
+			})
+		}, "EOF"},
+		{"group without error", func(logger *slog.Logger) {
+			logger.LogAttrs(t.Context(), slog.LevelInfo, "connected",
+				slog.Group("wire", slog.String("password", "private-password")))
+		}, ""},
+		{"string error", func(logger *slog.Logger) {
+			logger.InfoContext(t.Context(), "recv loop terminated", "error", "private-error-detail")
+		}, ""},
+		{"error object under another key", func(logger *slog.Logger) {
+			logger.InfoContext(t.Context(), "connected", "payload", errors.New("private-error-detail"))
+		}, ""},
+		{"record error overrides inherited error", func(logger *slog.Logger) {
+			logger.With("error", io.EOF).InfoContext(t.Context(), "recv loop terminated", "error", context.Canceled)
+		}, context.Canceled.Error()},
+		{"record nil overrides inherited error", func(logger *slog.Logger) {
+			logger.With("error", io.EOF).InfoContext(t.Context(), "send loop terminated", "error", nil)
+		}, ""},
+		{"record error overrides nested inherited error", func(logger *slog.Logger) {
+			logger.With(slog.Group("wire", slog.Any("error", io.EOF))).
+				InfoContext(t.Context(), "recv loop terminated", "error", context.Canceled)
+		}, context.Canceled.Error()},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			handler := &zooKeeperLogHandler{logger: zerolog.New(&output)}
+			tt.log(slog.New(handler))
+			entries := serviceLogMessages(t, output.Bytes())
+			require.Len(t, entries, 1)
+			require.NotContains(t, entries[0], "errorCategory")
+			if tt.errorText == "" {
+				require.NotContains(t, entries[0], "error")
+				require.Len(t, entries[0], 3)
+			} else {
+				require.Equal(t, tt.errorText, entries[0]["error"])
+				require.Len(t, entries[0], 4)
+			}
+			for _, sensitive := range []string{"private-password", "private-error-detail", "wire", "nested", "password"} {
+				require.NotContains(t, output.String(), sensitive)
+			}
+			require.Empty(t, handler.attrs, "WithAttrs must not mutate the original handler")
 		})
 	}
 }
