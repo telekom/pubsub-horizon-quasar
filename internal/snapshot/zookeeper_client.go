@@ -76,6 +76,7 @@ func (c *zooKeeperClient) run(ctx context.Context, retry time.Duration) {
 	defer close(c.done)
 	for ctx.Err() == nil {
 		conn, events, err := zk.Connect(c.config.Addresses, c.config.SessionTimeout,
+			zk.WithHostProvider(zk.NewRefreshDNSHostProvider()),
 			zk.WithLogger(slog.New(&zooKeeperLogHandler{logger: log.Logger})))
 		if err != nil {
 			log.Error().Err(zooKeeperError("connect", err)).Msg("Subscription snapshot ZooKeeper initialization failed")

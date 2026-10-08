@@ -38,8 +38,14 @@ type acknowledgmentProxy struct {
 // newAcknowledgmentProxy starts a local fault-injection proxy and registers cleanup for all accepted connections.
 func newAcknowledgmentProxy(t *testing.T, target string) *acknowledgmentProxy {
 	t.Helper()
+	return newAcknowledgmentProxyOn(t, target, "127.0.0.1:0")
+}
+
+// newAcknowledgmentProxyOn binds a fault-injection proxy to a specific address for DNS failover tests.
+func newAcknowledgmentProxyOn(t *testing.T, target, address string) *acknowledgmentProxy {
+	t.Helper()
 	var lc net.ListenConfig
-	listener, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	listener, err := lc.Listen(t.Context(), "tcp", address)
 	require.NoError(t, err)
 	proxy := &acknowledgmentProxy{listener: listener, target: target, dropped: make(chan struct{}, 1)}
 	proxy.wg.Add(1)
@@ -293,7 +299,7 @@ func TestZooKeeperDNSRecoveryWhileMongoDBContinues(t *testing.T) {
 		}
 	}
 	require.NotNil(t, address, "test DNS server requires an IPv4 Docker address")
-	server, recovered := recoveryDNSServer(t, address)
+	server, recovered := recoveryDNSServer(t)
 	previous := net.DefaultResolver
 	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		var dialer net.Dialer
@@ -317,7 +323,7 @@ func TestZooKeeperDNSRecoveryWhileMongoDBContinues(t *testing.T) {
 	w.publication.degrade(errZooKeeperUnavailable)
 	require.NoError(t, w.resolve(t.Context()))
 	require.NotEmpty(t, store.current.Version.SnapshotID)
-	recovered.Store(true)
+	recovered.Store(&address)
 	require.Eventually(t, client.available, 10*time.Second, 10*time.Millisecond)
 	require.NoError(t, w.progressZooKeeper(t.Context()))
 	time.Sleep(time.Millisecond)
@@ -325,13 +331,62 @@ func TestZooKeeperDNSRecoveryWhileMongoDBContinues(t *testing.T) {
 	require.True(t, sameDescriptor(store.current.Version, w.publication.observed.activated.value))
 }
 
-// recoveryDNSServer starts a local DNS fixture that changes from missing-name replies to a supplied IPv4 address.
-func recoveryDNSServer(t *testing.T, address net.IP) (net.PacketConn, *atomic.Bool) {
+// TestZooKeeperDNSAddressChange checks reconnection to a new DNS IP without replacing the SDK client.
+func TestZooKeeperDNSAddressChange(t *testing.T) {
+	ensemble := test.SetupZooKeeper(t)
+	first := newAcknowledgmentProxy(t, ensemble.Addresses[0])
+	_, port, err := net.SplitHostPort(first.listener.Addr().String())
+	require.NoError(t, err)
+	second := newAcknowledgmentProxyOn(t, ensemble.Addresses[0], net.JoinHostPort("127.0.0.2", port))
+	server, address := recoveryDNSServer(t)
+	initialIP := net.ParseIP("127.0.0.1").To4()
+	address.Store(&initialIP)
+	previous := net.DefaultResolver
+	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, "udp", server.LocalAddr().String())
+	}}
+	t.Cleanup(func() { net.DefaultResolver = previous })
+	client := testZooKeeperClient(t, []string{net.JoinHostPort("quasar-recovery.test", port)})
+	conn, _, err := client.connection()
+	require.NoError(t, err)
+	require.Equal(t, first.listener.Addr().String(), conn.Server())
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	missing, err := client.read(ctx, preparedNode)
+	require.NoError(t, err)
+	prepared, outcome, err := client.write(ctx, preparedNode, testDescriptor(time.Now(), 1), missing)
+	require.NoError(t, err)
+	require.Equal(t, writeConfirmed, outcome)
+
+	nextIP := net.ParseIP("127.0.0.2").To4()
+	address.Store(&nextIP)
+	first.offline.Store(true)
+	first.mu.Lock()
+	for _, connection := range first.connections {
+		_ = connection.Close()
+	}
+	first.mu.Unlock()
+	require.Eventually(t, func() bool {
+		return client.available() && conn.Server() == second.listener.Addr().String()
+	}, 15*time.Second, 20*time.Millisecond, "reconnect must resolve the updated DNS address")
+	reconnected, _, err := client.connection()
+	require.NoError(t, err)
+	require.Same(t, conn, reconnected, "recovery must not depend on restarting the SDK connection loop")
+	readCtx, readCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer readCancel()
+	current, err := client.read(readCtx, preparedNode)
+	require.NoError(t, err)
+	require.True(t, sameNode(prepared, current), "reconnection must preserve persistent metadata")
+}
+
+// recoveryDNSServer starts a local DNS fixture with a mutable IPv4 answer; nil means a missing name.
+func recoveryDNSServer(t *testing.T) (net.PacketConn, *atomic.Pointer[net.IP]) {
 	t.Helper()
 	var lc net.ListenConfig
 	server, err := lc.ListenPacket(t.Context(), "udp", "127.0.0.1:0")
 	require.NoError(t, err)
-	recovered := &atomic.Bool{}
+	address := &atomic.Pointer[net.IP]{}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -341,14 +396,18 @@ func recoveryDNSServer(t *testing.T, address net.IP) (net.PacketConn, *atomic.Bo
 			if err != nil {
 				return
 			}
-			response := recoveryDNSResponse(buffer[:n], recovered.Load(), address)
+			var ip net.IP
+			if current := address.Load(); current != nil {
+				ip = *current
+			}
+			response := recoveryDNSResponse(buffer[:n], ip != nil, ip)
 			if response != nil {
 				_, _ = server.WriteTo(response, peer)
 			}
 		}
 	}()
 	t.Cleanup(func() { require.NoError(t, server.Close()); <-done })
-	return server, recovered
+	return server, address
 }
 
 // recoveryDNSResponse builds a missing-name reply or an IPv4 answer while preserving the original DNS question.

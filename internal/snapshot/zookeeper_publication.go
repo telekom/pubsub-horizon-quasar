@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var errCleanupDeferred = errors.New("cleanup deferred until ZooKeeper references are safely resolved")
+var errCleanupDeferred = errors.New("cleanup deferred until publication state is safely resolved")
 
 const (
 	preparedNode  = "prepared"
@@ -408,7 +408,7 @@ func (p *zooKeeperPublication) confirmNode(name string) {
 // protection returns verified cleanup references only after activation and with no unresolved candidate or proposal.
 func (p *zooKeeperPublication) protection(ctx context.Context, store snapshotStore, proposalPending bool) (zState, error) {
 	if !p.firstActivated || p.candidate != nil || proposalPending {
-		return zState{}, errCleanupDeferred
+		return zState{}, errors.Join(errCleanupDeferred, errors.New("ZooKeeper activation is unconfirmed or publication is still pending"))
 	}
 	if err := p.readState(ctx, store); err != nil {
 		return zState{}, errors.Join(errCleanupDeferred, err)

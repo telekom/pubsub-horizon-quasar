@@ -193,6 +193,8 @@ New G:      finish fixed F -> prepare latest G -> full delay -> activate G
 - Catch-up does not create a snapshot, rescan the source or update the MongoDB head.
 - Reconnection in the same process preserves the candidate and preparation timer;
   a process restart creates a new startup snapshot.
+- The SDK refreshes DNS resolution on reconnect and after exhausting server
+  addresses, so changed server IPs do not require restarting Quasar.
 
 ```text
 Uncertain write -> keep expected node identity/version and descriptor
@@ -328,6 +330,9 @@ Messages below have the prefix `Subscription snapshot`. Durations are numeric mi
 - SDK records are forwarded immediately with `source="zookeeper-sdk"`, original
   message, severity and optional error text; other attributes are discarded.
   Error text can contain network addresses.
+- DNS-refresh failures use the SDK host provider's global `slog` logger, not the
+  client logger above. They remain plain-text records with the default logger;
+  Quasar does not change the global `slog` configuration.
 
 ## Operation and development
 

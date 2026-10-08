@@ -239,7 +239,7 @@ func (w *worker) deleteUnpublished(ctx context.Context, current head) error {
 func (w *worker) cleanup(ctx context.Context) error {
 	started := time.Now()
 	if w.starting || w.proposal != nil {
-		return errors.New("cleanup blocked until this process has acknowledged its activation")
+		return errors.Join(errCleanupDeferred, errors.New("cleanup blocked until this process has acknowledged its activation"))
 	}
 	current, err := w.store.readHead(ctx)
 	if err != nil {
@@ -291,7 +291,7 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) (i
 		return 0, err
 	}
 	if w.publication.protects(protected, id) {
-		return 0, errCleanupDeferred
+		return 0, errors.Join(errCleanupDeferred, errors.New("snapshot is protected by ZooKeeper references or the latest catch-up target"))
 	}
 	var deletedDocuments int64
 	for {

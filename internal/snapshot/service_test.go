@@ -507,6 +507,48 @@ func TestServiceSchedulingAndCancellation(t *testing.T) {
 	s.shutdown()
 }
 
+// TestCleanupPendingPublicationIsDeferred checks warnings and retained cleanup work before publication completes.
+func TestCleanupPendingPublicationIsDeferred(t *testing.T) {
+	for _, starting := range []bool{true, false} {
+		name := "follow-up proposal"
+		if starting {
+			name = "startup"
+		}
+		t.Run(name, func(t *testing.T) {
+			store := newFakeStore(t)
+			w := newWorker(testConfig(), store)
+			if !starting {
+				require.NoError(t, w.refresh(t.Context()))
+				store.source[0] = sourceDocument(t, "a", "next")
+				require.NoError(t, w.createSnapshot(t.Context()))
+			}
+			w.cleanupDue = true
+			pending := w.proposal
+			cleanups := store.cleanups
+			require.ErrorIs(t, w.cleanupPending(t.Context()), errCleanupDeferred)
+
+			s := newService(w.config)
+			defer s.cancel()
+			s.client, s.session, s.worker = &mongo.Client{}, &fakeSession{}, w
+			var output bytes.Buffer
+			previous := log.Logger
+			log.Logger = zerolog.New(&output)
+			t.Cleanup(func() { log.Logger = previous })
+			s.attemptCleanup()
+
+			entries := serviceLogMessages(t, output.Bytes())
+			require.Len(t, entries, 1)
+			require.Equal(t, "warn", entries[0]["level"])
+			require.Equal(t, "cleanup", entries[0]["operation"])
+			require.Equal(t, "Subscription snapshot cleanup deferred", entries[0]["message"])
+			require.True(t, w.cleanupDue)
+			require.Same(t, pending, w.proposal)
+			require.Equal(t, cleanups, store.cleanups)
+			require.Empty(t, store.deletions)
+		})
+	}
+}
+
 // TestQueuedRefreshContinuesPublicationInSameCycle checks one follow-up scan and publication without waiting for another event.
 func TestQueuedRefreshContinuesPublicationInSameCycle(t *testing.T) {
 	for _, fallback := range []bool{false, true} {
@@ -546,6 +588,9 @@ func TestQueuedRefreshContinuesPublicationInSameCycle(t *testing.T) {
 				require.Equal(t, 2, store.inserts)
 				require.Equal(t, 1, bytes.Count(output.Bytes(), []byte("Subscription snapshot created")))
 				serviceLogMessages(t, output.Bytes())
+				require.Contains(t, output.String(), `"level":"warn"`)
+				require.NotContains(t, output.String(), `"level":"error"`)
+				require.Contains(t, output.String(), `"message":"Subscription snapshot cleanup deferred"`)
 				require.Equal(t, 1, regularCleanupAttempts(output.Bytes()), "include blocked/deferred attempts, not just deletions")
 				require.True(t, s.worker.cleanupDue)
 				if fallback {

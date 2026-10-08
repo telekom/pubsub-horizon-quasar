@@ -590,6 +590,34 @@ func TestPublicationMongoFailureAndFlappingAreRateLimited(t *testing.T) {
 	})
 }
 
+// TestPublicationPendingProtectionReportsReason checks contextual deferrals before cleanup references can be read.
+func TestPublicationPendingProtectionReportsReason(t *testing.T) {
+	tests := []struct {
+		name           string
+		firstActivated bool
+		candidate      bool
+		proposal       bool
+	}{
+		{"initial activation", false, false, false},
+		{"ZooKeeper candidate", true, true, false},
+		{"MongoDB proposal", true, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newZooKeeperPublication(newFakeZooKeeper(), time.Minute)
+			p.firstActivated = tt.firstActivated
+			if tt.candidate {
+				p.candidate = &zCandidate{}
+			}
+			state, err := p.protection(t.Context(), newFakeStore(t), tt.proposal)
+			require.ErrorIs(t, err, errCleanupDeferred)
+			require.ErrorContains(t, err, "ZooKeeper activation is unconfirmed or publication is still pending")
+			require.Equal(t, zState{}, state)
+			require.Nil(t, p.observed, "pending publication must not read cleanup references")
+		})
+	}
+}
+
 // TestPublicationAllDeletionPathsProtectExternalHistoryReferences checks every cleanup path against old ZooKeeper references.
 func TestPublicationAllDeletionPathsProtectExternalHistoryReferences(t *testing.T) {
 	for _, name := range []string{preparedNode, activatedNode} {
@@ -614,6 +642,7 @@ func TestPublicationAllDeletionPathsProtectExternalHistoryReferences(t *testing.
 			w.publication.latestConfirmedHead = store.current.Version
 			deleted, err := w.deleteVersion(t.Context(), store.current, old.SnapshotID)
 			require.ErrorIs(t, err, errCleanupDeferred)
+			require.ErrorContains(t, err, "snapshot is protected by ZooKeeper references or the latest catch-up target")
 			require.Zero(t, deleted)
 			w.abandoned = old.SnapshotID
 			require.ErrorIs(t, w.deleteUnpublished(t.Context(), store.current), errCleanupDeferred)
