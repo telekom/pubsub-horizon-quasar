@@ -159,8 +159,8 @@ func setupMongoDb() error {
 	return err
 }
 
-// SetupMongoReplicaSet runs three journaled members in one isolated test container.
-// Identical loopback ports inside and outside the container make discovery work on Windows and Linux.
+// SetupMongoReplicaSet starts three journaled MongoDB members and returns their replica-set URI.
+// It waits for a primary and removes only its own container when the test ends.
 func SetupMongoReplicaSet(t *testing.T) string {
 	t.Helper()
 	replicaPool, err := dockertest.NewPool("")
@@ -170,6 +170,7 @@ func SetupMongoReplicaSet(t *testing.T) string {
 	host := dockerTestHost("MONGO_HOST")
 	bindings := make(map[docker.Port][]docker.PortBinding, len(ports))
 	var exposed, commands, addresses []string
+	// Matching internal and published ports let clients discover every member through the Docker host.
 	for i, port := range ports {
 		exposed = append(exposed, port+"/tcp")
 		bindings[docker.Port(port+"/tcp")] = []docker.PortBinding{{HostIP: allInterfaces, HostPort: port}}
@@ -215,6 +216,7 @@ func SetupMongoReplicaSet(t *testing.T) string {
 	return uri
 }
 
+// reserveMongoPorts selects three distinct free loopback ports and releases them before Docker starts.
 func reserveMongoPorts(t *testing.T) []string {
 	t.Helper()
 	var listeners []net.Listener
@@ -277,6 +279,7 @@ func configureTeardown(config *docker.HostConfig) {
 	}
 }
 
+// dockerTestHost selects an explicit service host, a remote Docker host or local loopback for test clients.
 func dockerTestHost(variable string) string {
 	if host := EnvOrDefault(variable, ""); host != "" && host != allInterfaces {
 		return host

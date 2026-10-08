@@ -30,6 +30,7 @@ type zNode struct {
 	value   descriptor
 }
 
+// sameNode compares persistent node identity, version and metadata, ignoring the observing session.
 func sameNode(a, b zNode) bool {
 	return a.exists == b.exists && (!a.exists ||
 		a.version == b.version && a.czxid == b.czxid && sameDescriptor(a.value, b.value))
@@ -60,6 +61,7 @@ type zooKeeperClient struct {
 	conn   *zk.Conn
 }
 
+// newZooKeeperClient starts a cancellable connection loop with coalesced session-change notifications.
 func newZooKeeperClient(ctx context.Context, c config.SnapshotZooKeeper, retry time.Duration) *zooKeeperClient {
 	ctx, cancel := context.WithCancel(ctx)
 	client := &zooKeeperClient{
@@ -69,6 +71,7 @@ func newZooKeeperClient(ctx context.Context, c config.SnapshotZooKeeper, retry t
 	return client
 }
 
+// run reconnects ZooKeeper after closed event streams, spacing attempts until cancellation.
 func (c *zooKeeperClient) run(ctx context.Context, retry time.Duration) {
 	defer close(c.done)
 	for ctx.Err() == nil {
@@ -94,6 +97,7 @@ func (c *zooKeeperClient) run(ctx context.Context, retry time.Duration) {
 	}
 }
 
+// waitZooKeeperRetry waits for the retry interval and returns false if shutdown happens first.
 func waitZooKeeperRetry(ctx context.Context, retry time.Duration) bool {
 	timer := time.NewTimer(retry)
 	defer timer.Stop()
@@ -105,6 +109,7 @@ func waitZooKeeperRetry(ctx context.Context, retry time.Duration) bool {
 	}
 }
 
+// consumeEvents coalesces SDK events into worker wake-ups and drains the stream when shutting down.
 func (c *zooKeeperClient) consumeEvents(ctx context.Context, conn *zk.Conn, events <-chan zk.Event) {
 	for {
 		select {
@@ -126,6 +131,7 @@ func (c *zooKeeperClient) consumeEvents(ctx context.Context, conn *zk.Conn, even
 	}
 }
 
+// connection returns the current client and session ID only while a usable session exists.
 func (c *zooKeeperClient) connection() (*zk.Conn, int64, error) {
 	c.mu.RLock()
 	conn := c.conn
@@ -136,15 +142,18 @@ func (c *zooKeeperClient) connection() (*zk.Conn, int64, error) {
 	return conn, conn.SessionID(), nil
 }
 
+// available reports whether the client currently has a usable ZooKeeper session.
 func (c *zooKeeperClient) available() bool {
 	_, _, err := c.connection()
 	return err == nil
 }
 
+// events exposes coalesced SDK notifications that wake the publication worker.
 func (c *zooKeeperClient) events() <-chan struct{} {
 	return c.wake
 }
 
+// close cancels the connection loop and waits for it to stop within the caller's deadline.
 func (c *zooKeeperClient) close(ctx context.Context) error {
 	c.cancel()
 	select {
@@ -155,6 +164,7 @@ func (c *zooKeeperClient) close(ctx context.Context) error {
 	}
 }
 
+// checkZooKeeperSession rejects operations whose original usable session has changed or expired.
 func checkZooKeeperSession(conn *zk.Conn, session int64) error {
 	if conn.State() != zk.StateHasSession || conn.SessionID() != session {
 		return zooKeeperError("session changed", zk.ErrSessionExpired)
@@ -162,6 +172,7 @@ func checkZooKeeperSession(conn *zk.Conn, session int64) error {
 	return nil
 }
 
+// read loads a publication node under the configured base path using the current session.
 func (c *zooKeeperClient) read(ctx context.Context, name string) (zNode, error) {
 	conn, session, err := c.connection()
 	if err != nil {
@@ -170,8 +181,10 @@ func (c *zooKeeperClient) read(ctx context.Context, name string) (zNode, error) 
 	return c.readOn(ctx, conn, session, path.Join(c.config.BasePath, name))
 }
 
+// readOn syncs an existing ancestor before reading and rejects session changes or non-persistent nodes.
 func (c *zooKeeperClient) readOn(ctx context.Context, conn *zk.Conn, session int64, nodePath string) (zNode, error) {
 	syncPath := nodePath
+	// A missing target still needs a sync barrier before its absence can be trusted.
 	for {
 		exists, _, err := conn.Exists(ctx, syncPath)
 		if err != nil {
@@ -211,6 +224,7 @@ func (c *zooKeeperClient) readOn(ctx context.Context, conn *zk.Conn, session int
 	return zNode{exists: true, version: stat.Version, czxid: stat.Czxid, session: session, value: value}, nil
 }
 
+// ensureParents creates missing persistent ancestors and checks that the same session remains usable.
 func (c *zooKeeperClient) ensureParents(ctx context.Context, conn *zk.Conn, session int64, nodePath string) error {
 	parent := path.Dir(nodePath)
 	if parent == "/" {
@@ -246,6 +260,7 @@ func (c *zooKeeperClient) ensureParents(ctx context.Context, conn *zk.Conn, sess
 	return checkZooKeeperSession(conn, session)
 }
 
+// write creates or version-checks a persistent node and reports whether the result is confirmed or uncertain.
 func (c *zooKeeperClient) write(ctx context.Context, name string, value descriptor, expected zNode) (zNode, writeOutcome, error) {
 	data, err := encodeDescriptor(value)
 	if err != nil {
@@ -276,6 +291,7 @@ func (c *zooKeeperClient) write(ctx context.Context, name string, value descript
 			return zNode{}, classifyWriteOutcome(err), zooKeeperError("set", err)
 		}
 		if err := checkZooKeeperSession(conn, session); err != nil {
+			// A successful response from an old session cannot safely confirm the current node state.
 			return zNode{}, writeUncertain, err
 		}
 		if stat.Czxid != expected.czxid || stat.Version != expected.version+1 || stat.EphemeralOwner != 0 {
@@ -297,6 +313,7 @@ func (c *zooKeeperClient) write(ctx context.Context, name string, value descript
 	return current, writeConfirmed, nil
 }
 
+// classifyWriteOutcome treats explicit server rejections as not executed and other failures as uncertain.
 func classifyWriteOutcome(err error) writeOutcome {
 	for _, rejection := range []error{
 		zk.ErrNoNode, zk.ErrNodeExists, zk.ErrBadVersion, zk.ErrNoAuth, zk.ErrAuthFailed,
@@ -315,6 +332,7 @@ type zooKeeperOperationError struct {
 	cause     error
 }
 
+// Error reports a safe failure category, including details only for local integrity checks.
 func (e *zooKeeperOperationError) Error() string {
 	if e.category == "invalid" {
 		return "ZooKeeper integrity failed: " + e.cause.Error()
@@ -322,14 +340,17 @@ func (e *zooKeeperOperationError) Error() string {
 	return "ZooKeeper " + e.operation + " failed (" + e.category + ")"
 }
 
+// Unwrap exposes the underlying ZooKeeper error for matching and retry decisions.
 func (e *zooKeeperOperationError) Unwrap() error {
 	return e.cause
 }
 
+// zooKeeperError wraps an operation failure with its category while preserving the original cause.
 func zooKeeperError(operation string, err error) error {
 	return &zooKeeperOperationError{operation: operation, category: zooKeeperErrorCategory(err), cause: err}
 }
 
+// zooKeeperErrorCategory maps session, access, timeout and version errors to stable log categories.
 func zooKeeperErrorCategory(err error) string {
 	switch {
 	case errors.Is(err, context.Canceled):
@@ -352,6 +373,7 @@ func zooKeeperErrorCategory(err error) string {
 	}
 }
 
+// integrityError marks a locally detected metadata or node inconsistency as an invalid-state failure.
 func integrityError(message string) error {
 	return &zooKeeperOperationError{operation: "integrity", category: "invalid", cause: errors.New(message)}
 }
@@ -361,10 +383,12 @@ type zooKeeperLogHandler struct {
 	attrs  []slog.Attr
 }
 
+// Enabled checks the SDK log level against the configured zerolog threshold.
 func (h *zooKeeperLogHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return h.logger.GetLevel() <= zooKeeperLogLevel(level)
 }
 
+// zooKeeperLogLevel maps slog severity to the corresponding zerolog level.
 func zooKeeperLogLevel(level slog.Level) zerolog.Level {
 	switch {
 	case level >= slog.LevelError:
@@ -378,6 +402,7 @@ func zooKeeperLogLevel(level slog.Level) zerolog.Level {
 	}
 }
 
+// Handle forwards SDK messages and nested error attributes to zerolog without copying other attributes.
 func (h *zooKeeperLogHandler) Handle(_ context.Context, record slog.Record) error {
 	var sdkError error
 	var addError func(slog.Attr)
@@ -405,12 +430,14 @@ func (h *zooKeeperLogHandler) Handle(_ context.Context, record slog.Record) erro
 	return nil
 }
 
+// WithAttrs returns an independent handler copy that also considers the supplied error attributes.
 func (h *zooKeeperLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	copyHandler := *h
 	copyHandler.attrs = append(append([]slog.Attr(nil), h.attrs...), attrs...)
 	return &copyHandler
 }
 
+// WithGroup keeps the same handler because forwarded errors do not retain slog group names.
 func (h *zooKeeperLogHandler) WithGroup(_ string) slog.Handler {
 	return h
 }

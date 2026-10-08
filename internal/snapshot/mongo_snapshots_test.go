@@ -23,6 +23,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// testMongoCrashRecovery checks restart publication and cleanup after partial inserts or lost activation replies.
 func testMongoCrashRecovery(t *testing.T, uri string) {
 	for _, phase := range []string{"mid-build", "before activation", "activation acknowledgement lost"} {
 		t.Run(phase, func(t *testing.T) {
@@ -68,6 +69,7 @@ func testMongoCrashRecovery(t *testing.T, uri string) {
 	}
 }
 
+// crashFaults injects a partial build, pre-activation interruption or lost reply after a committed head update.
 func crashFaults(store *mongoStore, phase string, candidate *string) *faultStore {
 	faults := &faultStore{snapshotStore: store}
 	faults.insert = func(ctx context.Context, id string, source *sourceBuffer) error {
@@ -93,6 +95,7 @@ func crashFaults(store *mongoStore, phase string, candidate *string) *faultStore
 	return faults
 }
 
+// verifyRecoveredCleanup checks that restart removes unpublished rows but keeps activated predecessors complete.
 func verifyRecoveredCleanup(t *testing.T, w *worker, store *mongoStore, candidate string, activated bool) {
 	t.Helper()
 	ctx := t.Context()
@@ -113,6 +116,7 @@ func verifyRecoveredCleanup(t *testing.T, w *worker, store *mongoStore, candidat
 	}
 }
 
+// testMongoInterruptedCleanup checks safe batch retries and deletion counts after interrupted or unacknowledged cleanup.
 func testMongoInterruptedCleanup(t *testing.T, uri string) {
 	for _, lostAcknowledgement := range []bool{false, true} {
 		t.Run(strconv.FormatBool(lostAcknowledgement), func(t *testing.T) {
@@ -172,6 +176,7 @@ func testMongoInterruptedCleanup(t *testing.T, uri string) {
 	}
 }
 
+// TestMutationAfterSourceScanUsesBufferedDocuments checks that build-time source changes wait for the next snapshot.
 func TestMutationAfterSourceScanUsesBufferedDocuments(t *testing.T) {
 	ctx := t.Context()
 	store := newFakeStore(t)
@@ -196,6 +201,7 @@ func TestMutationAfterSourceScanUsesBufferedDocuments(t *testing.T) {
 	require.NotEqual(t, initial.sourceHash(), store.current.Version.SourceHash)
 }
 
+// TestRefreshAndRestart checks that unchanged refreshes reuse the head while restart forces a new version.
 func TestRefreshAndRestart(t *testing.T) {
 	ctx := context.Background()
 	store := newFakeStore(t)
@@ -212,6 +218,7 @@ func TestRefreshAndRestart(t *testing.T) {
 	require.Equal(t, first.Version, store.current.RecentSnapshots[1])
 }
 
+// TestSnapshotUnchangedResultLogging checks debug-only scan results and unchanged publication timestamps.
 func TestSnapshotUnchangedResultLogging(t *testing.T) {
 	for _, tt := range []struct {
 		name           string
@@ -286,6 +293,7 @@ func TestSnapshotUnchangedResultLogging(t *testing.T) {
 	}
 }
 
+// TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork checks creation timing and the retained publication start time.
 func TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork(t *testing.T) {
 	for _, orphanPending := range []bool{false, true} {
 		t.Run(strconv.FormatBool(orphanPending), func(t *testing.T) {
@@ -349,6 +357,7 @@ func TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork(t *testing.T) {
 	}
 }
 
+// TestPublicationReason checks reason priority for initial snapshots, count repair, restart and source changes.
 func TestPublicationReason(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -404,6 +413,7 @@ func TestPublicationReason(t *testing.T) {
 	}
 }
 
+// assertCleanupResult accepts success or the expected cleanup block caused by incomplete retained history.
 func assertCleanupResult(t *testing.T, err error, blocked bool) {
 	t.Helper()
 	if blocked {
@@ -413,6 +423,7 @@ func assertCleanupResult(t *testing.T, err error, blocked bool) {
 	require.NoError(t, err)
 }
 
+// assertPublicationLogs checks ordered creation and publication events with the agreed metadata and reason fields.
 func assertPublicationLogs(t *testing.T, output []byte, current head, reason publicationReason) {
 	t.Helper()
 	entries := serviceLogMessages(t, output)
@@ -433,6 +444,7 @@ func assertPublicationLogs(t *testing.T, output []byte, current head, reason pub
 	require.Len(t, entries[0], 9, "created has exactly the agreed result fields, level and message")
 }
 
+// TestSourceChangesAndRepair checks new versions for source mutations and repairs without losing prior history.
 func TestSourceChangesAndRepair(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -465,6 +477,7 @@ func TestSourceChangesAndRepair(t *testing.T) {
 	}
 }
 
+// TestRefreshFailurePreservesHead checks that failed scans or inserts keep the active head and leave no proposal.
 func TestRefreshFailurePreservesHead(t *testing.T) {
 	for _, failure := range []string{"head", "source", "oversized", "insert"} {
 		t.Run(failure, func(t *testing.T) {
@@ -503,6 +516,7 @@ func TestRefreshFailurePreservesHead(t *testing.T) {
 	}
 }
 
+// TestUncertainActivation checks recovery of the exact proposal whether a timed-out head update was applied or not.
 func TestUncertainActivation(t *testing.T) {
 	for _, applied := range []bool{false, true} {
 		name := "old head observed"
@@ -548,6 +562,7 @@ func TestUncertainActivation(t *testing.T) {
 	}
 }
 
+// TestDelayedPreRestartActivation checks that restart rebases onto a late head update without dropping its history.
 func TestDelayedPreRestartActivation(t *testing.T) {
 	ctx := context.Background()
 	store := newFakeStore(t)
@@ -563,6 +578,7 @@ func TestDelayedPreRestartActivation(t *testing.T) {
 	var candidateID string
 	store.activation = func(expected string, next head) (bool, error) {
 		candidateID = next.Version.SnapshotID
+		// The old timed-out request arrives after restart and wins before the new process's CAS.
 		require.True(t, store.apply(delayed.previous.Version.SnapshotID, delayed.next))
 		require.False(t, store.apply(expected, next))
 		return false, nil
@@ -588,6 +604,7 @@ func TestDelayedPreRestartActivation(t *testing.T) {
 	require.Equal(t, 2, store.inserts)
 }
 
+// TestCleanupRetainsOnlyHeadHistory checks that retention follows head references, not snapshot age.
 func TestCleanupRetainsOnlyHeadHistory(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, total := range []int{1, 2, 3, 5} {
@@ -622,6 +639,7 @@ func TestCleanupRetainsOnlyHeadHistory(t *testing.T) {
 	}
 }
 
+// TestCleanupLoggingCountsConfirmedDocuments checks acknowledged deletion totals and retry accounting across batches.
 func TestCleanupLoggingCountsConfirmedDocuments(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -693,6 +711,7 @@ func TestCleanupLoggingCountsConfirmedDocuments(t *testing.T) {
 	}
 }
 
+// batchedCleanupFaults simulates bounded deletions with a rejected batch, lost reply or changed cleanup protection.
 func batchedCleanupFaults(store *fakeStore, w *worker, failure string) *faultStore {
 	calls := 0
 	return &faultStore{snapshotStore: store, delete: func(_ context.Context, id string) (int64, error) {
@@ -710,6 +729,7 @@ func batchedCleanupFaults(store *fakeStore, w *worker, failure string) *faultSto
 		}
 		switch {
 		case failure == "uncertain" && calls == 1:
+			// Rows are gone, but an error means the worker cannot count them as acknowledged deletions.
 			return deleted, context.DeadlineExceeded
 		case failure == "deferred" && calls == 1:
 			z := newFakeZooKeeper()
@@ -720,6 +740,7 @@ func batchedCleanupFaults(store *fakeStore, w *worker, failure string) *faultSto
 	}}
 }
 
+// countTestVersions sums the fake row counts for the selected snapshot IDs.
 func countTestVersions(store *fakeStore, ids []string) int64 {
 	var total int64
 	for _, id := range ids {
@@ -728,6 +749,7 @@ func countTestVersions(store *fakeStore, ids []string) int64 {
 	return total
 }
 
+// TestCleanupLoggingExcludesSeparateOrphanDeletion checks that regular cleanup totals exclude pre-scan orphan removal.
 func TestCleanupLoggingExcludesSeparateOrphanDeletion(t *testing.T) {
 	store := newFakeStore(t)
 	w := newWorker(testConfig(), store)
@@ -760,6 +782,7 @@ func TestCleanupLoggingExcludesSeparateOrphanDeletion(t *testing.T) {
 	require.Equal(t, float64(7), entries[2]["deletedDocuments"], "exclude the eleven separately deleted orphan rows")
 }
 
+// TestCleanupIntegrityAndHeadRecheck checks cleanup rejection for malformed IDs, damaged history and head changes.
 func TestCleanupIntegrityAndHeadRecheck(t *testing.T) {
 	for _, scenario := range []string{"malformed ID", "incomplete protected version", "head change"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -787,6 +810,7 @@ func TestCleanupIntegrityAndHeadRecheck(t *testing.T) {
 	}
 }
 
+// TestResetHeadDoesNotLoseHistory checks that resetting an active head to bootstrap blocks refresh and cleanup.
 func TestResetHeadDoesNotLoseHistory(t *testing.T) {
 	ctx := context.Background()
 	store := newFakeStore(t)

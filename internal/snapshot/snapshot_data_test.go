@@ -16,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// TestSourceBuffer checks owned BSON copies, stable hashes and rejection of invalid IDs or payload overflow.
 func TestSourceBuffer(t *testing.T) {
 	raw := sourceDocument(t, "a", "first")
 	original := append(bson.Raw(nil), raw...)
@@ -44,6 +45,7 @@ func TestSourceBuffer(t *testing.T) {
 	require.NotEqual(t, buffer.sourceHash(), changed.sourceHash())
 }
 
+// TestSourceHashIgnoresBSONFieldOrder checks canonical hashing without changing the original stored BSON.
 func TestSourceHashIgnoresBSONFieldOrder(t *testing.T) {
 	date := time.Date(2026, 9, 24, 11, 0, 0, 0, time.UTC)
 	original := marshal(t, bson.D{
@@ -89,6 +91,7 @@ func TestSourceHashIgnoresBSONFieldOrder(t *testing.T) {
 	require.Equal(t, reordered.Lookup("spec").Document(), wrapped.Lookup("resource", "spec").Document())
 }
 
+// TestSourceHashDetectsBSONContentChanges checks that values, BSON types and array order affect the hash.
 func TestSourceHashDetectsBSONContentChanges(t *testing.T) {
 	original := marshal(t, bson.D{
 		{Key: "_id", Value: "a"},
@@ -129,6 +132,7 @@ func TestSourceHashDetectsBSONContentChanges(t *testing.T) {
 	}
 }
 
+// TestSnapshotMappingPreservesBSON checks ID remapping, unchanged nested BSON and duplicate source-ID rejection.
 func TestSnapshotMappingPreservesBSON(t *testing.T) {
 	id := primitive.NewObjectID()
 	resource := bson.D{
@@ -154,6 +158,7 @@ func TestSnapshotMappingPreservesBSON(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestHeadBSONContract checks exact metadata BSON types and round-trips active and bootstrap heads.
 func TestHeadBSONContract(t *testing.T) {
 	for _, count := range []int64{0, 1, 123} {
 		version := testDescriptor(time.Now(), count)
@@ -173,6 +178,7 @@ func TestHeadBSONContract(t *testing.T) {
 	require.Empty(t, bootstrap.Version.SnapshotID)
 }
 
+// TestInvalidHeadMetadata checks that invalid descriptor fields and inconsistent history are rejected.
 func TestInvalidHeadMetadata(t *testing.T) {
 	version := testDescriptor(time.Now(), 1)
 	tests := []struct {
@@ -204,6 +210,7 @@ func TestInvalidHeadMetadata(t *testing.T) {
 	}
 }
 
+// TestHistoryUsesActivationOrder checks that retention follows publication order rather than creation timestamps.
 func TestHistoryUsesActivationOrder(t *testing.T) {
 	current := head{}
 	times := []time.Time{time.Now(), time.Now().Add(-24 * time.Hour), time.Now().Add(-48 * time.Hour), time.Now()}
@@ -216,6 +223,7 @@ func TestHistoryUsesActivationOrder(t *testing.T) {
 	require.Equal(t, []descriptor{versions[3], versions[2], versions[1]}, current.RecentSnapshots)
 }
 
+// TestBelowMinimumRetainsThreeSnapshots checks the minimum history capacity even for a smaller requested value.
 func TestBelowMinimumRetainsThreeSnapshots(t *testing.T) {
 	current := head{}
 	var versions []descriptor

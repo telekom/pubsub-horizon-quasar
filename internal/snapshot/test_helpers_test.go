@@ -25,6 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// serviceLogMessages decodes JSON log entries and rejects obsolete refresh-completion messages.
 func serviceLogMessages(t *testing.T, output []byte) []map[string]any {
 	t.Helper()
 	require.NotContains(t, string(output), "Subscription snapshot refresh completed")
@@ -41,6 +42,7 @@ func serviceLogMessages(t *testing.T, output []byte) []map[string]any {
 	return entries
 }
 
+// marshal encodes a test value as raw BSON and fails the test if encoding fails.
 func marshal(t *testing.T, value any) bson.Raw {
 	t.Helper()
 	raw, err := bson.Marshal(value)
@@ -48,6 +50,7 @@ func marshal(t *testing.T, value any) bson.Raw {
 	return raw
 }
 
+// sourceDocument creates a subscription document with a string ID and a simple spec value.
 func sourceDocument(t *testing.T, id, value string) bson.Raw {
 	t.Helper()
 	return marshal(t, bson.D{
@@ -55,6 +58,7 @@ func sourceDocument(t *testing.T, id, value string) bson.Raw {
 	})
 }
 
+// testDescriptor creates valid metadata with an ID-derived timestamp, fixed hash and chosen document count.
 func testDescriptor(at time.Time, count int64) descriptor {
 	id := primitive.NewObjectIDFromTimestamp(at)
 	return descriptor{
@@ -62,6 +66,7 @@ func testDescriptor(at time.Time, count int64) descriptor {
 	}
 }
 
+// mongoFixture seeds an isolated MongoDB database and returns its store and worker with automatic cleanup.
 func mongoFixture(t *testing.T, uri string) (*mongo.Client, *mongoStore, *worker) {
 	t.Helper()
 	c := testConfig()
@@ -95,16 +100,21 @@ type fakeZooKeeper struct {
 	beforeWrite func(context.Context, string, descriptor, zNode) (writeOutcome, error)
 }
 
+// newFakeZooKeeper creates an online, empty transport with one simulated session and a wake-up channel.
 func newFakeZooKeeper() *fakeZooKeeper {
 	return &fakeZooKeeper{online: true, session: 1, nodes: make(map[string]zNode), wake: make(chan struct{}, 1)}
 }
 
+// available reports the fake transport's configured connection state.
 func (f *fakeZooKeeper) available() bool { return f.online }
 
+// events exposes the fake transport's coalesced connection notifications.
 func (f *fakeZooKeeper) events() <-chan struct{} { return f.wake }
 
+// close satisfies the transport contract without releasing resources because the fake owns none.
 func (f *fakeZooKeeper) close(context.Context) error { return nil }
 
+// read returns a fake node in the current session after applying any injected read failure.
 func (f *fakeZooKeeper) read(ctx context.Context, name string) (zNode, error) {
 	if !f.online {
 		return zNode{}, zooKeeperError("read", errZooKeeperUnavailable)
@@ -119,6 +129,7 @@ func (f *fakeZooKeeper) read(ctx context.Context, name string) (zNode, error) {
 	return node, nil
 }
 
+// write applies a version-checked fake write unless an offline state or injected fault prevents it.
 func (f *fakeZooKeeper) write(ctx context.Context, name string, value descriptor, expected zNode) (zNode, writeOutcome, error) {
 	if !f.online {
 		return zNode{}, writeNotExecuted, zooKeeperError("write", errZooKeeperUnavailable)
@@ -136,6 +147,7 @@ func (f *fakeZooKeeper) write(ctx context.Context, name string, value descriptor
 	return node, writeConfirmed, nil
 }
 
+// apply checks the expected node and records a create or update with the corresponding identity and version.
 func (f *fakeZooKeeper) apply(name string, value descriptor, expected zNode) (zNode, error) {
 	current := f.nodes[name]
 	if !sameNode(expected, current) {
@@ -152,6 +164,7 @@ func (f *fakeZooKeeper) apply(name string, value descriptor, expected zNode) (zN
 	return next, nil
 }
 
+// publicationService starts a scheduled worker with fake storage and ZooKeeper at the chosen refresh interval.
 func publicationService(t *testing.T, interval time.Duration) (*scheduledService, *fakeStore, *fakeZooKeeper) {
 	t.Helper()
 	store := newFakeStore(t)
@@ -162,6 +175,7 @@ func publicationService(t *testing.T, interval time.Duration) (*scheduledService
 	return configuredPublicationService(t, c, store, transport), store, transport
 }
 
+// configuredPublicationService runs the real event loop with fake connections and caller-supplied settings.
 func configuredPublicationService(
 	t *testing.T, c config.SubscriptionSnapshots, store *fakeStore, transport *fakeZooKeeper,
 ) *scheduledService {
@@ -182,6 +196,7 @@ func configuredPublicationService(
 	return s
 }
 
+// signalZooKeeper changes the fake connection state and queues at most one worker wake-up.
 func signalZooKeeper(f *fakeZooKeeper, online bool) {
 	f.online = online
 	select {
@@ -197,6 +212,7 @@ type faultStore struct {
 	delete func(context.Context, string) (int64, error)
 }
 
+// insertSnapshot invokes an injected insert fault or delegates to the wrapped snapshot store.
 func (f *faultStore) insertSnapshot(ctx context.Context, id string, source *sourceBuffer) error {
 	if f.insert != nil {
 		return f.insert(ctx, id, source)
@@ -204,6 +220,7 @@ func (f *faultStore) insertSnapshot(ctx context.Context, id string, source *sour
 	return f.snapshotStore.insertSnapshot(ctx, id, source)
 }
 
+// activate invokes an injected head-update fault or delegates to the wrapped snapshot store.
 func (f *faultStore) activate(ctx context.Context, previous string, next head) (bool, error) {
 	if f.cas != nil {
 		return f.cas(ctx, previous, next)
@@ -211,6 +228,7 @@ func (f *faultStore) activate(ctx context.Context, previous string, next head) (
 	return f.snapshotStore.activate(ctx, previous, next)
 }
 
+// deleteBatch invokes an injected cleanup fault or delegates to the wrapped snapshot store.
 func (f *faultStore) deleteBatch(ctx context.Context, id string) (int64, error) {
 	if f.delete != nil {
 		return f.delete(ctx, id)
@@ -227,12 +245,14 @@ type scheduledService struct {
 	actions chan func()
 }
 
+// advance orders prior test changes before timer work and moves virtual time forward by the requested duration.
 func (s *scheduledService) advance(duration time.Duration) {
 	// Wait acquires worker activity; this channel also orders assertions/mutations before future timer work.
 	s.actions <- func() {}
 	time.Sleep(duration)
 }
 
+// attemptRefresh runs a refresh on the worker's control channel and waits for resulting activity to settle.
 func (s *scheduledService) attemptRefresh() {
 	done := make(chan struct{})
 	s.actions <- func() {
@@ -243,6 +263,7 @@ func (s *scheduledService) attemptRefresh() {
 	synctest.Wait()
 }
 
+// runScheduledService starts the event loop with fake MongoDB and no ZooKeeper publication state.
 func runScheduledService(t *testing.T, store *fakeStore, refreshInterval time.Duration) *scheduledService {
 	t.Helper()
 	c := testConfig()
@@ -284,6 +305,7 @@ type fakeStore struct {
 	beforeCleanup func(context.Context) error
 }
 
+// testConfig returns valid worker settings with no startup wait and separate refresh and cleanup budgets.
 func testConfig() config.SubscriptionSnapshots {
 	return config.SubscriptionSnapshots{
 		Enabled: true, URI: "mongodb://localhost:27017", Database: "test-horizon-config",
@@ -298,6 +320,7 @@ func testConfig() config.SubscriptionSnapshots {
 	}
 }
 
+// newFakeStore creates an empty bootstrap head and one source subscription for worker tests.
 func newFakeStore(t *testing.T) *fakeStore {
 	return &fakeStore{
 		current: head{ID: "head", RecentSnapshots: []descriptor{}},
@@ -305,6 +328,7 @@ func newFakeStore(t *testing.T) *fakeStore {
 	}
 }
 
+// refresh advances a test snapshot refresh and then runs any pending cleanup.
 func (w *worker) refresh(ctx context.Context) error {
 	if err := w.refreshSnapshot(ctx); err != nil {
 		return err
@@ -312,6 +336,7 @@ func (w *worker) refresh(ctx context.Context) error {
 	return w.cleanupPending(ctx)
 }
 
+// refreshSnapshot creates a missing proposal and resolves it immediately only without ZooKeeper publication.
 func (w *worker) refreshSnapshot(ctx context.Context) error {
 	if w.proposal == nil {
 		if err := w.createSnapshot(ctx); err != nil {
@@ -324,10 +349,12 @@ func (w *worker) refreshSnapshot(ctx context.Context) error {
 	return nil
 }
 
+// attemptPublication advances publication in a test cycle without requesting a source scan.
 func (s *service) attemptPublication() {
 	s.runCycle(publicationWork)
 }
 
+// readHead returns the fake head after applying an optional hook or configured read error.
 func (f *fakeStore) readHead(ctx context.Context) (head, error) {
 	if f.beforeHead != nil {
 		if err := f.beforeHead(ctx); err != nil {
@@ -337,6 +364,7 @@ func (f *fakeStore) readHead(ctx context.Context) (head, error) {
 	return f.current, f.readError
 }
 
+// readSource counts source scans and buffers fake documents with the real validation and size checks.
 func (f *fakeStore) readSource(ctx context.Context, limit int64) (*sourceBuffer, error) {
 	f.sourceReads++
 	if f.beforeRead != nil {
@@ -356,12 +384,14 @@ func (f *fakeStore) readSource(ctx context.Context, limit int64) (*sourceBuffer,
 	return buffer, nil
 }
 
+// insertSnapshot records a fake version's row count, even when a configured error simulates an uncertain insert.
 func (f *fakeStore) insertSnapshot(_ context.Context, id string, source *sourceBuffer) error {
 	f.inserts++
 	f.versions[id] = int64(len(source.documents))
 	return f.insertError
 }
 
+// activate counts fake head updates and uses an injected result or the default version check.
 func (f *fakeStore) activate(_ context.Context, expected string, next head) (bool, error) {
 	f.activations++
 	if f.activation != nil {
@@ -370,6 +400,7 @@ func (f *fakeStore) activate(_ context.Context, expected string, next head) (boo
 	return f.apply(expected, next), nil
 }
 
+// apply replaces the fake head only when its active snapshot ID matches the expected version.
 func (f *fakeStore) apply(expected string, next head) bool {
 	if f.current.Version.SnapshotID != expected {
 		return false
@@ -378,10 +409,12 @@ func (f *fakeStore) apply(expected string, next head) bool {
 	return true
 }
 
+// countSnapshot returns the simulated number of rows for a version, including zero for absent versions.
 func (f *fakeStore) countSnapshot(_ context.Context, id string) (int64, error) {
 	return f.versions[id], nil
 }
 
+// visitSnapshotIDs counts cleanup attempts and visits fake version IDs in a stable order after any hook.
 func (f *fakeStore) visitSnapshotIDs(ctx context.Context, visit func(string) error) error {
 	f.cleanups++
 	if f.beforeCleanup != nil {
@@ -402,6 +435,7 @@ func (f *fakeStore) visitSnapshotIDs(ctx context.Context, visit func(string) err
 	return nil
 }
 
+// deleteBatch runs an optional hook, removes the fake version and records its deleted row count.
 func (f *fakeStore) deleteBatch(_ context.Context, id string) (int64, error) {
 	if f.beforeDelete != nil {
 		f.beforeDelete()
@@ -412,6 +446,7 @@ func (f *fakeStore) deleteBatch(_ context.Context, id string) (int64, error) {
 	return count, nil
 }
 
+// testZooKeeperClient connects to a unique test path, waits for a session and registers bounded shutdown.
 func testZooKeeperClient(t *testing.T, addresses []string) *zooKeeperClient {
 	t.Helper()
 	client := newZooKeeperClient(t.Context(), config.SnapshotZooKeeper{

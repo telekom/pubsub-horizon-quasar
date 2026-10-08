@@ -16,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+// TestDescriptorJSONContract checks JSON and BSON round-trips and rejects ambiguous fields or invalid UTC metadata.
 func TestDescriptorJSONContract(t *testing.T) {
 	version := testDescriptor(time.Date(2026, 9, 30, 15, 0, 0, 0, time.UTC), 0)
 	data, err := encodeDescriptor(version)

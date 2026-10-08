@@ -36,6 +36,7 @@ var runCmd = &cobra.Command{
 			log.Fatal().Err(err).Msg("Invalid mode configuration")
 		}
 
+		// Start independently before mode-specific setup, which may block during cache population.
 		if err := snapshot.Start(config.Current.SubscriptionSnapshots); err != nil {
 			log.Fatal().Err(err).Msg("Could not start subscription snapshot worker")
 		}

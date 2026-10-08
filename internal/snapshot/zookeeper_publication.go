@@ -24,6 +24,7 @@ type zState struct {
 	activated zNode
 }
 
+// sameState compares both publication references by node identity, version and descriptor.
 func sameState(a, b zState) bool {
 	return sameNode(a.prepared, b.prepared) && sameNode(a.activated, b.activated)
 }
@@ -55,10 +56,12 @@ type zooKeeperPublication struct {
 	seenActivated       bool
 }
 
+// newZooKeeperPublication creates publication state with a fixed delay between preparation and activation.
 func newZooKeeperPublication(transport zooKeeperTransport, delay time.Duration) *zooKeeperPublication {
 	return &zooKeeperPublication{transport: transport, delay: delay}
 }
 
+// nextDeadline returns the candidate's activation time only when the required retries are not blocked.
 func (p *zooKeeperPublication) nextDeadline(mongoRetryBlocked bool) time.Time {
 	if p.candidate == nil || p.candidate.preparedAt.IsZero() || p.retryBlocked {
 		return time.Time{}
@@ -69,27 +72,33 @@ func (p *zooKeeperPublication) nextDeadline(mongoRetryBlocked bool) time.Time {
 	return p.candidate.preparedAt.Add(p.delay)
 }
 
+// allowRetry releases the publication retry gate for a new refresh or recovery event.
 func (p *zooKeeperPublication) allowRetry() {
 	p.retryBlocked = false
 }
 
+// blockRetry prevents further publication attempts until a later eligible event.
 func (p *zooKeeperPublication) blockRetry() {
 	p.retryBlocked = true
 }
 
+// canRetry reports whether publication may attempt ZooKeeper work in the current event window.
 func (p *zooKeeperPublication) canRetry() bool {
 	return !p.retryBlocked
 }
 
+// needsPreparation reports whether a new candidate can be selected without a retry block.
 func (p *zooKeeperPublication) needsPreparation() bool {
 	return p.candidate == nil && p.canRetry()
 }
 
+// activationDue requires a confirmed MongoDB candidate, an elapsed preparation delay and an open retry gate.
 func (p *zooKeeperPublication) activationDue() bool {
 	return p.candidate != nil && p.candidate.mongoConfirmed && p.canRetry() &&
 		!p.candidate.preparedAt.IsZero() && !time.Now().Before(p.candidate.preparedAt.Add(p.delay))
 }
 
+// snapshotID selects the fixed candidate, proposal or latest confirmed head for operation logging.
 func (p *zooKeeperPublication) snapshotID(proposed descriptor) string {
 	if p.candidate != nil {
 		return p.candidate.value.SnapshotID
@@ -100,6 +109,7 @@ func (p *zooKeeperPublication) snapshotID(proposed descriptor) string {
 	return p.latestConfirmedHead.SnapshotID
 }
 
+// phase names the pending write or next publication stage for logs.
 func (p *zooKeeperPublication) phase() string {
 	if p.candidate == nil {
 		return "reconcile"
@@ -113,6 +123,7 @@ func (p *zooKeeperPublication) phase() string {
 	return activatedNode
 }
 
+// degrade enters MongoDB fallback and blocks retries, logging only the transition into degraded mode.
 func (p *zooKeeperPublication) degrade(err error) {
 	if !p.degraded {
 		log.Warn().Err(err).Str("phase", p.phase()).Str("snapshotId", p.latestConfirmedHead.SnapshotID).
@@ -122,6 +133,7 @@ func (p *zooKeeperPublication) degrade(err error) {
 	p.retryBlocked = true
 }
 
+// mongoPublished records the latest confirmed head and marks a matching fixed candidate as confirmed.
 func (p *zooKeeperPublication) mongoPublished(value descriptor) {
 	p.latestConfirmedHead = value
 	if p.candidate != nil && sameDescriptor(p.candidate.value, value) {
@@ -129,6 +141,7 @@ func (p *zooKeeperPublication) mongoPublished(value descriptor) {
 	}
 }
 
+// mongoAllowed permits fallback immediately or waits until the matching candidate's preparation delay ends.
 func (p *zooKeeperPublication) mongoAllowed(proposed descriptor) bool {
 	if p == nil || p.degraded {
 		return true
@@ -138,6 +151,7 @@ func (p *zooKeeperPublication) mongoAllowed(proposed descriptor) bool {
 		!p.candidate.preparedAt.IsZero() && !time.Now().Before(p.candidate.preparedAt.Add(p.delay))
 }
 
+// progress reads back publication state, prepares a fixed candidate and activates it after MongoDB confirmation.
 func (p *zooKeeperPublication) progress(ctx context.Context, store snapshotStore, proposed descriptor, starting bool) error {
 	if !p.transport.available() {
 		return zooKeeperError("session", errZooKeeperUnavailable)
@@ -181,6 +195,7 @@ func (p *zooKeeperPublication) progress(ctx context.Context, store snapshotStore
 	return nil
 }
 
+// selectCandidate chooses a complete proposal or confirmed fallback head and keeps it fixed until activation.
 func (p *zooKeeperPublication) selectCandidate(ctx context.Context, store snapshotStore, proposed descriptor, starting bool) error {
 	if starting && (proposed.SnapshotID == "" || p.degraded) {
 		return nil
@@ -205,6 +220,7 @@ func (p *zooKeeperPublication) selectCandidate(ctx context.Context, store snapsh
 		return nil
 	}
 	if confirmed && p.observed.activated.exists && sameDescriptor(p.observed.activated.value, value) {
+		// Catch-up must finish before a newer, unconfirmed proposal resumes normal publication.
 		if p.degraded {
 			log.Info().Str("snapshotId", value.SnapshotID).
 				Msg("Subscription snapshots returned to synchronized publication")
@@ -231,6 +247,7 @@ func (p *zooKeeperPublication) selectCandidate(ctx context.Context, store snapsh
 	return nil
 }
 
+// readState validates both references in one session, checks snapshot counts and resolves known write results.
 func (p *zooKeeperPublication) readState(ctx context.Context, store snapshotStore) error {
 	prepared, err := p.transport.read(ctx, preparedNode)
 	if err != nil {
@@ -266,6 +283,7 @@ func (p *zooKeeperPublication) readState(ctx context.Context, store snapshotStor
 	return nil
 }
 
+// observeNode stores a validated reference and remembers which publication nodes have been seen.
 func (p *zooKeeperPublication) observeNode(name string, node zNode) {
 	if p.observed == nil {
 		p.observed = &zState{}
@@ -279,6 +297,7 @@ func (p *zooKeeperPublication) observeNode(name string, node zNode) {
 	}
 }
 
+// checkNode accepts unchanged references or the expected pending write and rejects unknown transitions.
 func (p *zooKeeperPublication) checkNode(name string, current zNode) error {
 	if p.observed == nil || name == preparedNode && !p.seenPrepared || name == activatedNode && !p.seenActivated {
 		return nil
@@ -299,6 +318,7 @@ func (p *zooKeeperPublication) checkNode(name string, current zNode) error {
 	return integrityError("ZooKeeper node disappeared or has an unknown identity, version or descriptor")
 }
 
+// matchesWrite checks the exact identity and version transition expected from one create or update.
 func matchesWrite(current, expected zNode, value descriptor) bool {
 	if !current.exists || !sameDescriptor(current.value, value) {
 		return false
@@ -309,6 +329,7 @@ func matchesWrite(current, expected zNode, value descriptor) bool {
 	return current.czxid == expected.czxid && current.version == expected.version+1
 }
 
+// confirmReadBack completes a pending write only when observed metadata proves its expected transition.
 func (p *zooKeeperPublication) confirmReadBack() {
 	if p.candidate == nil || p.candidate.operation == nil {
 		return
@@ -323,6 +344,7 @@ func (p *zooKeeperPublication) confirmReadBack() {
 	}
 }
 
+// writeNode tracks the expected node transition and preserves candidates whose write outcome is uncertain.
 func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error {
 	candidate := p.candidate
 	current := p.observed.prepared
@@ -337,6 +359,7 @@ func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error
 		candidate.operation = &zOperation{name: name, expected: current}
 	}
 	operation := candidate.operation
+	// Retry in the current session while keeping the original node identity and version expectation.
 	operation.expected.session = current.session
 	next, outcome, err := p.transport.write(ctx, name, candidate.value, operation.expected)
 	if err != nil {
@@ -344,6 +367,7 @@ func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error
 			operation.uncertain = true
 		}
 		if outcome == writeNotExecuted && !operation.uncertain && name == preparedNode && candidate.preparedAt.IsZero() {
+			// Only a first preparation that definitely did not execute can release the fixed candidate.
 			p.candidate = nil
 		}
 		return err
@@ -361,6 +385,7 @@ func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error
 	return nil
 }
 
+// confirmNode starts the delay after confirmed preparation or releases the candidate after activation.
 func (p *zooKeeperPublication) confirmNode(name string) {
 	candidate := p.candidate
 	candidate.operation = nil
@@ -380,6 +405,7 @@ func (p *zooKeeperPublication) confirmNode(name string) {
 	p.firstActivated = true
 }
 
+// protection returns verified cleanup references only after activation and with no unresolved candidate or proposal.
 func (p *zooKeeperPublication) protection(ctx context.Context, store snapshotStore, proposalPending bool) (zState, error) {
 	if !p.firstActivated || p.candidate != nil || proposalPending {
 		return zState{}, errCleanupDeferred
@@ -402,6 +428,7 @@ func (p *zooKeeperPublication) protection(ctx context.Context, store snapshotSto
 	return *p.observed, nil
 }
 
+// protects checks both ZooKeeper references and the latest confirmed head that catch-up may still need.
 func (p *zooKeeperPublication) protects(state zState, id string) bool {
 	return state.prepared.exists && state.prepared.value.SnapshotID == id ||
 		state.activated.exists && state.activated.value.SnapshotID == id ||

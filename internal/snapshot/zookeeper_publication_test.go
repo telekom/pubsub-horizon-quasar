@@ -23,6 +23,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// TestPublicationNormalTimerAndOrder checks preparation, the exact delay boundary and MongoDB-before-ZooKeeper activation.
 func TestPublicationNormalTimerAndOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 5*time.Minute)
@@ -56,6 +57,7 @@ func TestPublicationNormalTimerAndOrder(t *testing.T) {
 	})
 }
 
+// TestPublicationDegradedLatestStateAndFixedCatchUp checks recovery to the latest fallback head without new MongoDB writes.
 func TestPublicationDegradedLatestStateAndFixedCatchUp(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 2*time.Minute)
@@ -91,6 +93,7 @@ func TestPublicationDegradedLatestStateAndFixedCatchUp(t *testing.T) {
 	})
 }
 
+// TestPublicationDisconnectDuringWaitingAndNewHead checks that fixed catch-up candidates never roll MongoDB back.
 func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 20*time.Second)
@@ -136,6 +139,7 @@ func TestPublicationDisconnectDuringWaitingAndNewHead(t *testing.T) {
 	})
 }
 
+// TestPublicationOfflineWakesDeferCleanupUntilRefresh checks that repeated offline events do not trigger cleanup attempts.
 func TestPublicationOfflineWakesDeferCleanupUntilRefresh(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 300*time.Second)
@@ -186,6 +190,7 @@ func TestPublicationOfflineWakesDeferCleanupUntilRefresh(t *testing.T) {
 	})
 }
 
+// TestPublicationRecoveryAfterUsedWakeResumesCleanup checks renewed recovery work after a disconnect without repeated retries.
 func TestPublicationRecoveryAfterUsedWakeResumesCleanup(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 300*time.Second)
@@ -234,6 +239,7 @@ func TestPublicationRecoveryAfterUsedWakeResumesCleanup(t *testing.T) {
 	})
 }
 
+// TestPublicationUncertainWritesReadBackAndOriginalCAS checks queued and committed writes across session changes.
 func TestPublicationUncertainWritesReadBackAndOriginalCAS(t *testing.T) {
 	for _, name := range []string{"prepared", "activated"} {
 		for _, applied := range []bool{false, true} {
@@ -246,6 +252,7 @@ func TestPublicationUncertainWritesReadBackAndOriginalCAS(t *testing.T) {
 	}
 }
 
+// testUncertainZooKeeperWrite simulates a lost reply and verifies recovery with the original node version expectation.
 func testUncertainZooKeeperWrite(t *testing.T, name string, applied bool) {
 	t.Helper()
 	store := newFakeStore(t)
@@ -295,6 +302,7 @@ func testUncertainZooKeeperWrite(t *testing.T, name string, applied bool) {
 	require.Equal(t, []string{"prepared", "activated"}, z.writes)
 }
 
+// TestPublicationCleanupAndIntegrityRecovery checks protected old references and recovery after restoring known node identity.
 func TestPublicationCleanupAndIntegrityRecovery(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, time.Minute)
@@ -342,6 +350,7 @@ func TestPublicationCleanupAndIntegrityRecovery(t *testing.T) {
 	})
 }
 
+// TestPublicationPrepareTimeoutUsesFreshMongoBudget checks that ZooKeeper timeout leaves a fresh budget for fallback activation.
 func TestPublicationPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -370,6 +379,7 @@ func TestPublicationPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 	})
 }
 
+// TestPublicationShutdownAndRetryScheduling checks tick-bounded retries and cancellation of pending activation.
 func TestPublicationShutdownAndRetryScheduling(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 5*time.Minute)
@@ -399,6 +409,7 @@ func TestPublicationShutdownAndRetryScheduling(t *testing.T) {
 	})
 }
 
+// TestPublicationStartupAbandonsOldPrepare checks that restart prepares its own snapshot rather than releasing old work.
 func TestPublicationStartupAbandonsOldPrepare(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -427,6 +438,7 @@ func TestPublicationStartupAbandonsOldPrepare(t *testing.T) {
 	})
 }
 
+// TestWriteOutcomeClassification checks uncertain transport failures against definite server-side write rejections.
 func TestWriteOutcomeClassification(t *testing.T) {
 	for _, err := range []error{
 		context.Canceled, context.DeadlineExceeded, zk.ErrClosing, zk.ErrConnectionClosed,
@@ -439,6 +451,7 @@ func TestWriteOutcomeClassification(t *testing.T) {
 	}
 }
 
+// TestPublicationDelayedPreviousProcessWrites checks that stale version guards reject late writes from an earlier process.
 func TestPublicationDelayedPreviousProcessWrites(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -470,6 +483,7 @@ func TestPublicationDelayedPreviousProcessWrites(t *testing.T) {
 	})
 }
 
+// TestPublicationRejectedRetryKeepsUncertainOriginalWrite checks that a rejected retry cannot discard an older uncertain write.
 func TestPublicationRejectedRetryKeepsUncertainOriginalWrite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -498,6 +512,7 @@ func TestPublicationRejectedRetryKeepsUncertainOriginalWrite(t *testing.T) {
 		require.True(t, sameNode(original.expected, w.publication.candidate.operation.expected))
 		require.ErrorIs(t, w.cleanupPending(t.Context()), errCleanupDeferred)
 		require.Empty(t, store.deletions)
+		// Rejecting a later retry does not prove the original queued write was cancelled.
 		_, err := z.apply(preparedNode, b, original.expected)
 		require.NoError(t, err, "original request can still execute after retry rejection")
 		z.session++
@@ -512,6 +527,7 @@ func TestPublicationRejectedRetryKeepsUncertainOriginalWrite(t *testing.T) {
 	})
 }
 
+// TestPublicationAccessRecoveryWithoutWake checks that refresh ticks resume catch-up after access permissions are restored.
 func TestPublicationAccessRecoveryWithoutWake(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 5*time.Minute)
@@ -543,6 +559,7 @@ func TestPublicationAccessRecoveryWithoutWake(t *testing.T) {
 	})
 }
 
+// TestPublicationMongoFailureAndFlappingAreRateLimited checks that session chatter cannot release a failed MongoDB retry gate.
 func TestPublicationMongoFailureAndFlappingAreRateLimited(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 5*time.Minute)
@@ -573,6 +590,7 @@ func TestPublicationMongoFailureAndFlappingAreRateLimited(t *testing.T) {
 	})
 }
 
+// TestPublicationAllDeletionPathsProtectExternalHistoryReferences checks every cleanup path against old ZooKeeper references.
 func TestPublicationAllDeletionPathsProtectExternalHistoryReferences(t *testing.T) {
 	for _, name := range []string{preparedNode, activatedNode} {
 		t.Run(name, func(t *testing.T) {
@@ -607,6 +625,7 @@ func TestPublicationAllDeletionPathsProtectExternalHistoryReferences(t *testing.
 	}
 }
 
+// TestPublicationDeferredOrphanDoesNotBlockSourceAndIsEventuallyDeleted checks continued scans and safe later orphan cleanup.
 func TestPublicationDeferredOrphanDoesNotBlockSourceAndIsEventuallyDeleted(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -639,6 +658,7 @@ func TestPublicationDeferredOrphanDoesNotBlockSourceAndIsEventuallyDeleted(t *te
 	})
 }
 
+// TestPublicationStructuredPhaseLogs checks ordered stage logs, durations and explicit fallback and recovery events.
 func TestPublicationStructuredPhaseLogs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var output bytes.Buffer
@@ -708,6 +728,7 @@ func TestPublicationStructuredPhaseLogs(t *testing.T) {
 	})
 }
 
+// TestPublicationStartupWaitsForItsOwnConfirmedMongoHead checks that startup recovery never publishes an unconfirmed head.
 func TestPublicationStartupWaitsForItsOwnConfirmedMongoHead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -739,6 +760,7 @@ func TestPublicationStartupWaitsForItsOwnConfirmedMongoHead(t *testing.T) {
 	})
 }
 
+// TestPublicationCatchUpRequiresConfirmedMongoHead checks that only resolved worker proposals can become catch-up targets.
 func TestPublicationCatchUpRequiresConfirmedMongoHead(t *testing.T) {
 	for _, ownProposal := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unknown head", true: "own uncertain CAS"}[ownProposal], func(t *testing.T) {
@@ -779,6 +801,7 @@ func TestPublicationCatchUpRequiresConfirmedMongoHead(t *testing.T) {
 	}
 }
 
+// TestPublicationInsertMustBeCompleteIncludingEmptySnapshot checks valid empty publication and no release after build failures.
 func TestPublicationInsertMustBeCompleteIncludingEmptySnapshot(t *testing.T) {
 	for _, scenario := range []string{"empty", "source failure", "insert failure"} {
 		t.Run(scenario, func(t *testing.T) {

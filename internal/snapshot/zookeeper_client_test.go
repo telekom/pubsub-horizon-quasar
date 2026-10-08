@@ -27,6 +27,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+// TestZooKeeperIntegration checks persistent transport, real fallback recovery and immediate failure without a session.
 func TestZooKeeperIntegration(t *testing.T) {
 	ensemble := test.SetupZooKeeper(t)
 	t.Run("transport, persistent nodes and ACLs", func(t *testing.T) { testZooKeeperTransport(t, ensemble.Addresses) })
@@ -46,6 +47,7 @@ func TestZooKeeperIntegration(t *testing.T) {
 	})
 }
 
+// testZooKeeperTransport checks node creation, version guards, persistent metadata and preservation of existing ACLs.
 func testZooKeeperTransport(t *testing.T, addresses []string) {
 	client := testZooKeeperClient(t, addresses)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -113,6 +115,7 @@ func testZooKeeperTransport(t *testing.T, addresses []string) {
 	testZooKeeperExistingParentACL(t, client)
 }
 
+// testZooKeeperExistingParentACL checks that existing read-only ancestors need no create permission or data changes.
 func testZooKeeperExistingParentACL(t *testing.T, client *zooKeeperClient) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -150,6 +153,7 @@ func testZooKeeperExistingParentACL(t *testing.T, client *zooKeeperClient) {
 	require.Equal(t, []byte("preserved"), data)
 }
 
+// testZooKeeperFallback checks MongoDB publication during quorum loss and catch-up without rewriting head history.
 func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	uri := test.SetupMongoReplicaSet(t)
 	_, store, w := mongoFixture(t, uri)
@@ -218,6 +222,7 @@ func testZooKeeperFallback(t *testing.T, ensemble *test.ZooKeeperEnsemble) {
 	require.NoError(t, w.cleanupPending(t.Context()))
 }
 
+// TestZooKeeperSDKLogsDiscardNonErrorAttributes checks that SDK log forwarding drops arbitrary inherited and record fields.
 func TestZooKeeperSDKLogsDiscardNonErrorAttributes(t *testing.T) {
 	var output bytes.Buffer
 	handler := &zooKeeperLogHandler{logger: zerolog.New(&output)}
@@ -237,6 +242,7 @@ func TestZooKeeperSDKLogsDiscardNonErrorAttributes(t *testing.T) {
 	}
 }
 
+// TestZooKeeperSDKLogLevels checks severity mapping, threshold filtering and omission of unrelated attributes.
 func TestZooKeeperSDKLogLevels(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
@@ -267,6 +273,7 @@ func TestZooKeeperSDKLogLevels(t *testing.T) {
 	}
 }
 
+// TestZooKeeperSDKLogMessages checks immediate, unchanged SDK messages with only the original error when present.
 func TestZooKeeperSDKLogMessages(t *testing.T) {
 	for _, tt := range []struct {
 		message string
@@ -303,6 +310,7 @@ func TestZooKeeperSDKLogMessages(t *testing.T) {
 	}
 }
 
+// TestZooKeeperSDKLogErrors checks that SDK errors retain their original text without publisher error categories.
 func TestZooKeeperSDKLogErrors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -352,10 +360,12 @@ type zooKeeperSDKLogValuer struct {
 	value slog.Value
 }
 
+// LogValue exposes the fixture's stored slog value for deferred attribute-resolution checks.
 func (v zooKeeperSDKLogValuer) LogValue() slog.Value {
 	return v.value
 }
 
+// TestZooKeeperSDKLogAttributeHandling checks nested error resolution, override order and unchanged handler copies.
 func TestZooKeeperSDKLogAttributeHandling(t *testing.T) {
 	for _, tt := range []struct {
 		name      string

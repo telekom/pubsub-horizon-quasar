@@ -62,6 +62,7 @@ func Start(c config.SubscriptionSnapshots) error {
 	return nil
 }
 
+// logStartup reports whether snapshots are enabled and logs their settings without connection credentials.
 func logStartup(c config.SubscriptionSnapshots) {
 	if !c.Enabled {
 		log.Info().Bool("enabled", false).Msg("Subscription snapshots disabled")
@@ -84,11 +85,13 @@ func logStartup(c config.SubscriptionSnapshots) {
 		Msg("Starting subscription snapshot worker")
 }
 
+// newService creates an independent cancellation context and shutdown signal without opening connections.
 func newService(c config.SubscriptionSnapshots) *service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &service{config: c, ctx: ctx, cancel: cancel, done: make(chan struct{})}
 }
 
+// run starts the ZooKeeper client and refresh ticker, then closes all connections when the loop stops.
 func (s *service) run() {
 	defer close(s.done)
 	defer s.disconnect()
@@ -98,6 +101,7 @@ func (s *service) run() {
 	s.loop(refresh.C, nil)
 }
 
+// loop serializes refreshes, publication deadlines and connection changes until shutdown.
 func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 	if s.config.InitialRefreshDelay > 0 {
 		s.initialRefreshDeadline = time.Now().Add(s.config.InitialRefreshDelay)
@@ -140,6 +144,7 @@ func (s *service) loop(refresh <-chan time.Time, actions <-chan func()) {
 	}
 }
 
+// nextDeadline returns the earliest startup or publication deadline, ignoring blocked publication retries.
 func (s *service) nextDeadline() time.Time {
 	deadline := s.initialRefreshDeadline
 	if s.worker != nil && s.worker.publication != nil {
@@ -151,6 +156,7 @@ func (s *service) nextDeadline() time.Time {
 	return deadline
 }
 
+// attemptPeriodicRefresh releases retry blocks and starts work for the next refresh tick.
 func (s *service) attemptPeriodicRefresh() {
 	s.finishInitialRefreshDelay()
 	s.mongoRetryBlocked = false
@@ -160,6 +166,8 @@ func (s *service) attemptPeriodicRefresh() {
 	s.attemptRefresh()
 }
 
+// attemptDeadline advances due publication work or starts the first scan when the startup delay ends.
+// It reports whether it also consumed a pending refresh tick.
 func (s *service) attemptDeadline(refresh <-chan time.Time) bool {
 	if !s.finishInitialRefreshDelay() {
 		s.runCycle(deadlineWork)
@@ -178,6 +186,7 @@ func (s *service) attemptDeadline(refresh <-chan time.Time) bool {
 	return false
 }
 
+// runLoopActions drains queued control actions before the worker handles the next event.
 func runLoopActions(actions <-chan func()) {
 	for {
 		select {
@@ -189,6 +198,7 @@ func runLoopActions(actions <-chan func()) {
 	}
 }
 
+// connectionWake advances publication on session changes, allowing one recovery retry until a disconnect or refresh.
 func (s *service) connectionWake(recoveryWakeUsed bool) bool {
 	if s.worker == nil || s.worker.publication == nil || s.initialRefreshWaiting() {
 		return recoveryWakeUsed
@@ -198,6 +208,7 @@ func (s *service) connectionWake(recoveryWakeUsed bool) bool {
 		recoveryWakeUsed = false
 		s.worker.publication.degrade(zooKeeperError("session", errZooKeeperUnavailable))
 	case recoveryWakeUsed:
+		// Repeated SDK events must not turn a failed write into a tight retry loop.
 		return recoveryWakeUsed
 	default:
 		recoveryWakeUsed = true
@@ -207,10 +218,12 @@ func (s *service) connectionWake(recoveryWakeUsed bool) bool {
 	return recoveryWakeUsed
 }
 
+// initialRefreshWaiting reports whether the startup delay still prevents source scans and publication.
 func (s *service) initialRefreshWaiting() bool {
 	return !s.initialRefreshDeadline.IsZero() && time.Now().Before(s.initialRefreshDeadline)
 }
 
+// finishInitialRefreshDelay clears an expired startup deadline and reports that transition once.
 func (s *service) finishInitialRefreshDelay() bool {
 	if s.initialRefreshDeadline.IsZero() || time.Now().Before(s.initialRefreshDeadline) {
 		return false
@@ -219,12 +232,14 @@ func (s *service) finishInitialRefreshDelay() bool {
 	return true
 }
 
+// stopActivationTimer stops the current deadline timer when another event wins the loop selection.
 func stopActivationTimer(timer *time.Timer) {
 	if timer != nil {
 		timer.Stop()
 	}
 }
 
+// initialize connects MongoDB and sets up the worker once; initial connection failures are fatal.
 func (s *service) initialize(ctx context.Context) error {
 	if s.client == nil {
 		if err := s.connect(ctx); err != nil {
@@ -249,6 +264,7 @@ func (s *service) initialize(ctx context.Context) error {
 	return nil
 }
 
+// connect opens and pings the dedicated MongoDB client with primary reads and safe error messages.
 func (s *service) connect(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -263,6 +279,7 @@ func (s *service) connect(ctx context.Context) error {
 	return databaseError("ping dedicated subscription snapshot client", client.Ping(ctx, nil))
 }
 
+// withSession runs an action in the worker's shared, causally consistent MongoDB session.
 func (s *service) withSession(ctx context.Context, action func(context.Context) error) error {
 	if s.session == nil {
 		session, err := s.client.StartSession(options.Session().SetCausalConsistency(true))
@@ -276,10 +293,12 @@ func (s *service) withSession(ctx context.Context, action func(context.Context) 
 	})
 }
 
+// attemptRefresh starts a worker cycle that scans the source or queues a scan behind an open proposal.
 func (s *service) attemptRefresh() {
 	s.runCycle(refreshWork)
 }
 
+// runCycle advances refresh and publication work iteratively, then attempts eligible cleanup once.
 func (s *service) runCycle(cause workCause) {
 	refresh := cause == refreshWork
 	cleanupEligible := cause == refreshWork || cause == deadlineWork
@@ -288,6 +307,7 @@ func (s *service) runCycle(cause workCause) {
 		var err error
 		if refresh {
 			if s.worker != nil && s.worker.proposal != nil && s.worker.publication != nil {
+				// Keep one follow-up scan; ticks cannot replace a proposal awaiting publication.
 				s.refreshRequested = true
 			} else {
 				start, err = s.refreshStep()
@@ -307,11 +327,13 @@ func (s *service) runCycle(cause workCause) {
 		s.refreshRequested = false
 		refresh = true
 	}
+	// Connection failures are not cleanup triggers; recovery may finally release protected versions.
 	if cleanupEligible || cause == connectionWork && s.zooKeeper.available() {
 		s.cleanupAfterPublication()
 	}
 }
 
+// refreshStep initializes storage and creates a proposal within a fresh timeout, respecting the startup delay.
 func (s *service) refreshStep() (time.Time, error) {
 	ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
 	defer cancel()
@@ -334,6 +356,7 @@ func (s *service) refreshStep() (time.Time, error) {
 	return start, err
 }
 
+// publicationStep advances ZooKeeper and MongoDB publication while honoring delay and retry gates.
 func (s *service) publicationStep() {
 	if s.worker == nil {
 		return
@@ -347,6 +370,7 @@ func (s *service) publicationStep() {
 	}
 	mongoPublished := false
 	if s.worker.proposal != nil && p.mongoAllowed(s.worker.proposedSnapshot()) && !s.mongoRetryBlocked {
+		// Publication gets a fresh budget even if creating or preparing the snapshot used its timeout.
 		ctx, cancel := context.WithTimeout(s.ctx, s.config.RefreshTimeout)
 		start := time.Now()
 		err := s.withSession(ctx, s.worker.resolve)
@@ -367,6 +391,7 @@ func (s *service) publicationStep() {
 	}
 }
 
+// attemptZooKeeper makes one bounded publication attempt and enters MongoDB fallback on failure.
 func (s *service) attemptZooKeeper() {
 	ctx, cancel := context.WithTimeout(s.ctx, min(zooKeeperIOTimeout, s.config.RefreshTimeout))
 	start := time.Now()
@@ -388,12 +413,14 @@ func (s *service) attemptZooKeeper() {
 		Msg("Subscription snapshot ZooKeeper operation failed")
 }
 
+// cleanupAfterPublication runs pending cleanup only while the worker is active and not shutting down.
 func (s *service) cleanupAfterPublication() {
 	if s.worker != nil && s.worker.cleanupDue && s.ctx.Err() == nil {
 		s.attemptCleanup()
 	}
 }
 
+// attemptCleanup uses a separate timeout and logs deferred cleanup without clearing the pending work.
 func (s *service) attemptCleanup() {
 	ctx, cancel := context.WithTimeout(s.ctx, s.config.CleanupTimeout)
 	start := time.Now()
@@ -409,12 +436,14 @@ func (s *service) attemptCleanup() {
 	}
 }
 
+// logError records a failed worker operation with its duration and collection names.
 func (s *service) logError(operation string, start time.Time, err error) {
 	log.Error().Err(err).Str("operation", operation).Dur("durationMs", time.Since(start)).
 		Str("sourceCollection", s.config.SourceCollection).Str("snapshotCollection", s.config.SnapshotCollection).
 		Str("headCollection", s.config.HeadCollection).Msg("Subscription snapshot operation failed")
 }
 
+// shutdown cancels the worker once and waits up to ten seconds for it to stop.
 func (s *service) shutdown() {
 	s.stopOnce.Do(func() {
 		s.cancel()
@@ -428,6 +457,7 @@ func (s *service) shutdown() {
 	})
 }
 
+// disconnect closes ZooKeeper, the MongoDB session and the client using a fresh shutdown timeout.
 func (s *service) disconnect() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()

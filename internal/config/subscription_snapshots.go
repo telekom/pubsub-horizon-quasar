@@ -42,6 +42,7 @@ type SnapshotZooKeeper struct {
 	SessionTimeout time.Duration `mapstructure:"sessionTimeout"`
 }
 
+// setSubscriptionSnapshotsDefaults registers disabled-by-default settings and enables environment-only loading.
 func setSubscriptionSnapshotsDefaults() {
 	const defaultTimeout = "60s"
 
@@ -69,6 +70,7 @@ func setSubscriptionSnapshotsDefaults() {
 	}
 }
 
+// Validate checks MongoDB, timing and ZooKeeper settings only when snapshots are enabled.
 func (c SubscriptionSnapshots) Validate() error {
 	if !c.Enabled {
 		return nil
@@ -97,6 +99,7 @@ func (c SubscriptionSnapshots) Validate() error {
 	return c.validateZooKeeper()
 }
 
+// validateZooKeeper requires positive delays, explicit server addresses and a safe publication path.
 func (c SubscriptionSnapshots) validateZooKeeper() error {
 	if c.ActivationDelay <= 0 || c.ZooKeeper.SessionTimeout <= 0 {
 		return errors.New("subscriptionSnapshots activationDelay and zookeeper.sessionTimeout must be positive")
@@ -115,6 +118,7 @@ func (c SubscriptionSnapshots) validateZooKeeper() error {
 	return nil
 }
 
+// validZooKeeperAddress accepts a hostname or IP address with an explicit, non-zero port.
 func validZooKeeperAddress(address string) bool {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil || host == "" || strings.ContainsAny(host, " \t\r\n/@?#\\") {
@@ -144,6 +148,7 @@ func validZooKeeperAddress(address string) bool {
 	return true
 }
 
+// validZooKeeperPath checks absolute paths and rejects invalid characters and ZooKeeper's system subtree.
 func validZooKeeperPath(value string) bool {
 	if !utf8.ValidString(value) || !strings.HasPrefix(value, "/") ||
 		value == "/zookeeper" || strings.HasPrefix(value, "/zookeeper/") {
@@ -167,6 +172,7 @@ func validZooKeeperPath(value string) bool {
 	return true
 }
 
+// validateCollections checks namespace limits and prevents source, snapshot and head collections from overlapping.
 func (c SubscriptionSnapshots) validateCollections() error {
 	seen := make(map[string]bool, 3)
 	for _, name := range []string{c.SourceCollection, c.SnapshotCollection, c.HeadCollection} {
@@ -184,6 +190,7 @@ func (c SubscriptionSnapshots) validateCollections() error {
 	return nil
 }
 
+// validateSubscriptionSnapshotsURI requires a URI and rejects options that weaken publication consistency.
 func validateSubscriptionSnapshotsURI(uri string) error {
 	if strings.TrimSpace(uri) == "" {
 		return errors.New("subscriptionSnapshots.uri must be configured")
@@ -204,6 +211,7 @@ func validateSubscriptionSnapshotsURI(uri string) error {
 	return nil
 }
 
+// validateSubscriptionSnapshotsURIOption checks one normalized option for majority writes and primary reads.
 func validateSubscriptionSnapshotsURIOption(key, value string) error {
 	switch key {
 	case "w":

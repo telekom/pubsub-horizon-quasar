@@ -26,6 +26,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// TestSchedulingRefreshAndCleanupAfterPublication checks periodic scans and cleanup only after confirmed publication.
 func TestSchedulingRefreshAndCleanupAfterPublication(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -59,6 +60,7 @@ func TestSchedulingRefreshAndCleanupAfterPublication(t *testing.T) {
 	})
 }
 
+// TestSchedulingCoalescesTicksWhileRefreshIsRunning checks that blocked scans do not overlap and missed ticks coalesce.
 func TestSchedulingCoalescesTicksWhileRefreshIsRunning(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -90,6 +92,7 @@ func TestSchedulingCoalescesTicksWhileRefreshIsRunning(t *testing.T) {
 	})
 }
 
+// TestSchedulingCancelsInflightRefresh checks prompt shutdown and preservation of the head during a blocked scan.
 func TestSchedulingCancelsInflightRefresh(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -113,6 +116,7 @@ func TestSchedulingCancelsInflightRefresh(t *testing.T) {
 	})
 }
 
+// TestSchedulingUnresolvedActivationBlocksCleanup checks that uncertain head updates retain their proposal until recovery.
 func TestSchedulingUnresolvedActivationBlocksCleanup(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -134,6 +138,7 @@ func TestSchedulingUnresolvedActivationBlocksCleanup(t *testing.T) {
 	})
 }
 
+// TestCleanupFailureIsLoggedAndRetriedOnNextRefresh checks cleanup error logging and retry without a new publication.
 func TestCleanupFailureIsLoggedAndRetriedOnNextRefresh(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -172,6 +177,7 @@ func TestCleanupFailureIsLoggedAndRetriedOnNextRefresh(t *testing.T) {
 	})
 }
 
+// TestCleanupUsesIndependentTimeout checks that cleanup can finish beyond the refresh timeout.
 func TestCleanupUsesIndependentTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -195,6 +201,7 @@ func TestCleanupUsesIndependentTimeout(t *testing.T) {
 	})
 }
 
+// TestPendingCleanupRunsAfterRefreshTimeout checks that a failed scan does not consume pending cleanup's time budget.
 func TestPendingCleanupRunsAfterRefreshTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -218,6 +225,7 @@ func TestPendingCleanupRunsAfterRefreshTimeout(t *testing.T) {
 	})
 }
 
+// TestPublicationLoggingDurationMs checks separate creation, publication and cleanup logs with millisecond durations.
 func TestPublicationLoggingDurationMs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newFakeStore(t)
@@ -254,6 +262,7 @@ func TestPublicationLoggingDurationMs(t *testing.T) {
 	})
 }
 
+// TestSnapshotServiceFailureLogging checks failure stages and confirms that ZooKeeper errors still allow MongoDB fallback.
 func TestSnapshotServiceFailureLogging(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -322,6 +331,7 @@ func TestSnapshotServiceFailureLogging(t *testing.T) {
 
 const snapshotTestURIEnv = "QUASAR_TEST_SNAPSHOT_URI"
 
+// TestSnapshotConnectionProcess is a subprocess entry point for initial connection failures, skipped in normal runs.
 func TestSnapshotConnectionProcess(t *testing.T) {
 	uri := os.Getenv(snapshotTestURIEnv)
 	if uri == "" {
@@ -349,6 +359,7 @@ func TestSnapshotConnectionProcess(t *testing.T) {
 	require.NoError(t, s.initialize(ctx))
 }
 
+// requireSnapshotConnectionFatal checks that a child exits with a fatal connection log without exposing sensitive values.
 func requireSnapshotConnectionFatal(t *testing.T, uri, operation string, sensitive ...string) string {
 	t.Helper()
 	executable, err := os.Executable()
@@ -372,6 +383,7 @@ func requireSnapshotConnectionFatal(t *testing.T, uri, operation string, sensiti
 	return text
 }
 
+// TestInitialSnapshotConnectionFailures checks fatal, sanitized handling of URI, discovery and initial ping failures.
 func TestInitialSnapshotConnectionFailures(t *testing.T) {
 	var listenConfig net.ListenConfig
 	listener, err := listenConfig.Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -400,6 +412,7 @@ func TestInitialSnapshotConnectionFailures(t *testing.T) {
 	}
 }
 
+// TestDisabledServiceHasNoSideEffects checks disabled startup and rejection of invalid enabled settings before logging.
 func TestDisabledServiceHasNoSideEffects(t *testing.T) {
 	var output bytes.Buffer
 	previousLogger := log.Logger
@@ -421,6 +434,7 @@ func TestDisabledServiceHasNoSideEffects(t *testing.T) {
 	require.Empty(t, output.String(), "invalid configuration must not announce startup")
 }
 
+// TestStartupLogging checks one startup event with exact settings and no MongoDB credentials.
 func TestStartupLogging(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		name := "disabled"
@@ -473,6 +487,7 @@ func TestStartupLogging(t *testing.T) {
 	}
 }
 
+// TestServiceSchedulingAndCancellation checks cancellation without timer events and repeated, safe shutdown calls.
 func TestServiceSchedulingAndCancellation(t *testing.T) {
 	s := newService(testConfig())
 	// A canceled context must stop a service even when no ticker ever fires.
@@ -492,6 +507,7 @@ func TestServiceSchedulingAndCancellation(t *testing.T) {
 	s.shutdown()
 }
 
+// TestQueuedRefreshContinuesPublicationInSameCycle checks one follow-up scan and publication without waiting for another event.
 func TestQueuedRefreshContinuesPublicationInSameCycle(t *testing.T) {
 	for _, fallback := range []bool{false, true} {
 		t.Run(map[bool]string{false: "healthy", true: "fallback"}[fallback], func(t *testing.T) {
@@ -570,6 +586,7 @@ func TestQueuedRefreshContinuesPublicationInSameCycle(t *testing.T) {
 	}
 }
 
+// TestQueuedRefreshDoesNotRepeatFailedOrUnchangedScan checks that a queued scan runs once even without a new snapshot.
 func TestQueuedRefreshDoesNotRepeatFailedOrUnchangedScan(t *testing.T) {
 	for _, failed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unchanged", true: "failed"}[failed], func(t *testing.T) {
@@ -613,6 +630,7 @@ func TestQueuedRefreshDoesNotRepeatFailedOrUnchangedScan(t *testing.T) {
 	}
 }
 
+// TestQueuedFallbackRefreshPreservesBudgetsAndRetryBlocks checks fresh MongoDB timeouts and retained retry blocks during flapping.
 func TestQueuedFallbackRefreshPreservesBudgetsAndRetryBlocks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, time.Hour)
@@ -657,6 +675,7 @@ func TestQueuedFallbackRefreshPreservesBudgetsAndRetryBlocks(t *testing.T) {
 	})
 }
 
+// TestCleanupCoalescingRetriesOnlyAtEligibleEvents checks one pending cleanup attempt per refresh or usable recovery event.
 func TestCleanupCoalescingRetriesOnlyAtEligibleEvents(t *testing.T) {
 	for _, failure := range []string{"deferred", "error"} {
 		t.Run(failure, func(t *testing.T) {
@@ -708,6 +727,7 @@ func TestCleanupCoalescingRetriesOnlyAtEligibleEvents(t *testing.T) {
 	}
 }
 
+// TestFollowUpPrepareTimeoutUsesFreshMongoBudget checks immediate fallback after a follow-up preparation timeout.
 func TestFollowUpPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, time.Hour)
@@ -748,6 +768,7 @@ func TestFollowUpPrepareTimeoutUsesFreshMongoBudget(t *testing.T) {
 	})
 }
 
+// TestSnapshotCreationDurationAndCleanupOrder checks stage ordering and durations that exclude unrelated work.
 func TestSnapshotCreationDurationAndCleanupOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
@@ -796,6 +817,7 @@ func TestSnapshotCreationDurationAndCleanupOrder(t *testing.T) {
 	})
 }
 
+// TestFollowUpRefreshHasOwnDurationWindow checks that a queued snapshot's creation duration excludes earlier publication work.
 func TestFollowUpRefreshHasOwnDurationWindow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, time.Hour)
@@ -841,11 +863,13 @@ func TestFollowUpRefreshHasOwnDurationWindow(t *testing.T) {
 	})
 }
 
+// regularCleanupAttempts counts successful, deferred and failed regular cleanup attempts in captured logs.
 func regularCleanupAttempts(output []byte) int {
 	return bytes.Count(output, []byte(`"operation":"cleanup"`)) +
 		bytes.Count(output, []byte(`"message":"Subscription snapshot cleanup completed"`))
 }
 
+// messageNames extracts string message fields from decoded log entries in their original order.
 func messageNames(entries []map[string]any) []string {
 	var names []string
 	for _, entry := range entries {

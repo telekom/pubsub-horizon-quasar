@@ -88,6 +88,7 @@ func SetupZooKeeper(t *testing.T) *ZooKeeperEnsemble {
 	return ensemble
 }
 
+// runZooKeeperMember starts an isolated member and retries port collisions after removing failed containers.
 func runZooKeeperMember(t *testing.T, pool *dockertest.Pool, options *dockertest.RunOptions) (*dockertest.Resource, error) {
 	t.Helper()
 	for attempt := 1; ; attempt++ {
@@ -105,6 +106,7 @@ func runZooKeeperMember(t *testing.T, pool *dockertest.Pool, options *dockertest
 	}
 }
 
+// removeFailedZooKeeperMember removes only the named fixture container, treating an absent container as clean.
 func removeFailedZooKeeperMember(pool *dockertest.Pool, name string) error {
 	container, err := pool.Client.InspectContainer(name)
 	var missing *docker.NoSuchContainer

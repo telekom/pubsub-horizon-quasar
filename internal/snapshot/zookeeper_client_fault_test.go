@@ -35,6 +35,7 @@ type acknowledgmentProxy struct {
 	connections []net.Conn
 }
 
+// newAcknowledgmentProxy starts a local fault-injection proxy and registers cleanup for all accepted connections.
 func newAcknowledgmentProxy(t *testing.T, target string) *acknowledgmentProxy {
 	t.Helper()
 	var lc net.ListenConfig
@@ -71,6 +72,7 @@ func newAcknowledgmentProxy(t *testing.T, target string) *acknowledgmentProxy {
 	return proxy
 }
 
+// readZooKeeperPacket reads a complete length-prefixed packet and rejects payloads above the proxy's size limit.
 func readZooKeeperPacket(conn net.Conn) ([]byte, error) {
 	header := make([]byte, 4)
 	if _, err := io.ReadFull(conn, header); err != nil {
@@ -86,6 +88,7 @@ func readZooKeeperPacket(conn net.Conn) ([]byte, error) {
 	return packet, err
 }
 
+// forward relays one connection and drops the selected write response after the server has processed it.
 func (p *acknowledgmentProxy) forward(client net.Conn) {
 	defer client.Close()
 	if p.offline.Load() {
@@ -111,6 +114,7 @@ func (p *acknowledgmentProxy) forward(client net.Conn) {
 			return
 		}
 		if len(packet) >= 8 && lostXID.Load() != 0 && int32(binary.BigEndian.Uint32(packet[4:8])) == lostXID.Load() {
+			// Match the request ID so the write reaches the server but its acknowledgement never reaches the SDK.
 			p.dropped <- struct{}{}
 			return
 		}
@@ -120,6 +124,7 @@ func (p *acknowledgmentProxy) forward(client net.Conn) {
 	}
 }
 
+// forwardRequests relays client packets and records the next armed target write's request ID.
 func (p *acknowledgmentProxy) forwardRequests(client, upstream net.Conn, lostXID *atomic.Int32) {
 	for {
 		packet, err := readZooKeeperPacket(client)
@@ -135,6 +140,7 @@ func (p *acknowledgmentProxy) forwardRequests(client, upstream net.Conn, lostXID
 	}
 }
 
+// isTargetWrite recognizes create and set-data requests for the configured publication path.
 func (p *acknowledgmentProxy) isTargetWrite(packet []byte) bool {
 	target := p.nodePath.Load()
 	if len(packet) < 16 || target == nil {
@@ -142,10 +148,12 @@ func (p *acknowledgmentProxy) isTargetWrite(packet []byte) bool {
 	}
 	operation := int32(binary.BigEndian.Uint32(packet[8:12]))
 	length := int(binary.BigEndian.Uint32(packet[12:16]))
+	// ZooKeeper opcodes 1 and 5 carry a length-prefixed path after the request header.
 	return (operation == 1 || operation == 5) && length <= len(packet)-16 &&
 		string(packet[16:16+length]) == *target
 }
 
+// TestZooKeeperLostWriteAcknowledgment checks uncertain create and update results through a real response-dropping proxy.
 func TestZooKeeperLostWriteAcknowledgment(t *testing.T) {
 	ensemble := test.SetupZooKeeper(t)
 	for _, node := range []string{preparedNode, activatedNode} {
@@ -181,6 +189,7 @@ func TestZooKeeperLostWriteAcknowledgment(t *testing.T) {
 	}
 }
 
+// TestZooKeeperQueuedWriteAfterContextCancellation checks that an expired SDK call can still commit after reconnection.
 func TestZooKeeperQueuedWriteAfterContextCancellation(t *testing.T) {
 	ensemble := test.SetupZooKeeper(t)
 	client := testZooKeeperClient(t, ensemble.Addresses)
@@ -216,6 +225,7 @@ func TestZooKeeperQueuedWriteAfterContextCancellation(t *testing.T) {
 	}, 10*time.Second, 20*time.Millisecond, "context expiry must not be treated as rollback of the queued write")
 }
 
+// TestZooKeeperCancelledWriteRecoveryAfterNewSession checks exact CAS recovery across expiry of the original session.
 func TestZooKeeperCancelledWriteRecoveryAfterNewSession(t *testing.T) {
 	ensemble := test.SetupZooKeeper(t)
 	proxy := newAcknowledgmentProxy(t, ensemble.Addresses[0])
@@ -268,6 +278,7 @@ func TestZooKeeperCancelledWriteRecoveryAfterNewSession(t *testing.T) {
 	require.True(t, matchesWrite(confirmed, initial, value), "retain the original CAS across session expiry")
 }
 
+// TestZooKeeperDNSRecoveryWhileMongoDBContinues checks publication fallback and catch-up after DNS becomes available.
 func TestZooKeeperDNSRecoveryWhileMongoDBContinues(t *testing.T) {
 	ensemble := test.SetupZooKeeper(t)
 	host, port, err := net.SplitHostPort(ensemble.Addresses[0])
@@ -314,6 +325,7 @@ func TestZooKeeperDNSRecoveryWhileMongoDBContinues(t *testing.T) {
 	require.True(t, sameDescriptor(store.current.Version, w.publication.observed.activated.value))
 }
 
+// recoveryDNSServer starts a local DNS fixture that changes from missing-name replies to a supplied IPv4 address.
 func recoveryDNSServer(t *testing.T, address net.IP) (net.PacketConn, *atomic.Bool) {
 	t.Helper()
 	var lc net.ListenConfig
@@ -339,6 +351,7 @@ func recoveryDNSServer(t *testing.T, address net.IP) (net.PacketConn, *atomic.Bo
 	return server, recovered
 }
 
+// recoveryDNSResponse builds a missing-name reply or an IPv4 answer while preserving the original DNS question.
 func recoveryDNSResponse(data []byte, available bool, address net.IP) []byte {
 	if len(data) < 16 {
 		return nil
@@ -357,6 +370,7 @@ func recoveryDNSResponse(data []byte, available bool, address net.IP) []byte {
 	if available {
 		response[3] = 0x80
 		if binary.BigEndian.Uint16(response[end-4:end-2]) == 1 {
+			// Answer only A queries; the compressed name points back to the original question.
 			response[7] = 1
 			response = append(response, 0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 1, 0, 4)
 			response = append(response, address...)

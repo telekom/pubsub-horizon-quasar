@@ -28,6 +28,7 @@ type mongoStore struct {
 	seenHead  bool
 }
 
+// newMongoStore binds the collections with primary, majority reads and journaled majority writes.
 func newMongoStore(client *mongo.Client, c config.SubscriptionSnapshots) *mongoStore {
 	journal := true
 	wc := &writeconcern.WriteConcern{W: "majority", Journal: &journal}
@@ -39,6 +40,7 @@ func newMongoStore(client *mongo.Client, c config.SubscriptionSnapshots) *mongoS
 	}
 }
 
+// readHead validates publication metadata and bootstraps it only when no existing data would be lost.
 func (m *mongoStore) readHead(ctx context.Context) (head, error) {
 	raw, err := m.heads.FindOne(ctx, bson.D{{Key: fieldID, Value: headID}}).Raw()
 	if errors.Is(err, mongo.ErrNoDocuments) {
@@ -54,6 +56,7 @@ func (m *mongoStore) readHead(ctx context.Context) (head, error) {
 	return current, err
 }
 
+// bootstrap creates and reads back an empty head only for a previously unseen, empty snapshot store.
 func (m *mongoStore) bootstrap(ctx context.Context) (head, error) {
 	if m.seenHead {
 		return head{}, errors.New("previously observed head is missing; restore publication metadata")
@@ -84,6 +87,7 @@ func (m *mongoStore) bootstrap(ctx context.Context) (head, error) {
 	return current, err
 }
 
+// readSource buffers subscriptions in binary ID order and rejects invalid or oversized source data.
 func (m *mongoStore) readSource(ctx context.Context, limit int64) (*sourceBuffer, error) {
 	if err := m.requireSourceCollection(ctx); err != nil {
 		return nil, err
@@ -107,6 +111,7 @@ func (m *mongoStore) readSource(ctx context.Context, limit int64) (*sourceBuffer
 	return buffer, nil
 }
 
+// insertSnapshot wraps buffered subscriptions and writes ordered batches limited by count and byte size.
 func (m *mongoStore) insertSnapshot(ctx context.Context, id string, source *sourceBuffer) error {
 	documents := make([]any, 0, batchSize)
 	var size int
@@ -136,9 +141,11 @@ func (m *mongoStore) insertSnapshot(ctx context.Context, id string, source *sour
 	return flush()
 }
 
+// activate replaces the head and history only if the previous version still matches.
 func (m *mongoStore) activate(ctx context.Context, previous string, next head) (bool, error) {
 	var expected any = previous
 	if previous == "" {
+		// The bootstrap head has no snapshotId field, rather than an empty string.
 		expected = bson.D{{Key: "$exists", Value: false}}
 	}
 	result, err := m.heads.ReplaceOne(ctx, bson.D{
@@ -150,11 +157,13 @@ func (m *mongoStore) activate(ctx context.Context, previous string, next head) (
 	return result.MatchedCount == 1, nil
 }
 
+// countSnapshot counts stored rows for one snapshot version using the store's read concern.
 func (m *mongoStore) countSnapshot(ctx context.Context, id string) (int64, error) {
 	count, err := m.snapshots.CountDocuments(ctx, bson.D{{Key: fieldSnapshotID, Value: id}})
 	return count, databaseError("count snapshot", err)
 }
 
+// visitSnapshotIDs streams distinct version IDs to a callback and aborts on invalid IDs or callback errors.
 func (m *mongoStore) visitSnapshotIDs(ctx context.Context, visit func(string) error) error {
 	cursor, err := m.snapshots.Aggregate(ctx, mongo.Pipeline{
 		bson.D{{Key: "$group", Value: bson.D{{Key: fieldID, Value: "$snapshotId"}}}},
@@ -175,6 +184,7 @@ func (m *mongoStore) visitSnapshotIDs(ctx context.Context, visit func(string) er
 	return databaseError("finish listing snapshot versions", cursor.Err())
 }
 
+// deleteBatch selects and removes at most one batch of rows belonging to the given version.
 func (m *mongoStore) deleteBatch(ctx context.Context, id string) (int64, error) {
 	cursor, err := m.snapshots.Find(ctx, bson.D{{Key: fieldSnapshotID, Value: id}},
 		options.Find().SetProjection(bson.D{{Key: fieldID, Value: 1}}).SetLimit(batchSize))
@@ -185,6 +195,7 @@ func (m *mongoStore) deleteBatch(ctx context.Context, id string) (int64, error) 
 	ids := make(bson.A, 0, batchSize)
 	for cursor.Next(ctx) {
 		id := cursor.Current.Lookup(fieldID)
+		// Cursor storage is reused on the next row, so selected IDs must own their bytes.
 		id.Value = slices.Clone(id.Value)
 		ids = append(ids, id)
 	}
@@ -203,6 +214,7 @@ func (m *mongoStore) deleteBatch(ctx context.Context, id string) (int64, error) 
 	return result.DeletedCount, nil
 }
 
+// closeCursor releases a MongoDB cursor and logs cleanup failures without exposing driver details.
 func closeCursor(ctx context.Context, cursor *mongo.Cursor) {
 	if err := cursor.Close(ctx); err != nil {
 		log.Error().Err(databaseError("close cursor", err)).Msg("Subscription snapshot cursor cleanup failed")
@@ -214,6 +226,7 @@ type mongoOperationError struct {
 	cause     error
 }
 
+// Error describes the failed operation with a server code or timeout, hiding sensitive driver messages.
 func (e *mongoOperationError) Error() string {
 	message := e.operation + " failed"
 	var commandError mongo.CommandError
@@ -226,10 +239,12 @@ func (e *mongoOperationError) Error() string {
 	return message
 }
 
+// Unwrap exposes the original MongoDB error for error matching without changing the safe log message.
 func (e *mongoOperationError) Unwrap() error {
 	return e.cause
 }
 
+// databaseError wraps a non-nil MongoDB error with a safe operation label and preserves its cause.
 func databaseError(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -243,7 +258,8 @@ const (
 	schemaRequired = "required"
 )
 
-// snapshotValidator uses ordered BSON to keep create's existing-options comparison stable across starts.
+// snapshotValidator defines the required fields and BSON types for wrapped subscriptions.
+// Ordered BSON keeps collection-option comparisons stable across starts.
 func snapshotValidator() bson.D {
 	return bson.D{{Key: "$jsonSchema", Value: bson.D{
 		{Key: schemaBSONType, Value: schemaObject},
@@ -257,10 +273,12 @@ func snapshotValidator() bson.D {
 	}}}
 }
 
+// versionIDSchema requires a lowercase, 24-character ObjectID string in stored metadata.
 func versionIDSchema() bson.D {
 	return bson.D{{Key: schemaBSONType, Value: schemaString}, {Key: "pattern", Value: "^[0-9a-f]{24}$"}}
 }
 
+// descriptorProperties defines the BSON types and basic bounds shared by head and history descriptors.
 func descriptorProperties() bson.D {
 	return bson.D{
 		{Key: fieldSnapshotID, Value: versionIDSchema()},
@@ -270,6 +288,7 @@ func descriptorProperties() bson.D {
 	}
 }
 
+// headValidator allows either an empty bootstrap head or active metadata with bounded, non-empty history.
 func headValidator() bson.D {
 	required := bson.A{fieldSnapshotID, fieldSourceHash, fieldDocumentCount, fieldCreatedAt}
 	id := bson.D{{Key: schemaBSONType, Value: schemaString}, {Key: "enum", Value: bson.A{headID}}}
@@ -306,6 +325,7 @@ func headValidator() bson.D {
 	}}}
 }
 
+// setup checks the source, creates compatible output collections and installs indexes without TTL expiry.
 func (m *mongoStore) setup(ctx context.Context) error {
 	if err := m.requireSourceCollection(ctx); err != nil {
 		return err
@@ -342,6 +362,7 @@ func (m *mongoStore) setup(ctx context.Context) error {
 	return databaseError("create snapshot indexes", err)
 }
 
+// requireSourceCollection rejects missing sources, views and capped collections before a source scan.
 func (m *mongoStore) requireSourceCollection(ctx context.Context) error {
 	cursor, err := m.database.ListCollections(ctx, bson.D{{Key: "name", Value: m.source.Name()}},
 		options.ListCollections().SetNameOnly(true).SetAuthorizedCollections(true))
@@ -374,6 +395,7 @@ func (m *mongoStore) requireSourceCollection(ctx context.Context) error {
 	return nil
 }
 
+// ensureCollection creates strict schema validation and rejects incompatible existing collection options.
 func (m *mongoStore) ensureCollection(ctx context.Context, name string, validator bson.D) error {
 	err := m.database.CreateCollection(ctx, name, options.CreateCollection().
 		SetValidator(validator).SetValidationLevel("strict").SetValidationAction("error").
@@ -386,6 +408,7 @@ func (m *mongoStore) ensureCollection(ctx context.Context, name string, validato
 	return databaseError("create snapshot/head collection", err)
 }
 
+// rejectTTLIndexes rejects automatic expiry that could remove snapshots still protected by readers.
 func rejectTTLIndexes(ctx context.Context, collection *mongo.Collection) error {
 	indexes, err := collection.Indexes().ListSpecifications(ctx)
 	if err != nil {

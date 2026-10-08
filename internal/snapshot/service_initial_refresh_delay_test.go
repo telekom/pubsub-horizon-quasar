@@ -17,6 +17,7 @@ import (
 	"github.com/telekom/quasar/internal/config"
 )
 
+// initialRefreshTestConfig sets a two-minute startup delay with a short, independent refresh timeout.
 func initialRefreshTestConfig() config.SubscriptionSnapshots {
 	c := testConfig()
 	c.InitialRefreshDelay = 2 * time.Minute
@@ -25,6 +26,7 @@ func initialRefreshTestConfig() config.SubscriptionSnapshots {
 	return c
 }
 
+// TestInitialRefreshDelayZero checks immediate scanning and the normal or fallback activation path.
 func TestInitialRefreshDelayZero(t *testing.T) {
 	for _, online := range []bool{false, true} {
 		name := "offline"
@@ -59,6 +61,7 @@ func TestInitialRefreshDelayZero(t *testing.T) {
 	}
 }
 
+// TestInitialRefreshDelayNormalPublication checks startup waiting and fresh source data on bootstrap and restart.
 func TestInitialRefreshDelayNormalPublication(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		name := "bootstrap"
@@ -120,6 +123,7 @@ func TestInitialRefreshDelayNormalPublication(t *testing.T) {
 	}
 }
 
+// TestInitialRefreshDelayZooKeeperFailures checks that outages preserve startup waiting and catch up without rescanning.
 func TestInitialRefreshDelayZooKeeperFailures(t *testing.T) {
 	timeout := func(ctx context.Context, _ string) error {
 		<-ctx.Done()
@@ -205,6 +209,7 @@ func TestInitialRefreshDelayZooKeeperFailures(t *testing.T) {
 	}
 }
 
+// TestInitialRefreshDelayShutdown checks that shutdown interrupts startup waiting without scanning or publishing.
 func TestInitialRefreshDelayShutdown(t *testing.T) {
 	for _, online := range []bool{false, true} {
 		name := "offline"
@@ -229,6 +234,7 @@ func TestInitialRefreshDelayShutdown(t *testing.T) {
 	}
 }
 
+// TestInitialRefreshDelayRecoveryBeforeDeadline checks that early recovery still waits for startup and activation delays.
 func TestInitialRefreshDelayRecoveryBeforeDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
@@ -260,6 +266,7 @@ func TestInitialRefreshDelayRecoveryBeforeDeadline(t *testing.T) {
 	})
 }
 
+// TestInitialRefreshDelayLatestFallbackHead checks that recovery publishes the latest confirmed fallback version.
 func TestInitialRefreshDelayLatestFallbackHead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
@@ -293,6 +300,7 @@ func TestInitialRefreshDelayLatestFallbackHead(t *testing.T) {
 	})
 }
 
+// TestInitialRefreshDelayFailedScanAtCoincidentTick checks that coincident timers cause only one failed startup scan.
 func TestInitialRefreshDelayFailedScanAtCoincidentTick(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
@@ -318,6 +326,7 @@ func TestInitialRefreshDelayFailedScanAtCoincidentTick(t *testing.T) {
 	})
 }
 
+// TestInitialRefreshDelayExpiredBeforeFirstRefresh checks that a late first scan consumes the startup deadline once.
 func TestInitialRefreshDelayExpiredBeforeFirstRefresh(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
@@ -344,6 +353,7 @@ func TestInitialRefreshDelayExpiredBeforeFirstRefresh(t *testing.T) {
 	})
 }
 
+// TestInitialRefreshDelayBoundsFailedFallbackRefreshes checks that disconnect wakes do not retry failed source scans.
 func TestInitialRefreshDelayBoundsFailedFallbackRefreshes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()
@@ -377,6 +387,7 @@ func TestInitialRefreshDelayBoundsFailedFallbackRefreshes(t *testing.T) {
 	})
 }
 
+// TestInitialRefreshDelayPreservesUncertainMongoCAS checks that recovery waits for the unresolved startup head update.
 func TestInitialRefreshDelayPreservesUncertainMongoCAS(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store, z := newFakeStore(t), newFakeZooKeeper()

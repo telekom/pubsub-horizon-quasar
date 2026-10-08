@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// encodeDescriptor validates metadata and encodes it as JSON with a UTC creation time.
 func encodeDescriptor(value descriptor) ([]byte, error) {
 	if err := validateDescriptor(value); err != nil {
 		return nil, err
@@ -21,6 +22,7 @@ func encodeDescriptor(value descriptor) ([]byte, error) {
 	return json.Marshal(value)
 }
 
+// decodeJSONDescriptor requires four non-null, correctly typed fields and validates the snapshot metadata.
 func decodeJSONDescriptor(data []byte) (descriptor, error) {
 	fields, err := descriptorFields(data)
 	if err != nil {
@@ -47,6 +49,7 @@ func decodeJSONDescriptor(data []byte) (descriptor, error) {
 	return result, validateDescriptor(result)
 }
 
+// descriptorFields reads one JSON object and rejects unknown or repeated keys and trailing data.
 func descriptorFields(data []byte) (map[string]json.RawMessage, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	token, err := decoder.Token()
@@ -86,6 +89,7 @@ func descriptorFields(data []byte) (map[string]json.RawMessage, error) {
 	return fields, nil
 }
 
+// descriptorTimestamp accepts canonical UTC timestamps with no non-zero fractional seconds.
 func descriptorTimestamp(value string) (time.Time, error) {
 	if !strings.HasSuffix(value, "Z") {
 		return time.Time{}, errors.New("ZooKeeper createdAt must use UTC with a trailing Z")

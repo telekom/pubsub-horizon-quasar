@@ -64,10 +64,12 @@ type sourceBuffer struct {
 	lastID    string
 }
 
+// newSourceBuffer creates an empty source buffer with a running SHA-256 digest.
 func newSourceBuffer() *sourceBuffer {
 	return &sourceBuffer{digest: sha256.New()}
 }
 
+// add validates and copies one sorted subscription, enforcing the payload limit and updating the source hash.
 func (b *sourceBuffer) add(raw bson.Raw, limit int64) error {
 	if err := raw.Validate(); err != nil {
 		return errors.New("source contains invalid BSON")
@@ -88,6 +90,7 @@ func (b *sourceBuffer) add(raw bson.Raw, limit int64) error {
 	}
 	owned := slices.Clone(raw)
 	var length [8]byte
+	// Length prefixes keep document boundaries unambiguous in the combined digest.
 	binary.LittleEndian.PutUint64(length[:], uint64(len(canonical)))
 	_, _ = b.digest.Write(length[:])
 	_, _ = b.digest.Write(canonical)
@@ -129,10 +132,13 @@ func appendCanonicalBSON(dst []byte, raw bson.Raw, sortFields bool) ([]byte, err
 	return dst, nil
 }
 
+// sourceHash returns the lowercase SHA-256 digest of the buffered canonical documents.
 func (b *sourceBuffer) sourceHash() string {
 	return hex.EncodeToString(b.digest.Sum(nil))
 }
 
+// wrapDocument moves the source ID into subscriptionId and preserves the remaining raw BSON as resource.
+// It rejects duplicate IDs and wrappers exceeding MongoDB's document limit.
 func wrapDocument(raw bson.Raw, snapshotID string) (bson.Raw, error) {
 	elements, err := raw.Elements()
 	if err != nil {
@@ -170,6 +176,7 @@ func wrapDocument(raw bson.Raw, snapshotID string) (bson.Raw, error) {
 	return result, nil
 }
 
+// decodeHead validates bootstrap or active metadata, including unique history and a matching first descriptor.
 func decodeHead(raw bson.Raw) (head, error) {
 	var result head
 	if raw.Lookup(fieldID).Type != bson.TypeString || raw.Lookup(fieldID).StringValue() != headID {
@@ -216,6 +223,7 @@ func decodeHead(raw bson.Raw) (head, error) {
 	return result, nil
 }
 
+// decodeDescriptor reads the required BSON field types and validates the resulting snapshot metadata.
 func decodeDescriptor(value bson.RawValue) (descriptor, error) {
 	raw, ok := value.DocumentOK()
 	if !ok || raw.Lookup(fieldSnapshotID).Type != bson.TypeString || raw.Lookup(fieldSourceHash).Type != bson.TypeString ||
@@ -230,6 +238,7 @@ func decodeDescriptor(value bson.RawValue) (descriptor, error) {
 	return result, validateDescriptor(result)
 }
 
+// validateDescriptor checks canonical IDs and hashes, non-negative counts and the ID-derived creation time.
 func validateDescriptor(result descriptor) error {
 	id, err := canonicalID(result.SnapshotID)
 	if err != nil {
@@ -244,6 +253,7 @@ func validateDescriptor(result descriptor) error {
 	return nil
 }
 
+// canonicalID parses an ObjectID only when its input is the canonical lowercase hex form.
 func canonicalID(value string) (primitive.ObjectID, error) {
 	id, err := primitive.ObjectIDFromHex(value)
 	if err != nil || id.Hex() != value {
@@ -252,16 +262,19 @@ func canonicalID(value string) (primitive.ObjectID, error) {
 	return id, nil
 }
 
+// sameDescriptor compares snapshot identity, content metadata and creation time by instant.
 func sameDescriptor(a, b descriptor) bool {
 	return a.SnapshotID == b.SnapshotID && a.SourceHash == b.SourceHash &&
 		a.DocumentCount == b.DocumentCount && a.CreatedAt.Equal(b.CreatedAt)
 }
 
+// sameHead compares active metadata and the full, ordered snapshot history.
 func sameHead(a, b head) bool {
 	return a.ID == b.ID && sameDescriptor(a.Version, b.Version) &&
 		slices.EqualFunc(a.RecentSnapshots, b.RecentSnapshots, sameDescriptor)
 }
 
+// proposeHead puts the next version first and retains a bounded history with a minimum capacity of three.
 func proposeHead(previous head, next descriptor, retained int) head {
 	retained = max(retained, 3)
 	history := make([]descriptor, 0, min(retained, len(previous.RecentSnapshots)+1))

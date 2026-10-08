@@ -51,10 +51,13 @@ type worker struct {
 	publication *zooKeeperPublication
 }
 
+// newWorker creates a worker that forces its first snapshot before allowing cleanup.
 func newWorker(c config.SubscriptionSnapshots, store snapshotStore) *worker {
 	return &worker{config: c, store: store, starting: true}
 }
 
+// createSnapshot buffers the source and inserts a new version when starting, repairing or detecting a change.
+// It keeps the old head active until the new proposal is resolved.
 func (w *worker) createSnapshot(ctx context.Context) error {
 	started := time.Now()
 	if w.proposal != nil {
@@ -121,6 +124,7 @@ func (w *worker) createSnapshot(ctx context.Context) error {
 	return nil
 }
 
+// resolve confirms or applies the pending head update, retaining uncertain proposals for later read-back.
 func (w *worker) resolve(ctx context.Context) error {
 	current, err := w.store.readHead(ctx)
 	if err != nil {
@@ -158,6 +162,7 @@ func (w *worker) resolve(ctx context.Context) error {
 	return w.published(candidate.next)
 }
 
+// confirmProposal accepts a read-back only when both active metadata and history match the proposal.
 func (w *worker) confirmProposal(current head) error {
 	if !sameHead(current, w.proposal.next) {
 		return errors.New("activated candidate has unexpected metadata or history; cleanup blocked")
@@ -165,6 +170,7 @@ func (w *worker) confirmProposal(current head) error {
 	return w.published(current)
 }
 
+// published records a confirmed MongoDB head, notifies ZooKeeper publication and schedules cleanup.
 func (w *worker) published(current head) error {
 	duration := time.Since(w.proposal.started)
 	reason := w.proposal.reason
@@ -183,6 +189,7 @@ func (w *worker) published(current head) error {
 	return nil
 }
 
+// cleanupPending clears the cleanup flag only after pending cleanup completes successfully.
 func (w *worker) cleanupPending(ctx context.Context) error {
 	if !w.cleanupDue {
 		return nil
@@ -194,6 +201,7 @@ func (w *worker) cleanupPending(ctx context.Context) error {
 	return nil
 }
 
+// snapshotComplete checks that a non-bootstrap version has its advertised document count.
 func snapshotComplete(ctx context.Context, store snapshotStore, version descriptor) (bool, error) {
 	if version.SnapshotID == "" {
 		return false, nil
@@ -202,6 +210,7 @@ func snapshotComplete(ctx context.Context, store snapshotStore, version descript
 	return count == version.DocumentCount, err
 }
 
+// containsSnapshot reports whether an ID belongs to the active head or its retained history.
 func containsSnapshot(current head, id string) bool {
 	if current.Version.SnapshotID == id {
 		return true
@@ -214,6 +223,7 @@ func containsSnapshot(current head, id string) bool {
 	return false
 }
 
+// deleteUnpublished removes rows left by a failed insert only if publication references do not protect them.
 func (w *worker) deleteUnpublished(ctx context.Context, current head) error {
 	if containsSnapshot(current, w.abandoned) {
 		return errors.New("unpublished candidate unexpectedly appears in head history; cleanup blocked")
@@ -225,6 +235,7 @@ func (w *worker) deleteUnpublished(ctx context.Context, current head) error {
 	return nil
 }
 
+// cleanup deletes unprotected versions after checking that the retained snapshots and references are safe.
 func (w *worker) cleanup(ctx context.Context) error {
 	started := time.Now()
 	if w.starting || w.proposal != nil {
@@ -242,6 +253,7 @@ func (w *worker) cleanup(ctx context.Context) error {
 		return err
 	}
 	for _, version := range current.RecentSnapshots {
+		// Losing a retained version would leave readers without the promised fallback history.
 		complete, err := snapshotComplete(ctx, w.store, version)
 		if err != nil {
 			return err
@@ -272,6 +284,7 @@ func (w *worker) cleanup(ctx context.Context) error {
 	return nil
 }
 
+// deleteVersion deletes one version in batches, rechecking MongoDB and ZooKeeper protection before each batch.
 func (w *worker) deleteVersion(ctx context.Context, expected head, id string) (int64, error) {
 	protected, err := w.protectedZooKeeper(ctx)
 	if err != nil {
@@ -293,6 +306,7 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) (i
 		if err != nil {
 			return deletedDocuments, err
 		}
+		// Any reference change invalidates the safety decision made before deletion started.
 		if !sameState(protected, latestProtection) || w.publication.protects(latestProtection, id) {
 			return deletedDocuments, errors.Join(errCleanupDeferred, errors.New("ZooKeeper references changed during deletion"))
 		}
@@ -308,6 +322,7 @@ func (w *worker) deleteVersion(ctx context.Context, expected head, id string) (i
 	}
 }
 
+// proposedSnapshot returns the pending MongoDB version, or an empty descriptor when no proposal is open.
 func (w *worker) proposedSnapshot() descriptor {
 	if w.proposal == nil {
 		return descriptor{}
@@ -315,10 +330,12 @@ func (w *worker) proposedSnapshot() descriptor {
 	return w.proposal.next.Version
 }
 
+// progressZooKeeper advances publication using the current proposal and the worker's startup state.
 func (w *worker) progressZooKeeper(ctx context.Context) error {
 	return w.publication.progress(ctx, w.store, w.proposedSnapshot(), w.starting)
 }
 
+// protectedZooKeeper reads safe cleanup references within a bounded timeout, or skips absent publication.
 func (w *worker) protectedZooKeeper(ctx context.Context) (zState, error) {
 	if w.publication == nil {
 		return zState{}, nil

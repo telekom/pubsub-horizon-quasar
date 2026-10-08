@@ -17,6 +17,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// validSubscriptionSnapshots returns enabled settings that pass all snapshot configuration checks.
 func validSubscriptionSnapshots() SubscriptionSnapshots {
 	return SubscriptionSnapshots{
 		Enabled: true, URI: "mongodb://localhost:27017", Database: "integration-horizon-config",
@@ -32,6 +33,7 @@ func validSubscriptionSnapshots() SubscriptionSnapshots {
 	}
 }
 
+// TestSubscriptionSnapshotsValidation checks required settings and rejects weaker MongoDB consistency options.
 func TestSubscriptionSnapshotsValidation(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -135,6 +137,7 @@ func TestSubscriptionSnapshotsValidation(t *testing.T) {
 	}
 }
 
+// TestSubscriptionSnapshotsEnvironmentOnly checks nested environment overrides without changing other store settings.
 func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
@@ -175,6 +178,7 @@ func TestSubscriptionSnapshotsEnvironmentOnly(t *testing.T) {
 	require.Equal(t, "mongodb://localhost:27017", c.Fallback.Mongo.Uri)
 }
 
+// TestSubscriptionSnapshotsDisabledDefaults verifies disabled defaults need no MongoDB or ZooKeeper connection settings.
 func TestSubscriptionSnapshotsDisabledDefaults(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
@@ -195,6 +199,7 @@ func TestSubscriptionSnapshotsDisabledDefaults(t *testing.T) {
 	require.NoError(t, c.SubscriptionSnapshots.Validate())
 }
 
+// TestSubscriptionSnapshotsDurationDefaultsInSeconds checks that generated configuration keeps durations in seconds.
 func TestSubscriptionSnapshotsDurationDefaultsInSeconds(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
@@ -223,6 +228,7 @@ func TestSubscriptionSnapshotsDurationDefaultsInSeconds(t *testing.T) {
 	}
 }
 
+// TestSubscriptionSnapshotsInitialRefreshDelayEnvironment checks zero and duration syntax in startup-delay overrides.
 func TestSubscriptionSnapshotsInitialRefreshDelayEnvironment(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -248,6 +254,7 @@ func TestSubscriptionSnapshotsInitialRefreshDelayEnvironment(t *testing.T) {
 	}
 }
 
+// TestSubscriptionSnapshotsZooKeeperValidation checks server addresses, safe paths and positive publication timings.
 func TestSubscriptionSnapshotsZooKeeperValidation(t *testing.T) {
 	tests := []struct {
 		name   string

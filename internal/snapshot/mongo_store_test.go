@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
+// configureTestFailpoint enables a MongoDB fault and returns its entry count and a cleanup-safe release function.
 func configureTestFailpoint(t *testing.T, client *mongo.Client, name string, mode any, data bson.D) (int64, func()) {
 	t.Helper()
 	var result struct {
@@ -53,6 +54,7 @@ func configureTestFailpoint(t *testing.T, client *mongo.Client, name string, mod
 	return result.Count, disable
 }
 
+// waitForTestFailpoint waits until MongoDB enters the configured fault at least once after the saved count.
 func waitForTestFailpoint(t *testing.T, client *mongo.Client, name string, previousCount int64) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -64,6 +66,7 @@ func waitForTestFailpoint(t *testing.T, client *mongo.Client, name string, previ
 	}).Err())
 }
 
+// pauseSecondaryReplication stops apply on both secondaries and returns a function that resumes replication.
 func pauseSecondaryReplication(t *testing.T, client *mongo.Client) func() {
 	t.Helper()
 	var hello struct {
@@ -96,6 +99,7 @@ func pauseSecondaryReplication(t *testing.T, client *mongo.Client) func() {
 	}
 }
 
+// testMongoDelayedVisibility checks that locally inserted rows cannot advance the head before majority acknowledgement.
 func testMongoDelayedVisibility(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
@@ -123,6 +127,7 @@ func testMongoDelayedVisibility(t *testing.T, uri string) {
 			t.Error("blocked publication did not stop")
 		}
 	})
+	// Local reads expose the blocked write, while majority reads must still see the old publication.
 	local, err := store.snapshots.Clone(options.Collection().SetReadConcern(readconcern.Local()))
 	require.NoError(t, err)
 	var candidate struct {
@@ -167,6 +172,7 @@ func testMongoDelayedVisibility(t *testing.T, uri string) {
 	}))
 }
 
+// testMongoInflightShutdown checks cancellation of a blocked database operation and isolation from unrelated clients.
 func testMongoInflightShutdown(t *testing.T, uri string) {
 	existingClient, store, w := mongoFixture(t, uri)
 	ctx := t.Context()
@@ -204,6 +210,7 @@ func testMongoInflightShutdown(t *testing.T, uri string) {
 	require.True(t, sameHead(before, after))
 }
 
+// TestMongoStoreConcerns checks dedicated collection settings for primary reads and journaled majority writes.
 func TestMongoStoreConcerns(t *testing.T) {
 	c := testConfig()
 	store := newMongoStore(&mongo.Client{}, c)
@@ -218,6 +225,7 @@ func TestMongoStoreConcerns(t *testing.T) {
 	require.Equal(t, c.HeadCollection, store.heads.Name())
 }
 
+// TestMongoIntegration runs snapshot storage, recovery and failover checks against an isolated three-member replica set.
 func TestMongoIntegration(t *testing.T) {
 	uri := test.SetupMongoReplicaSet(t)
 	t.Run("independent client and shutdown", func(t *testing.T) { testMongoServiceLifecycle(t, uri) })
@@ -240,6 +248,7 @@ func TestMongoIntegration(t *testing.T) {
 	})
 }
 
+// testMongoResultInitializationDuration checks that schema setup time is excluded from snapshot result durations.
 func testMongoResultInitializationDuration(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	_, disable := configureTestFailpoint(t, client, "failCommand", bson.D{{Key: "times", Value: 1}}, bson.D{
@@ -302,6 +311,7 @@ func testMongoResultInitializationDuration(t *testing.T, uri string) {
 	require.LessOrEqual(t, unchangedDuration, float64(elapsed)/float64(time.Millisecond))
 }
 
+// testMongoSession checks that refresh and cleanup reuse the same causally consistent MongoDB session.
 func testMongoSession(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	s := &service{client: client, store: store}
@@ -323,6 +333,7 @@ func testMongoSession(t *testing.T, uri string) {
 	}))
 }
 
+// testMongoServiceLifecycle checks authenticated startup, isolated shutdown and fatal authentication failure logging.
 func testMongoServiceLifecycle(t *testing.T, uri string) {
 	const password = "test-p@ss:/?#%"
 	existingClient, store, w := mongoFixture(t, uri)
@@ -367,6 +378,7 @@ func testMongoServiceLifecycle(t *testing.T, uri string) {
 	})
 }
 
+// testMongoSetupRetry checks that restoring a missing source lets setup retry reuse the existing connection.
 func testMongoSetupRetry(t *testing.T, uri string) {
 	_, store, w := mongoFixture(t, uri)
 	require.NoError(t, store.source.Drop(t.Context()))
@@ -388,6 +400,7 @@ func testMongoSetupRetry(t *testing.T, uri string) {
 	require.NoError(t, s.withSession(ctx, s.worker.refresh))
 }
 
+// testMongoPublication checks publication, indexes, schema enforcement, empty sources and restart history.
 func testMongoPublication(t *testing.T, uri string) {
 	_, store, w := mongoFixture(t, uri)
 	ctx := t.Context()
@@ -439,6 +452,7 @@ func testMongoPublication(t *testing.T, uri string) {
 	require.NoError(t, store.setup(ctx), "schema/index setup must be idempotent")
 }
 
+// testMongoMissingMetadata checks that missing source or head data cannot silently reset publication history.
 func testMongoMissingMetadata(t *testing.T, uri string) {
 	_, store, w := mongoFixture(t, uri)
 	ctx := t.Context()
@@ -458,6 +472,7 @@ func testMongoMissingMetadata(t *testing.T, uri string) {
 	require.Error(t, w.cleanup(ctx))
 }
 
+// testMongoRepair checks snapshot repair while damaged retained history continues to block cleanup.
 func testMongoRepair(t *testing.T, uri string) {
 	_, store, w := mongoFixture(t, uri)
 	ctx := t.Context()
@@ -481,6 +496,7 @@ func testMongoRepair(t *testing.T, uri string) {
 	require.Error(t, w.cleanup(ctx))
 }
 
+// testMongoExistingValidators checks that setup rejects incompatible collection options without changing them.
 func testMongoExistingValidators(t *testing.T, uri string) {
 	tests := []struct {
 		name   string
@@ -523,6 +539,7 @@ func testMongoExistingValidators(t *testing.T, uri string) {
 	}
 }
 
+// testMongoSourceCollections checks that views, time-series and capped sources fail without advancing the head.
 func testMongoSourceCollections(t *testing.T, uri string) {
 	tests := []struct {
 		name   string
@@ -558,6 +575,7 @@ func testMongoSourceCollections(t *testing.T, uri string) {
 	}
 }
 
+// testMongoReaderRetirement checks that a reader discards a retired partial snapshot and retries from the latest head.
 func testMongoReaderRetirement(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	require.NoError(t, w.refresh(t.Context()))
@@ -578,6 +596,7 @@ func testMongoReaderRetirement(t *testing.T, uri string) {
 				if attempts != 1 {
 					return
 				}
+				// Retire the pinned version while its cursor is open to force a safe reader retry.
 				for range 3 {
 					require.NoError(t, newWorker(w.config, store).refresh(t.Context()))
 				}
@@ -599,6 +618,7 @@ func testMongoReaderRetirement(t *testing.T, uri string) {
 	require.Equal(t, 2, attempts, "retired partial results must be discarded")
 }
 
+// readCompleteSnapshot verifies loaded rows and current retention before accepting a reader's snapshot.
 func readCompleteSnapshot(ctx context.Context, store *mongoStore, current head, afterFirst func()) (bool, error) {
 	documents, err := loadSnapshot(ctx, store, current.Version.SnapshotID, afterFirst)
 	if err != nil {
@@ -616,6 +636,7 @@ func readCompleteSnapshot(ctx context.Context, store *mongoStore, current head, 
 		containsSnapshot(latest, current.Version.SnapshotID), nil
 }
 
+// loadSnapshot copies version rows in single-row batches and runs a hook after the first row.
 func loadSnapshot(ctx context.Context, store *mongoStore, id string, afterFirst func()) ([]bson.Raw, error) {
 	cursor, err := store.snapshots.Find(ctx, bson.D{{Key: "snapshotId", Value: id}}, options.Find().SetBatchSize(1))
 	if err != nil {
@@ -632,6 +653,7 @@ func loadSnapshot(ctx context.Context, store *mongoStore, id string, afterFirst 
 	return documents, cursor.Err()
 }
 
+// setFailCommand configures a one-shot MongoDB command fault with the supplied failure details.
 func setFailCommand(t *testing.T, client *mongo.Client, data bson.D) {
 	t.Helper()
 	require.NoError(t, client.Database("admin").RunCommand(t.Context(), bson.D{
@@ -641,6 +663,7 @@ func setFailCommand(t *testing.T, client *mongo.Client, data bson.D) {
 	}).Err())
 }
 
+// testMongoUncertainWrites checks failed inserts and recovery of a head update whose acknowledgement was lost.
 func testMongoUncertainWrites(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	ctx := t.Context()
@@ -676,6 +699,7 @@ func testMongoUncertainWrites(t *testing.T, uri string) {
 	require.Len(t, confirmed.RecentSnapshots, 2)
 }
 
+// testMongoFailover checks that publication resumes on a new primary without losing the previous head history.
 func testMongoFailover(t *testing.T, uri string) {
 	client, store, w := mongoFixture(t, uri)
 	ctx := t.Context()

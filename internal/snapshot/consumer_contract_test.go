@@ -19,12 +19,14 @@ type simulatedConsumer struct {
 	fallback bool
 }
 
+// poll models a consumer that loads complete snapshots and returns from fallback only to trusted activated metadata.
 func (c *simulatedConsumer) poll(t *testing.T, store *fakeStore, z *fakeZooKeeper) {
 	t.Helper()
 	current := store.current.Version
 	activated := z.nodes[activatedNode]
 	target := current
 	c.fallback = true
+	// An older ZooKeeper head may keep an applied version, but must never replace newer fallback data.
 	if z.online && activated.exists && (sameDescriptor(activated.value, c.applied) ||
 		sameDescriptor(activated.value, current)) {
 
@@ -39,6 +41,7 @@ func (c *simulatedConsumer) poll(t *testing.T, store *fakeStore, z *fakeZooKeepe
 	}
 }
 
+// TestConsumerFallbackAndSafeReturn checks that recovery never rolls a consumer back to a lagging ZooKeeper version.
 func TestConsumerFallbackAndSafeReturn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s, store, z := publicationService(t, 20*time.Second)
@@ -83,6 +86,7 @@ func TestConsumerFallbackAndSafeReturn(t *testing.T) {
 	})
 }
 
+// TestConsumerRejectsIncompleteSnapshotAndChangedMetadata checks complete loads and full-descriptor matching on recovery.
 func TestConsumerRejectsIncompleteSnapshotAndChangedMetadata(t *testing.T) {
 	store := newFakeStore(t)
 	a := testDescriptor(time.Now(), 1)
