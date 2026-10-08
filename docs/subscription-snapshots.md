@@ -28,6 +28,18 @@ activated -> switch to the new cache once loading is complete
 - The MongoDB **head** identifies the currently published snapshot.
 - Ordered publication across both systems, not a cross-system transaction.
 
+## Automatic setup
+
+When snapshots are enabled:
+
+- The source collection must already exist; the snapshot worker only reads it.
+- Quasar creates the snapshot/head collections with strict schema validators
+  and installs the required snapshot indexes.
+- Compatible existing collections are reused. Incompatible collection options
+  are rejected and require manual migration.
+- Missing ZooKeeper parent paths and persistent `prepared`/`activated` nodes
+  are created during publication. Existing parent data and node ACLs are preserved.
+
 ## File/function overview
 
 Each box is a production file, not a Go type. Functions omit receivers;
