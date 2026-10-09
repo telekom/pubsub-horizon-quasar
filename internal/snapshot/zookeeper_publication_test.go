@@ -739,8 +739,8 @@ func TestPublicationStructuredPhaseLogs(t *testing.T) {
 		}
 		require.Equal(t, float64(0), messages[ordered[0]][0]["durationMs"])
 		require.Equal(t, float64(0), messages[ordered[1]][0]["durationMs"])
-		require.Equal(t, float64(60000), messages[ordered[2]][0]["durationMs"])
-		require.Equal(t, float64(60000), messages[ordered[3]][0]["durationMs"])
+		require.Equal(t, float64(0), messages[ordered[2]][0]["durationMs"])
+		require.Equal(t, float64(0), messages[ordered[3]][0]["durationMs"])
 		failure := messages["Subscription snapshot ZooKeeper operation failed"][0]
 		require.Equal(t, activatedNode, failure["phase"])
 		require.Equal(t, "access", failure["errorCategory"])

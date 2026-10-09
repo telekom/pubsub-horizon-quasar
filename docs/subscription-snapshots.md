@@ -363,13 +363,13 @@ Messages below have the prefix `Subscription snapshot`. Durations are numeric mi
 | --- | --- | --- |
 | `created` | INFO | Complete insert, not publication. Snapshot creation step, including checks and orphan work. |
 | `source unchanged` | DEBUG | Reused complete snapshot. Same step without insert; `lastSuccess` stays unchanged. |
-| `published` | INFO | MongoDB head confirmed; updates `lastSuccess`. Since snapshot creation began, including retries/waits. |
-| `ZooKeeper prepared` | INFO | Prepare confirmed. Since this fixed ZooKeeper candidate began. |
-| `ZooKeeper activated` | INFO | Activation confirmed. Same candidate start, including waits/recovery. |
+| `published` | INFO | MongoDB head confirmed; updates `lastSuccess`. Duration of this publication attempt. |
+| `ZooKeeper prepared` | INFO | `prepared` node confirmed. Duration of this publication attempt. |
+| `ZooKeeper activated` | INFO | `activated` node confirmed. Duration of this publication attempt. |
 | `cleanup completed` | DEBUG | Successful regular attempt. Cleanup duration; `deletedDocuments` counts its acknowledged deletions, including `0`, excluding separate orphan deletion. |
 
 - Creation timing excludes initialization, startup waiting, publication and regular cleanup.
-  Publication durations overlap; do not sum them.
+- Publication durations cover only the current attempt, without `activationDelay` or waiting between retries.
 - Queued refreshes emit no result; publication retries do not repeat `created`.
   Failures emit errors, deferred cleanup a warning, never a success total.
 - SDK records are forwarded immediately with `source="zookeeper-sdk"`, original

@@ -36,7 +36,6 @@ const (
 type proposal struct {
 	previous head
 	next     head
-	started  time.Time
 	reason   publicationReason
 }
 
@@ -114,7 +113,7 @@ func (w *worker) createSnapshot(ctx context.Context) error {
 	}
 	w.proposal = &proposal{
 		previous: previous, next: proposeHead(previous, next, w.config.MinimumRetainedSnapshots),
-		started: started, reason: reason,
+		reason: reason,
 	}
 	log.Info().Str("snapshotId", next.SnapshotID).Int64("documentCount", next.DocumentCount).
 		Str("snapshotReason", string(reason)).
@@ -126,13 +125,14 @@ func (w *worker) createSnapshot(ctx context.Context) error {
 
 // resolve confirms or applies the pending head update, retaining uncertain proposals for later read-back.
 func (w *worker) resolve(ctx context.Context) error {
+	started := time.Now()
 	current, err := w.store.readHead(ctx)
 	if err != nil {
 		return err
 	}
 	candidate := w.proposal
 	if current.Version.SnapshotID == candidate.next.Version.SnapshotID {
-		return w.confirmProposal(current)
+		return w.confirmProposal(current, started)
 	}
 	if !sameHead(current, candidate.previous) {
 		if !w.starting || current.Version.SnapshotID == "" || current.Version.SnapshotID == candidate.previous.Version.SnapshotID ||
@@ -155,24 +155,23 @@ func (w *worker) resolve(ctx context.Context) error {
 			return err
 		}
 		if current.Version.SnapshotID == candidate.next.Version.SnapshotID {
-			return w.confirmProposal(current)
+			return w.confirmProposal(current, started)
 		}
 		return errors.New("head CAS did not match; retaining the proposal for read-back and recovery")
 	}
-	return w.published(candidate.next)
+	return w.published(candidate.next, time.Since(started))
 }
 
 // confirmProposal accepts a read-back only when both active metadata and history match the proposal.
-func (w *worker) confirmProposal(current head) error {
+func (w *worker) confirmProposal(current head, started time.Time) error {
 	if !sameHead(current, w.proposal.next) {
 		return errors.New("activated candidate has unexpected metadata or history; cleanup blocked")
 	}
-	return w.published(current)
+	return w.published(current, time.Since(started))
 }
 
 // published records a confirmed MongoDB head, notifies ZooKeeper publication and schedules cleanup.
-func (w *worker) published(current head) error {
-	duration := time.Since(w.proposal.started)
+func (w *worker) published(current head, duration time.Duration) error {
 	reason := w.proposal.reason
 	w.proposal = nil
 	w.starting = false

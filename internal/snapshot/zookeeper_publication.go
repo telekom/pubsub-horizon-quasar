@@ -37,7 +37,6 @@ type zOperation struct {
 
 type zCandidate struct {
 	value          descriptor
-	started        time.Time
 	preparedAt     time.Time
 	mongoConfirmed bool
 	operation      *zOperation
@@ -239,7 +238,7 @@ func (p *zooKeeperPublication) selectCandidate(ctx context.Context, store snapsh
 	if !complete {
 		return integrityError("ZooKeeper publication target is incomplete")
 	}
-	p.candidate = &zCandidate{value: value, started: time.Now(), mongoConfirmed: confirmed}
+	p.candidate = &zCandidate{value: value, mongoConfirmed: confirmed}
 	if p.degraded {
 		log.Info().Str("snapshotId", value.SnapshotID).Str("mongoSnapshotId", p.latestConfirmedHead.SnapshotID).
 			Msg("Subscription snapshot ZooKeeper catch-up started")
@@ -249,6 +248,7 @@ func (p *zooKeeperPublication) selectCandidate(ctx context.Context, store snapsh
 
 // readState validates both references in one session, checks snapshot counts and resolves known write results.
 func (p *zooKeeperPublication) readState(ctx context.Context, store snapshotStore) error {
+	started := time.Now()
 	prepared, err := p.transport.read(ctx, preparedNode)
 	if err != nil {
 		return err
@@ -279,7 +279,7 @@ func (p *zooKeeperPublication) readState(ctx context.Context, store snapshotStor
 			}
 		}
 	}
-	p.confirmReadBack()
+	p.confirmReadBack(time.Since(started))
 	return nil
 }
 
@@ -330,7 +330,7 @@ func matchesWrite(current, expected zNode, value descriptor) bool {
 }
 
 // confirmReadBack completes a pending write only when observed metadata proves its expected transition.
-func (p *zooKeeperPublication) confirmReadBack() {
+func (p *zooKeeperPublication) confirmReadBack(duration time.Duration) {
 	if p.candidate == nil || p.candidate.operation == nil {
 		return
 	}
@@ -340,19 +340,20 @@ func (p *zooKeeperPublication) confirmReadBack() {
 		current = p.observed.activated
 	}
 	if matchesWrite(current, operation.expected, p.candidate.value) {
-		p.confirmNode(operation.name)
+		p.confirmNode(operation.name, duration)
 	}
 }
 
 // writeNode tracks the expected node transition and preserves candidates whose write outcome is uncertain.
 func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error {
+	started := time.Now()
 	candidate := p.candidate
 	current := p.observed.prepared
 	if name == activatedNode {
 		current = p.observed.activated
 	}
 	if current.exists && sameDescriptor(current.value, candidate.value) && candidate.operation == nil {
-		p.confirmNode(name)
+		p.confirmNode(name, time.Since(started))
 		return nil
 	}
 	if candidate.operation == nil {
@@ -381,25 +382,25 @@ func (p *zooKeeperPublication) writeNode(ctx context.Context, name string) error
 	} else {
 		p.observed.activated = next
 	}
-	p.confirmNode(name)
+	p.confirmNode(name, time.Since(started))
 	return nil
 }
 
 // confirmNode starts the delay after confirmed preparation or releases the candidate after activation.
-func (p *zooKeeperPublication) confirmNode(name string) {
+func (p *zooKeeperPublication) confirmNode(name string, duration time.Duration) {
 	candidate := p.candidate
 	candidate.operation = nil
 	if name == preparedNode {
 		if candidate.preparedAt.IsZero() {
 			candidate.preparedAt = time.Now()
 			log.Info().Str("snapshotId", candidate.value.SnapshotID).
-				Dur("durationMs", time.Since(candidate.started)).
+				Dur("durationMs", duration).
 				Msg("Subscription snapshot ZooKeeper prepared")
 		}
 		return
 	}
 	log.Info().Str("snapshotId", candidate.value.SnapshotID).Int64("documentCount", candidate.value.DocumentCount).
-		Dur("durationMs", time.Since(candidate.started)).
+		Dur("durationMs", duration).
 		Msg("Subscription snapshot ZooKeeper activated")
 	p.candidate = nil
 	p.firstActivated = true

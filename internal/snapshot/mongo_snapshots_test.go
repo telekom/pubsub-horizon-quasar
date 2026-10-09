@@ -293,7 +293,7 @@ func TestSnapshotUnchangedResultLogging(t *testing.T) {
 	}
 }
 
-// TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork checks creation timing and the retained publication start time.
+// TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork checks creation timing separately from each publication attempt.
 func TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork(t *testing.T) {
 	for _, orphanPending := range []bool{false, true} {
 		t.Run(strconv.FormatBool(orphanPending), func(t *testing.T) {
@@ -347,11 +347,15 @@ func TestSnapshotCreationLoggingMeasuresInsertAndOrphanWork(t *testing.T) {
 				require.Equal(t, "source_changed", entries[0]["snapshotReason"])
 				require.Equal(t, duration, entries[0]["durationMs"])
 				output.Reset()
+				store.activation = func(previous string, next head) (bool, error) {
+					time.Sleep(3 * time.Second)
+					return store.apply(previous, next), nil
+				}
 				time.Sleep(time.Minute)
 				require.NoError(t, w.resolve(t.Context()))
 				entries = serviceLogMessages(t, output.Bytes())
 				require.Equal(t, []string{"Subscription snapshot published"}, messageNames(entries))
-				require.Equal(t, duration+60000, entries[0]["durationMs"], "publication retains the original proposal start")
+				require.Equal(t, float64(3000), entries[0]["durationMs"], "exclude creation, orphan cleanup and waiting before publication")
 			})
 		})
 	}

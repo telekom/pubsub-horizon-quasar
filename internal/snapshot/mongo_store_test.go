@@ -294,9 +294,8 @@ func testMongoResultInitializationDuration(t *testing.T, uri string) {
 	publicationDuration, publicationOK := publicationEntry["durationMs"].(float64)
 	require.True(t, createdOK)
 	require.True(t, publicationOK)
-	require.GreaterOrEqual(t, float64(elapsed)/float64(time.Millisecond), publicationDuration+1000,
+	require.GreaterOrEqual(t, float64(elapsed)/float64(time.Millisecond), createdDuration+publicationDuration+1000,
 		"schema initialization is outside the snapshot and publication durations")
-	require.GreaterOrEqual(t, publicationDuration, createdDuration)
 	require.Equal(t, "info", createdEntry["level"])
 
 	output.Reset()
