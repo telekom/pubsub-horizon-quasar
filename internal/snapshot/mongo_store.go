@@ -59,7 +59,8 @@ func (m *mongoStore) readHead(ctx context.Context) (head, error) {
 // bootstrap creates and reads back an empty head only for a previously unseen, empty snapshot store.
 func (m *mongoStore) bootstrap(ctx context.Context) (head, error) {
 	if m.seenHead {
-		return head{}, errors.New("previously observed head is missing; restore publication metadata")
+		return head{}, errors.New("previously observed MongoDB head document is missing; " +
+			"restore the original head document in the configured head collection")
 	}
 	for _, collection := range []*mongo.Collection{m.snapshots, m.heads} {
 		count, err := collection.CountDocuments(ctx, bson.D{}, options.Count().SetLimit(1))
@@ -67,7 +68,8 @@ func (m *mongoStore) bootstrap(ctx context.Context) (head, error) {
 			return head{}, databaseError("check bootstrap state", err)
 		}
 		if count != 0 {
-			return head{}, errors.New("head missing alongside existing snapshot/head data; restore publication metadata")
+			return head{}, errors.New("MongoDB head document is missing alongside existing snapshot/head data; " +
+				"restore the original head document in the configured head collection")
 		}
 	}
 	_, err := m.heads.InsertOne(ctx, bson.D{

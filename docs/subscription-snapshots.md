@@ -6,6 +6,32 @@ SPDX-License-Identifier: Apache-2.0
 
 # Subscription snapshots
 
+## Architecture overview
+
+```mermaid
+flowchart LR
+    Q["Quasar snapshot worker"]
+    M[("MongoDB<br/>source, snapshots, head")]
+    Z[("ZooKeeper<br/>prepared / activated")]
+    subgraph Consumer["External consumer (not part of Quasar)"]
+        C["Snapshot loader"]
+        Cache["Local subscription cache"]
+    end
+    Q -->|"1. Read source; write complete snapshot"| M
+    Q -->|"2. Publish prepared metadata"| Z
+    Q -->|"3. After activationDelay: publish head via CAS"| M
+    Q -->|"4. Publish activated metadata"| Z
+    Z -->|"Watch notifications"| C
+    C -->|"Read metadata"| Z
+    C -->|"Load snapshot / read fallback head"| M
+    C -->|"On prepared: preload; on activated: switch once loaded"| Cache
+```
+
+Steps 1-4 show normal Quasar publication order. Consumer loading runs independently;
+Quasar does not wait for it. Watch notifications are not a reliable event queue.
+During ZooKeeper outages, MongoDB publication skips the activation delay;
+ZooKeeper catches up after recovery.
+
 Normal flow, shown separately for Quasar and the consumer:
 
 ```text
@@ -190,7 +216,7 @@ Refresh / deadline / eligible connection event -> advance publication
 ## ZooKeeper outage and recovery
 
 ```text
-Outage:     MongoDB A -> B -> ... -> F; ZooKeeper remains at A
+Outage:     MongoDB A -> B -> ... -> F (without activationDelay); ZooKeeper remains at A
 Recovery:   prepare F -> full activationDelay -> activate F; MongoDB stays at F
 New G:      finish fixed F -> prepare latest G -> full delay -> activate G
 ```
@@ -262,6 +288,9 @@ ZooKeeper unavailable / no activated -> read confirmed MongoDB head
   -> pin snapshot ID -> load and validate full snapshot -> switch cache
 ```
 
+- During ZooKeeper outages, Quasar publishes MongoDB heads without `activationDelay`
+  after the startup delay. Consumers load from the confirmed head without waiting
+  for ZooKeeper `activated`.
 - Read current nodes at startup/reconnect, renew watches and handle duplicates safely.
   Watches are not a queue; a missed prepare must not prevent loading an activated snapshot.
 - Serialize or coalesce cache loads. Discard partial results; if cleanup intervenes,
@@ -280,9 +309,13 @@ Pending cleanup -> validate retained snapshots and publication references
   -> delete batches -> clear cleanupDue only after success
 ```
 
-- Protect MongoDB head/history, both ZooKeeper nodes and the latest catch-up target.
-  Open MongoDB proposals or ZooKeeper candidates, and no activation yet confirmed
-  by this process, defer deletion.
+- Keep the snapshot referenced by the MongoDB head and all versions in its history.
+  Also keep snapshots that ZooKeeper still references or needs to publish.
+- While ZooKeeper references cannot be verified, all snapshots are retained:
+  cleanup is deferred even as MongoDB advances without `activationDelay`.
+- Do not delete snapshots while publication is pending in either system.
+- After startup, wait until this process has confirmed both a MongoDB head
+  update and a ZooKeeper activation.
 - Changed, unknown, unreadable or incomplete protected state stops deletion.
   The same checks apply to orphans left by failed inserts.
 - One regular attempt per eligible event cycle, after publication work.
