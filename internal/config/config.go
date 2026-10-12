@@ -27,7 +27,8 @@ type Configuration struct {
 		Type  string `mapstructure:"type"`
 		Mongo Mongo  `mapstructure:"mongo"`
 	} `mapstructure:"fallback"`
-	Metrics Metrics `mapstructure:"metrics"`
+	Metrics               Metrics               `mapstructure:"metrics"`
+	SubscriptionSnapshots SubscriptionSnapshots `mapstructure:"subscriptionSnapshots"`
 }
 
 // GetResourceConfiguration returns a resource configuration for the given object if applicable.
