@@ -101,4 +101,5 @@ func (c *Client) readStream() {
 func (c *Client) Close() {
 	c.clientCancel()
 	c.streamWg.Wait()
+	close(c.streamChan)
 }
