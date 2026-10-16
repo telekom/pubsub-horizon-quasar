@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package mongo
 
 import (
@@ -5,6 +9,7 @@ import (
 	"sync"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -96,6 +101,64 @@ func (c *Client) readStream() {
 
 		}
 	}
+}
+
+func (c *Client) CreateSnapshot() (string, int64, error) {
+	ctx, cancel := context.WithCancel(c.clientCtx)
+	defer cancel()
+
+	snapshotId := primitive.NewObjectID()
+
+	cursor, err := c.sourceCollection.Aggregate(ctx, aggregateSnapshot)
+	if err != nil {
+		return "", 0, err
+	}
+
+	bulk, err := c.readCursor(cursor, snapshotId)
+	if err != nil {
+		return "", 0, err
+	}
+
+	result, err := c.writeBulk(ctx, bulk)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return snapshotId.Hex(), result.InsertedCount, nil
+}
+
+func (c *Client) readCursor(cursor *mongo.Cursor, snapshotId primitive.ObjectID) ([]mongo.WriteModel, error) {
+	bulk := make([]mongo.WriteModel, 0)
+	for cursor.Next(c.clientCtx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			return bulk, err
+		}
+
+		doc["_id"] = primitive.NewObjectID()
+		doc["snapshotId"] = snapshotId
+
+		bulk = append(bulk, &mongo.InsertOneModel{Document: doc})
+	}
+
+	return bulk, nil
+}
+
+func (c *Client) writeBulk(ctx context.Context, bulk []mongo.WriteModel) (*mongo.BulkWriteResult, error) {
+	session, err := c.mongoClient.StartSession()
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := session.WithTransaction(ctx, func(sessionCtx mongo.SessionContext) (any, error) {
+		return c.targetCollection.BulkWrite(sessionCtx, bulk)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.(*mongo.BulkWriteResult), nil
 }
 
 func (c *Client) Close() {
