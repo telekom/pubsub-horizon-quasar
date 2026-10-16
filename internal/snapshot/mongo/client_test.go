@@ -16,6 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/telekom/quasar/internal/test"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 const streamTimeout = 10 * time.Second
@@ -145,6 +148,59 @@ func TestClient_ReplicaSet(t *testing.T) {
 			// Close returned promptly, confirming readStream exited and streamWg.Wait() was released.
 		case <-time.After(streamTimeout):
 			t.Fatal("Close did not return in time, readStream goroutine may have leaked")
+		}
+	})
+
+	t.Run("CreateSnapshot", func(t *testing.T) {
+		snapshotClient, err := NewClient(uri, "quasar_snapshot_test", "snapshot_source", "snapshot_target")
+		require.NoError(t, err)
+
+		sourceDocs := []any{
+			bson.M{
+				"_id":        "sub-1",
+				"kind":       "Subscription",
+				"apiVersion": "v1",
+				"metadata":   bson.M{"name": "sub-1"},
+				"spec":       bson.M{"foo": "bar"},
+			},
+			bson.M{
+				"_id":        "sub-2",
+				"kind":       "Subscription",
+				"apiVersion": "v1",
+				"metadata":   bson.M{"name": "sub-2"},
+				"spec":       bson.M{"foo": "baz"},
+			},
+		}
+		_, err = snapshotClient.sourceCollection.InsertMany(context.Background(), sourceDocs)
+		require.NoError(t, err)
+
+		snapshotId, insertedCount, err := snapshotClient.CreateSnapshot()
+		require.NoError(t, err)
+		assert.NotEmpty(t, snapshotId)
+		assert.Equal(t, int64(len(sourceDocs)), insertedCount)
+
+		objectId, err := primitive.ObjectIDFromHex(snapshotId)
+		require.NoError(t, err)
+
+		// Read from the primary to avoid replication lag against the just-committed transaction.
+		primaryTargetCollection := snapshotClient.targetCollection.Database().Collection(
+			snapshotClient.targetCollection.Name(), options.Collection().SetReadPreference(readpref.Primary()))
+
+		cursor, err := primaryTargetCollection.Find(context.Background(), bson.M{"snapshotId": objectId})
+		require.NoError(t, err)
+
+		var results []bson.M
+		require.NoError(t, cursor.All(context.Background(), &results))
+		require.Len(t, results, len(sourceDocs))
+
+		for _, result := range results {
+			assert.Equal(t, objectId, result["snapshotId"])
+			assert.NotEmpty(t, result["subscriptionId"])
+
+			resource, ok := result["resource"].(bson.M)
+			require.True(t, ok, "resource should be present in the snapshot document")
+			assert.Equal(t, "Subscription", resource["kind"])
+			assert.Equal(t, "v1", resource["apiVersion"])
 		}
 	})
 }
