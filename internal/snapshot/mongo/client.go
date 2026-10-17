@@ -75,6 +75,10 @@ func (c *Client) Connect(resumeToken bson.Raw) error {
 	return nil
 }
 
+func (c *Client) GetUpdates() <-chan bson.Raw {
+	return c.streamChan
+}
+
 func (c *Client) openStream(resumeToken bson.Raw) (*mongo.ChangeStream, error) {
 	streamOpts := options.ChangeStream()
 	if len(resumeToken) > 0 {
