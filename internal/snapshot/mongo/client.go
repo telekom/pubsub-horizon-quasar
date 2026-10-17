@@ -105,8 +105,8 @@ func (c *Client) readStream() {
 	for c.stream.Next(c.clientCtx) {
 		select {
 
-		case c.streamChan <- c.stream.Current:
-			// Just pass the current event
+		case c.streamChan <- c.stream.ResumeToken():
+			// Just pass the current resume token
 
 		case <-c.clientCtx.Done():
 			return
