@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package state
 
 import (
@@ -26,7 +30,7 @@ func (t *ResumeToken) UnmarshalJSON(bytes []byte) error {
 		return nil
 	}
 
-	t.Value = string(bytes)
+	t.Value = string(bytes)[1 : len(bytes)-1]
 
 	return nil
 }

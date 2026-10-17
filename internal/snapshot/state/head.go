@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Deutsche Telekom AG
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package state
 
 import (
@@ -6,7 +10,7 @@ import (
 
 type Head struct {
 	HistoryEntry
-	ResumeToken ResumeToken    `json:"resumeToken"`
+	ResumeToken *ResumeToken   `json:"resumeToken"`
 	History     []HistoryEntry `json:"history"`
 }
 
