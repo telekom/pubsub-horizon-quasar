@@ -93,7 +93,7 @@ func (c *Client) openStream(resumeToken bson.Raw) (*mongo.ChangeStream, error) {
 		streamOpts.SetResumeAfter(resumeToken)
 	}
 
-	stream, err := c.mongoClient.Watch(c.clientCtx, mongo.Pipeline{}, streamOpts)
+	stream, err := c.sourceCollection.Watch(c.clientCtx, mongo.Pipeline{}, streamOpts)
 	if err != nil {
 		return nil, err
 	}
