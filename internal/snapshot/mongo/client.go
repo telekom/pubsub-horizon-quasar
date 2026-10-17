@@ -75,6 +75,14 @@ func (c *Client) Connect(resumeToken bson.Raw) error {
 	return nil
 }
 
+func (c *Client) ResumeToken() bson.Raw {
+	if c.stream == nil {
+		return []byte{}
+	}
+
+	return c.stream.ResumeToken()
+}
+
 func (c *Client) GetUpdates() <-chan bson.Raw {
 	return c.streamChan
 }
