@@ -30,3 +30,24 @@ func (t *ResumeToken) UnmarshalJSON(bytes []byte) error {
 
 	return nil
 }
+
+func ParseResumeToken(rawToken bson.Raw) (*ResumeToken, error) {
+	var obj bson.M
+	if err := bson.Unmarshal(rawToken, &obj); err != nil {
+		return nil, err
+	}
+
+	data, ok := obj["_data"]
+	if !ok {
+		return nil, fmt.Errorf("could not find '_data' field in resume token")
+	}
+
+	dataStr, ok := data.(string)
+	if !ok {
+		return nil, fmt.Errorf("could not cast '_data' field in resume token to string")
+	}
+
+	return &ResumeToken{
+		Value: dataStr,
+	}, nil
+}
