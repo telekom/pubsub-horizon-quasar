@@ -33,11 +33,12 @@ type Service struct {
 	lastResumeToken   *state.ResumeToken
 	lastResumeTokenMu sync.Mutex
 
-	svcCtx             context.Context
-	svcCtxCancel       context.CancelFunc
+	svcCtx       context.Context
+	svcCtxCancel context.CancelFunc
+	svcWg        sync.WaitGroup
+
 	svcRebuildInterval time.Duration
 	svcInitialDelay    time.Duration
-	svcWg              sync.WaitGroup
 }
 
 func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration, initialDelay time.Duration) *Service {
