@@ -119,7 +119,7 @@ func (s *Service) initializeHead() error {
 		return err
 	}
 
-	if err := s.zoo.Write(zoo.ZNodeHead, bytes); err != nil {
+	if err := s.zoo.Write(zoo.ZNodePrepare, bytes); err != nil {
 		return err
 	}
 
@@ -129,7 +129,7 @@ func (s *Service) initializeHead() error {
 }
 
 func (s *Service) fetchHead() (bool, error) {
-	headBytes, err := s.zoo.Read(zoo.ZNodeHead)
+	headBytes, err := s.zoo.Read(zoo.ZNodePrepare)
 	if err != nil {
 		if errors.Is(err, zk.ErrNoNode) {
 			return false, nil
@@ -177,7 +177,7 @@ func (s *Service) waitForChanges() {
 					continue
 				}
 
-				if err := s.zoo.Write(zoo.ZNodeHead, bytes); err != nil {
+				if err := s.zoo.Write(zoo.ZNodePrepare, bytes); err != nil {
 					log.Error().
 						Str("snapshotId", snapshotId).
 						Err(err).
