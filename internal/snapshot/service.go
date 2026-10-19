@@ -44,7 +44,7 @@ type Service struct {
 	svcInitialDelay    time.Duration
 }
 
-func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration, initialDelay time.Duration) *Service {
+func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Service{
@@ -63,7 +63,6 @@ func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Durat
 		svcCtx:             ctx,
 		svcCtxCancel:       cancel,
 		svcRebuildInterval: rebuildInterval,
-		svcInitialDelay:    initialDelay, // TODO: Check if this can be removed due to the switch to MongoDB resume tokens
 		svcWg:              sync.WaitGroup{},
 	}
 }
@@ -165,8 +164,6 @@ func (s *Service) fetchHead() (bool, error) {
 }
 
 func (s *Service) waitForChanges() {
-	time.Sleep(s.svcInitialDelay) // TODO: Remove if no longer needed.
-
 	for {
 		select {
 
