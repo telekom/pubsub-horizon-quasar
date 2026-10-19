@@ -8,15 +8,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	_ "log/slog"
 	"strings"
 	"time"
 
 	"github.com/Shopify/zk"
 	"github.com/rs/zerolog"
-	_ "github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	_ "github.com/rs/zerolog/log"
 )
 
 const autoIncrementVersion = -1
