@@ -79,20 +79,11 @@ func TestClient_ReplicaSet(t *testing.T) {
 
 		select {
 		case payload := <-client.streamChan:
-			t.Logf("received change stream payload: %s", payload.String())
+			var token bson.M
+			require.NoError(t, bson.Unmarshal(payload, &token))
+			assert.NotEmpty(t, token["_data"], "the stream should only pass the resume token of the event")
 
-			var event bson.M
-			require.NoError(t, bson.Unmarshal(payload, &event))
-			assert.Equal(t, "insert", event["operationType"])
-
-			fullDocument, ok := event["fullDocument"].(bson.M)
-			require.True(t, ok, "fullDocument should be present in the event")
-			assert.Equal(t, doc["_id"], fullDocument["_id"])
-			assert.Equal(t, doc["value"], fullDocument["value"])
-
-			resumeToken, err := bson.Marshal(event["_id"])
-			require.NoError(t, err)
-			firstResumeToken = resumeToken
+			firstResumeToken = payload
 
 		case <-time.After(streamTimeout):
 			t.Fatal("timed out waiting for change stream event")
@@ -116,16 +107,11 @@ func TestClient_ReplicaSet(t *testing.T) {
 
 		select {
 		case payload := <-resumedClient.streamChan:
-			t.Logf("received resumed change stream payload: %s", payload.String())
-
-			var event bson.M
-			require.NoError(t, bson.Unmarshal(payload, &event))
-			assert.Equal(t, "insert", event["operationType"])
-
-			fullDocument, ok := event["fullDocument"].(bson.M)
-			require.True(t, ok, "fullDocument should be present in the event")
-			assert.Equal(t, doc["_id"], fullDocument["_id"])
-			assert.Equal(t, doc["value"], fullDocument["value"])
+			// Only the doc-2 insert happened after the first token, so any delivered token belongs to it.
+			var token bson.M
+			require.NoError(t, bson.Unmarshal(payload, &token))
+			assert.NotEmpty(t, token["_data"])
+			assert.NotEqual(t, firstResumeToken, payload)
 
 		case <-time.After(streamTimeout):
 			t.Fatal("timed out waiting for resumed change stream event")
@@ -179,14 +165,14 @@ func TestClient_ReplicaSet(t *testing.T) {
 		assert.NotEmpty(t, snapshotId)
 		assert.Equal(t, int64(len(sourceDocs)), insertedCount)
 
-		objectId, err := primitive.ObjectIDFromHex(snapshotId)
-		require.NoError(t, err)
+		_, err = primitive.ObjectIDFromHex(snapshotId)
+		require.NoError(t, err, "snapshotId should be an ObjectId in hex format")
 
 		// Read from the primary to avoid replication lag against the just-committed transaction.
 		primaryTargetCollection := snapshotClient.targetCollection.Database().Collection(
 			snapshotClient.targetCollection.Name(), options.Collection().SetReadPreference(readpref.Primary()))
 
-		cursor, err := primaryTargetCollection.Find(context.Background(), bson.M{"snapshotId": objectId})
+		cursor, err := primaryTargetCollection.Find(context.Background(), bson.M{"snapshotId": snapshotId})
 		require.NoError(t, err)
 
 		var results []bson.M
@@ -194,7 +180,7 @@ func TestClient_ReplicaSet(t *testing.T) {
 		require.Len(t, results, len(sourceDocs))
 
 		for _, result := range results {
-			assert.Equal(t, objectId, result["snapshotId"])
+			assert.Equal(t, snapshotId, result["snapshotId"])
 			assert.NotEmpty(t, result["subscriptionId"])
 
 			resource, ok := result["resource"].(bson.M)

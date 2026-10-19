@@ -47,9 +47,9 @@ func TestClient_Ensemble(t *testing.T) {
 		return err == nil
 	}, 30*time.Second, 100*time.Millisecond)
 
-	headPath := "/" + ZNodeHead
-	preparePath := "/" + ZNodePrepared
-	activatePath := "/" + ZNodeActivated
+	headPath := ZNodeHead
+	preparePath := ZNodePrepared
+	activatePath := ZNodeActivated
 
 	t.Run("WriteCreatesNestedZNodePath", func(t *testing.T) {
 		require.NoError(t, client.Write(headPath, []byte("v1")))
@@ -105,8 +105,7 @@ func TestClient_Ensemble(t *testing.T) {
 		}
 		require.GreaterOrEqual(t, memberIndex, 0, "connected server %q must be one of the ensemble addresses", currentServer)
 
-		ensemble.Pause(t, memberIndex)
-		defer ensemble.Resume(t, memberIndex)
+		ensemble.Stop(t, memberIndex)
 
 		require.Eventually(t, func() bool {
 			if err := client.Write(headPath, []byte("v3")); err != nil {

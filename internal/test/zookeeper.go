@@ -62,13 +62,7 @@ func SetupZooKeeper(t *testing.T) *ZooKeeperEnsemble {
 		})
 		require.NoError(t, err, "configured ZooKeeper image must be accessible; do not skip this test")
 		ensemble.members = append(ensemble.members, member)
-		t.Cleanup(func() {
-			container, err := pool.Client.InspectContainer(member.Container.ID)
-			if err == nil && container.State.Paused {
-				require.NoError(t, pool.Client.UnpauseContainer(member.Container.ID))
-			}
-			require.NoError(t, pool.Purge(member))
-		})
+		t.Cleanup(func() { require.NoError(t, removeZooKeeperMember(pool, member.Container.ID)) })
 		ensemble.Addresses = append(ensemble.Addresses, net.JoinHostPort(host, member.GetPort("2181/tcp")))
 	}
 	conn, events, err := zk.Connect(ensemble.Addresses, 3*time.Second)
@@ -96,7 +90,7 @@ func runZooKeeperMember(t *testing.T, pool *dockertest.Pool, options *dockertest
 		if err == nil {
 			return member, nil
 		}
-		if cleanupErr := removeFailedZooKeeperMember(pool, options.Name); cleanupErr != nil {
+		if cleanupErr := removeZooKeeperMember(pool, options.Name); cleanupErr != nil {
 			return nil, errors.Join(err, cleanupErr)
 		}
 		if !strings.Contains(err.Error(), "address already in use") || attempt == 5 {
@@ -106,8 +100,8 @@ func runZooKeeperMember(t *testing.T, pool *dockertest.Pool, options *dockertest
 	}
 }
 
-// removeFailedZooKeeperMember removes only the named fixture container, treating an absent container as clean.
-func removeFailedZooKeeperMember(pool *dockertest.Pool, name string) error {
+// removeZooKeeperMember removes only the given fixture container (name or ID), treating an absent container as clean.
+func removeZooKeeperMember(pool *dockertest.Pool, name string) error {
 	container, err := pool.Client.InspectContainer(name)
 	var missing *docker.NoSuchContainer
 	if errors.As(err, &missing) {
@@ -119,14 +113,9 @@ func removeFailedZooKeeperMember(pool *dockertest.Pool, name string) error {
 	return pool.Purge(&dockertest.Resource{Container: container})
 }
 
-// Pause suspends one of the fixture's members without destroying its persistent data.
-func (e *ZooKeeperEnsemble) Pause(t *testing.T, member int) {
+// Stop crashes one of the fixture's members. A paused member is not used because Docker keeps
+// accepting TCP connections for it, which stalls the client's handshake far beyond the session timeout.
+func (e *ZooKeeperEnsemble) Stop(t *testing.T, member int) {
 	t.Helper()
-	require.NoError(t, e.pool.Client.PauseContainer(e.members[member].Container.ID))
-}
-
-// Resume restores one of the fixture's suspended members.
-func (e *ZooKeeperEnsemble) Resume(t *testing.T, member int) {
-	t.Helper()
-	require.NoError(t, e.pool.Client.UnpauseContainer(e.members[member].Container.ID))
+	require.NoError(t, e.pool.Client.StopContainer(e.members[member].Container.ID, 1))
 }
