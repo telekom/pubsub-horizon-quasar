@@ -148,7 +148,7 @@ func (c *Client) readCursor(cursor *mongo.Cursor, snapshotId primitive.ObjectID)
 		}
 
 		doc["_id"] = primitive.NewObjectID()
-		doc["snapshotId"] = snapshotId
+		doc["snapshotId"] = snapshotId.Hex()
 
 		bulk = append(bulk, &mongo.InsertOneModel{Document: doc})
 	}

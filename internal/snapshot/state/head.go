@@ -15,7 +15,7 @@ type Head struct {
 }
 
 type HistoryEntry struct {
-	ID            string    `json:"id"`
+	ID            string    `json:"snapshotId"`
 	DocumentCount int64     `json:"documentCount"`
 	Created       time.Time `json:"created"`
 }
