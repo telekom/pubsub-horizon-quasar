@@ -114,6 +114,11 @@ func (s *Service) Start() error {
 }
 
 func (s *Service) initializeHead() error {
+	// A missing prepared node is expected during bootstrap; other ZooKeeper errors prevent snapshot creation.
+	if _, err := s.zoo.Read(zoo.ZNodePrepared); err != nil && !errors.Is(err, zk.ErrNoNode) {
+		return err
+	}
+
 	snapshotId, documentCount, err := s.mongo.CreateSnapshot()
 	if err != nil {
 		return err
@@ -181,6 +186,12 @@ func (s *Service) waitForChanges() {
 				currentLastResumeToken := *s.lastResumeToken
 				s.lastResumeTokenMu.Unlock()
 
+				// Only create a MongoDB snapshot after a successful ZooKeeper read.
+				if _, err := s.zoo.Read(zoo.ZNodePrepared); err != nil {
+					log.Error().Err(err).Msg("failed to read prepared-head; skipping snapshot creation")
+					continue
+				}
+
 				snapshotId, documentCount, err := s.mongo.CreateSnapshot()
 				if err != nil {
 					log.Error().Err(err).Msg("failed to create snapshot")
@@ -200,6 +211,8 @@ func (s *Service) waitForChanges() {
 						Str("snapshotId", snapshotId).
 						Err(err).
 						Msg("failed to write head")
+					// Do not advance the local head when the prepared write fails.
+					continue
 				}
 
 				log.Debug().
