@@ -33,6 +33,7 @@ type Service struct {
 	lastResumeToken   *state.ResumeToken
 	lastResumeTokenMu sync.Mutex
 
+	activationDelay     time.Duration
 	activationPending   bool
 	activationPendingMu sync.Mutex
 
@@ -44,7 +45,7 @@ type Service struct {
 	svcInitialDelay    time.Duration
 }
 
-func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration) *Service {
+func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration, activationDelay time.Duration) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Service{
@@ -57,6 +58,7 @@ func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Durat
 		lastResumeToken:   nil,
 		lastResumeTokenMu: sync.Mutex{},
 
+		activationDelay:     activationDelay,
 		activationPending:   false,
 		activationPendingMu: sync.Mutex{},
 
@@ -95,6 +97,15 @@ func (s *Service) Start() error {
 		}
 	}
 
+	activationPending, err := s.isActivationPending()
+	if err != nil {
+		return err
+	}
+
+	if activationPending {
+		s.activationPending = true
+	}
+
 	s.svcWg.Go(s.waitForChanges)
 	return nil
 }
@@ -130,16 +141,6 @@ func (s *Service) initializeHead() error {
 	}
 
 	s.head = head
-
-	// TODO: Move this section. Initializing the head makes an acitvation mandatory!
-	activationPending, err := s.isActivationPending()
-	if err != nil {
-		return err
-	}
-
-	if activationPending {
-		s.activationPending = true
-	}
 
 	return nil
 }
@@ -220,7 +221,7 @@ func (s *Service) waitForChanges() {
 			s.activationPendingMu.Unlock()
 
 			if activationPending {
-				s.activatePrepared(10 * time.Second) //TODO: Use config value
+				s.activatePrepared(s.activationDelay)
 			}
 
 		case lastEvent := <-s.mongo.GetUpdates():
