@@ -7,10 +7,16 @@ package zoo
 import (
 	"context"
 	"errors"
+	"log/slog"
+	_ "log/slog"
 	"strings"
 	"time"
 
 	"github.com/Shopify/zk"
+	"github.com/rs/zerolog"
+	_ "github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	_ "github.com/rs/zerolog/log"
 )
 
 const autoIncrementVersion = -1
@@ -20,10 +26,13 @@ type Client struct {
 }
 
 func NewClient(addresses []string, sessionTimeout time.Duration) (*Client, error) {
-	conn, _, err := zk.Connect(addresses, sessionTimeout)
+	zookeeperLog := log.With().Str("pkg", "zoo").Logger()
+
+	conn, _, err := zk.Connect(addresses, sessionTimeout, zk.WithLogger(slog.New(zerolog.NewSlogHandler(zookeeperLog))))
 	if err != nil {
 		return nil, err
 	}
+
 	return &Client{conn}, nil
 }
 
