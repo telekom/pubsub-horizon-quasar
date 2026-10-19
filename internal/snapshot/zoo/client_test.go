@@ -48,8 +48,8 @@ func TestClient_Ensemble(t *testing.T) {
 	}, 30*time.Second, 100*time.Millisecond)
 
 	headPath := "/" + ZNodeHead
-	preparePath := "/" + ZNodePrepare
-	activatePath := "/" + ZNodeActivate
+	preparePath := "/" + ZNodePrepared
+	activatePath := "/" + ZNodeActivated
 
 	t.Run("WriteCreatesNestedZNodePath", func(t *testing.T) {
 		require.NoError(t, client.Write(headPath, []byte("v1")))

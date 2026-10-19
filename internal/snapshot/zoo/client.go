@@ -52,7 +52,7 @@ func (c *Client) create(ctx context.Context, zNode string, data []byte) error {
 
 	nextNode := strings.Builder{}
 	for i, node := range nodes {
-		nextNode.WriteString("/" + node)
+		_, _ = nextNode.WriteString("/" + node)
 
 		if isParentNode := i < len(nodes)-1; isParentNode {
 			if _, err := c.conn.Create(ctx, nextNode.String(), make([]byte, 0), 0, zk.WorldACL(zk.PermAll)); err != nil {

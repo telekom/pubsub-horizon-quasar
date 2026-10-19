@@ -63,7 +63,7 @@ func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Durat
 		svcCtx:             ctx,
 		svcCtxCancel:       cancel,
 		svcRebuildInterval: rebuildInterval,
-		svcInitialDelay:    initialDelay,
+		svcInitialDelay:    initialDelay, // TODO: Check if this can be removed due to the switch to MongoDB resume tokens
 		svcWg:              sync.WaitGroup{},
 	}
 }
@@ -126,12 +126,13 @@ func (s *Service) initializeHead() error {
 		return err
 	}
 
-	if err := s.zoo.Write(zoo.ZNodePrepare, bytes); err != nil {
+	if err := s.zoo.Write(zoo.ZNodePrepared, bytes); err != nil {
 		return err
 	}
 
 	s.head = head
 
+	// TODO: Move this section. Initializing the head makes an acitvation mandatory!
 	activationPending, err := s.isActivationPending()
 	if err != nil {
 		return err
@@ -145,7 +146,7 @@ func (s *Service) initializeHead() error {
 }
 
 func (s *Service) fetchHead() (bool, error) {
-	headBytes, err := s.zoo.Read(zoo.ZNodePrepare)
+	headBytes, err := s.zoo.Read(zoo.ZNodePrepared)
 	if err != nil {
 		if errors.Is(err, zk.ErrNoNode) {
 			return false, nil
@@ -164,7 +165,7 @@ func (s *Service) fetchHead() (bool, error) {
 }
 
 func (s *Service) waitForChanges() {
-	time.Sleep(s.svcInitialDelay)
+	time.Sleep(s.svcInitialDelay) // TODO: Remove if no longer needed.
 
 	for {
 		select {
@@ -193,7 +194,7 @@ func (s *Service) waitForChanges() {
 					continue
 				}
 
-				if err := s.zoo.Write(zoo.ZNodePrepare, bytes); err != nil {
+				if err := s.zoo.Write(zoo.ZNodePrepared, bytes); err != nil {
 					log.Error().
 						Str("snapshotId", snapshotId).
 						Err(err).
@@ -222,7 +223,7 @@ func (s *Service) waitForChanges() {
 			s.activationPendingMu.Unlock()
 
 			if activationPending {
-				s.activatePrepared(10 * time.Second)
+				s.activatePrepared(10 * time.Second) //TODO: Use config value
 			}
 
 		case lastEvent := <-s.mongo.GetUpdates():
@@ -291,7 +292,7 @@ func (s *Service) isActivationPending() (bool, error) {
 	s.activationPendingMu.Lock()
 	defer s.activationPendingMu.Unlock()
 
-	preparedBytes, err := s.zoo.Read(zoo.ZNodePrepare)
+	preparedBytes, err := s.zoo.Read(zoo.ZNodePrepared)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -299,7 +300,7 @@ func (s *Service) isActivationPending() (bool, error) {
 		return false, err
 	}
 
-	activatedBytes, err := s.zoo.Read(zoo.ZNodeActivate)
+	activatedBytes, err := s.zoo.Read(zoo.ZNodeActivated)
 	if err != nil {
 		if errors.Is(err, zk.ErrNoNode) {
 			log.Debug().
@@ -327,7 +328,7 @@ func (s *Service) activatePrepared(activationDelay time.Duration) {
 	s.activationPendingMu.Lock()
 	defer s.activationPendingMu.Unlock()
 
-	preparedBytes, err := s.zoo.Read(zoo.ZNodePrepare)
+	preparedBytes, err := s.zoo.Read(zoo.ZNodePrepared)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -340,7 +341,7 @@ func (s *Service) activatePrepared(activationDelay time.Duration) {
 		Msg("waiting for activation delay to pass")
 	time.Sleep(activationDelay)
 
-	if err := s.zoo.Write(zoo.ZNodeActivate, preparedBytes); err != nil {
+	if err := s.zoo.Write(zoo.ZNodeActivated, preparedBytes); err != nil {
 		log.Error().
 			Err(err).
 			Msg("failed to write activate-head during activation")

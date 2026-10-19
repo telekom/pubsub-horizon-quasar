@@ -5,7 +5,7 @@
 package zoo
 
 const (
-	ZNodeHead     = "/horizon/subscriptions/head"
-	ZNodePrepare  = "/horizon/subscriptions/prepare"
-	ZNodeActivate = "/horizon/subscriptions/activate"
+	ZNodeHead      = "/horizon/subscriptions/head"
+	ZNodePrepared  = "/horizon/subscriptions/prepared"
+	ZNodeActivated = "/horizon/subscriptions/activated"
 )
