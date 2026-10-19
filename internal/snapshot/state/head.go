@@ -19,3 +19,14 @@ type HistoryEntry struct {
 	DocumentCount int64     `json:"documentCount"`
 	Created       time.Time `json:"created"`
 }
+
+func (h *Head) GetSnapshotIds() []string {
+	snapshotIds := make([]string, 0)
+	snapshotIds = append(snapshotIds, h.ID)
+
+	for _, historicEntry := range h.History {
+		snapshotIds = append(snapshotIds, historicEntry.ID)
+	}
+
+	return snapshotIds
+}

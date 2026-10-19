@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -42,10 +43,10 @@ type Service struct {
 	svcWg        sync.WaitGroup
 
 	svcRebuildInterval time.Duration
-	svcInitialDelay    time.Duration
+	svcCleanupInterval time.Duration
 }
 
-func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration, activationDelay time.Duration) *Service {
+func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Duration, activationDelay time.Duration, cleanupInterval time.Duration) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Service{
@@ -65,6 +66,7 @@ func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Durat
 		svcCtx:             ctx,
 		svcCtxCancel:       cancel,
 		svcRebuildInterval: rebuildInterval,
+		svcCleanupInterval: cleanupInterval,
 		svcWg:              sync.WaitGroup{},
 	}
 }
@@ -107,6 +109,7 @@ func (s *Service) Start() error {
 	}
 
 	s.svcWg.Go(s.waitForChanges)
+	s.svcWg.Go(s.runCleanupJob)
 	return nil
 }
 
@@ -255,6 +258,60 @@ func (s *Service) waitForChanges() {
 	}
 }
 
+func (s *Service) runCleanupJob() {
+	for {
+		select {
+
+		case <-time.After(s.svcCleanupInterval):
+			s.headMu.Lock()
+
+			retainedSnapshotIds := s.head.GetSnapshotIds()
+
+			activatedHeadBytes, err := s.zoo.Read(zoo.ZNodeActivated)
+			if err != nil && !errors.Is(err, zk.ErrNoNode) {
+				log.Error().
+					Err(err).
+					Msg("failed to retrieve activated head during cleanup")
+				s.headMu.Unlock()
+				continue
+			} else {
+				var activatedHead state.Head
+				if err := json.Unmarshal(activatedHeadBytes, &activatedHead); err != nil {
+					log.Error().
+						Err(err).
+						Msg("failed to unmarshal the activated head")
+
+					s.headMu.Unlock()
+					continue
+				}
+
+				for _, snapshotId := range activatedHead.GetSnapshotIds() {
+					if !slices.Contains(retainedSnapshotIds, snapshotId) {
+						retainedSnapshotIds = append(retainedSnapshotIds, snapshotId)
+					}
+				}
+			}
+
+			result, err := s.mongo.DeleteStaleSnapshots(retainedSnapshotIds)
+			if err != nil {
+				log.Error().
+					Err(err).
+					Msg("cleanup of stale snapshots failed")
+			} else {
+				log.Debug().
+					Int64("documentCount", result.DeletedCount).
+					Msg("cleaned up stale snapshots")
+			}
+
+			s.headMu.Unlock()
+
+		case <-s.svcCtx.Done():
+			return
+
+		}
+	}
+}
+
 func (s *Service) updateHead(head *state.Head, snapshotId string, documentCount int64, resumeToken *state.ResumeToken) {
 	head.History = append(head.History, state.HistoryEntry{
 		ID:            head.ID,
@@ -349,4 +406,9 @@ func (s *Service) activatePrepared(activationDelay time.Duration) {
 	s.activationPending = false
 	log.Debug().
 		Msg("activation succeeded")
+}
+
+func (s *Service) Stop() {
+	s.svcCtxCancel()
+	s.svcWg.Wait()
 }

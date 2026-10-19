@@ -173,6 +173,14 @@ func (c *Client) writeBulk(ctx context.Context, bulk []mongo.WriteModel) (*mongo
 	return result.(*mongo.BulkWriteResult), nil
 }
 
+func (c *Client) DeleteStaleSnapshots(retainedSnapshotIds []string) (*mongo.DeleteResult, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	query := bson.D{{"snapshotId", bson.D{{"$nin", retainedSnapshotIds}}}}
+	return c.targetCollection.DeleteMany(ctx, query)
+}
+
 func (c *Client) Close() {
 	c.clientCancel()
 	c.streamWg.Wait()
