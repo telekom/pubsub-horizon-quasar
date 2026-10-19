@@ -33,6 +33,9 @@ type Service struct {
 	lastResumeToken   *state.ResumeToken
 	lastResumeTokenMu sync.Mutex
 
+	activationPending   bool
+	activationPendingMu sync.Mutex
+
 	svcCtx       context.Context
 	svcCtxCancel context.CancelFunc
 	svcWg        sync.WaitGroup
@@ -53,6 +56,9 @@ func NewService(mongo *mongo.Client, zoo *zoo.Client, rebuildInterval time.Durat
 
 		lastResumeToken:   nil,
 		lastResumeTokenMu: sync.Mutex{},
+
+		activationPending:   false,
+		activationPendingMu: sync.Mutex{},
 
 		svcCtx:             ctx,
 		svcCtxCancel:       cancel,
@@ -126,6 +132,15 @@ func (s *Service) initializeHead() error {
 
 	s.head = head
 
+	activationPending, err := s.isActivationPending()
+	if err != nil {
+		return err
+	}
+
+	if activationPending {
+		s.activationPending = true
+	}
+
 	return nil
 }
 
@@ -193,9 +208,21 @@ func (s *Service) waitForChanges() {
 				s.headMu.Lock()
 				s.head = &currentHead
 				s.headMu.Unlock()
+
+				s.activationPendingMu.Lock()
+				s.activationPending = true
+				s.activationPendingMu.Unlock()
 			} else {
 				log.Debug().
 					Msg("no changes therefore skipping snapshot creation")
+			}
+
+			s.activationPendingMu.Lock()
+			activationPending := s.activationPending
+			s.activationPendingMu.Unlock()
+
+			if activationPending {
+				s.activatePrepared(10 * time.Second)
 			}
 
 		case lastEvent := <-s.mongo.GetUpdates():
@@ -258,4 +285,69 @@ func (s *Service) changesPresent() bool {
 	}
 
 	return s.lastResumeToken.Value != s.head.ResumeToken.Value
+}
+
+func (s *Service) isActivationPending() (bool, error) {
+	s.activationPendingMu.Lock()
+	defer s.activationPendingMu.Unlock()
+
+	preparedBytes, err := s.zoo.Read(zoo.ZNodePrepare)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Msg("failed to read prepare-head while checking for pending activation")
+		return false, err
+	}
+
+	activatedBytes, err := s.zoo.Read(zoo.ZNodeActivate)
+	if err != nil {
+		if errors.Is(err, zk.ErrNoNode) {
+			log.Debug().
+				Msg("activate-head node does not exist yet")
+			return true, nil
+		}
+
+		log.Error().
+			Err(err).
+			Msg("failed to read activate-head while checking for pending activation")
+		return false, err
+	}
+
+	if string(preparedBytes) != string(activatedBytes) {
+		log.Debug().
+			Msg("prepare and activate head do not match, activation will be scheduled")
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (s *Service) activatePrepared(activationDelay time.Duration) {
+	s.activationPendingMu.Lock()
+	defer s.activationPendingMu.Unlock()
+
+	preparedBytes, err := s.zoo.Read(zoo.ZNodePrepare)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Msg("failed to read prepare-head during activation")
+		return
+	}
+
+	log.Debug().
+		Str("activationDelay", activationDelay.String()).
+		Msg("waiting for activation delay to pass")
+	time.Sleep(activationDelay)
+
+	if err := s.zoo.Write(zoo.ZNodeActivate, preparedBytes); err != nil {
+		log.Error().
+			Err(err).
+			Msg("failed to write activate-head during activation")
+		return
+	}
+
+	s.activationPending = false
+	log.Debug().
+		Msg("activation succeeded")
 }
