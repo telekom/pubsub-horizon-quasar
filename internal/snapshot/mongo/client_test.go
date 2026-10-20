@@ -58,6 +58,35 @@ func TestClient_NewClient(t *testing.T) {
 	})
 }
 
+func TestClient_ReadCursor(t *testing.T) {
+	ctx := context.Background()
+
+	client, err := NewClient(standaloneMongoUri, "quasar_read_cursor_test", "source", "target")
+	require.NoError(t, err)
+	defer client.Close()
+
+	require.NoError(t, client.sourceCollection.Drop(ctx))
+	_, err = client.sourceCollection.InsertMany(ctx, []any{bson.M{"_id": "sub-1"}, bson.M{"_id": "sub-2"}, bson.M{"_id": "sub-3"}})
+	require.NoError(t, err)
+
+	t.Run("FailureMidIteration", func(t *testing.T) {
+		cursor, err := client.sourceCollection.Aggregate(ctx, aggregateSnapshot, options.Aggregate().SetBatchSize(1))
+		require.NoError(t, err)
+		defer cursor.Close(ctx)
+
+		// Kill the server-side cursor so the getMore after the first batch fails.
+		killCursors := bson.D{
+			{Key: "killCursors", Value: client.sourceCollection.Name()},
+			{Key: "cursors", Value: bson.A{cursor.ID()}},
+		}
+		require.NoError(t, client.sourceCollection.Database().RunCommand(ctx, killCursors).Err())
+
+		bulk, err := client.readCursor(cursor, primitive.NewObjectID())
+		assert.Error(t, err, "a cursor failing mid-iteration must not yield a partial snapshot")
+		assert.Len(t, bulk, 1)
+	})
+}
+
 // TestClient_ReplicaSet provisions a single shared MongoDB replicaset and runs all replicaset-dependent
 // scenarios as sub-tests so the container is only started once.
 func TestClient_ReplicaSet(t *testing.T) {

@@ -141,8 +141,11 @@ func (c *Client) CreateSnapshot() (string, int64, error) {
 }
 
 func (c *Client) readCursor(cursor *mongo.Cursor, snapshotId primitive.ObjectID) ([]mongo.WriteModel, error) {
+	ctx, cancel := context.WithCancel(c.clientCtx)
+	defer cancel()
+
 	bulk := make([]mongo.WriteModel, 0)
-	for cursor.Next(c.clientCtx) {
+	for cursor.Next(ctx) {
 		var doc bson.M
 		if err := cursor.Decode(&doc); err != nil {
 			return bulk, err
@@ -154,7 +157,7 @@ func (c *Client) readCursor(cursor *mongo.Cursor, snapshotId primitive.ObjectID)
 		bulk = append(bulk, &mongo.InsertOneModel{Document: doc})
 	}
 
-	return bulk, nil
+	return bulk, cursor.Err()
 }
 
 func (c *Client) writeBulk(ctx context.Context, bulk []mongo.WriteModel) (*mongo.BulkWriteResult, error) {
