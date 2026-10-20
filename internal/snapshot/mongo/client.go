@@ -161,6 +161,7 @@ func (c *Client) writeBulk(ctx context.Context, bulk []mongo.WriteModel) (*mongo
 	if err != nil {
 		return nil, err
 	}
+	defer session.EndSession(context.Background())
 
 	result, err := session.WithTransaction(ctx, func(sessionCtx mongo.SessionContext) (any, error) {
 		return c.targetCollection.BulkWrite(sessionCtx, bulk)
