@@ -88,12 +88,15 @@ func (c *Client) GetUpdates() <-chan bson.Raw {
 }
 
 func (c *Client) openStream(resumeToken bson.Raw) (*mongo.ChangeStream, error) {
+	ctx, cancel := context.WithCancel(c.clientCtx)
+	defer cancel()
+
 	streamOpts := options.ChangeStream()
 	if len(resumeToken) > 0 {
 		streamOpts.SetResumeAfter(resumeToken)
 	}
 
-	stream, err := c.sourceCollection.Watch(c.clientCtx, mongo.Pipeline{}, streamOpts)
+	stream, err := c.sourceCollection.Watch(ctx, mongo.Pipeline{}, streamOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +105,10 @@ func (c *Client) openStream(resumeToken bson.Raw) (*mongo.ChangeStream, error) {
 }
 
 func (c *Client) readStream() {
-	for c.stream.Next(c.clientCtx) {
+	ctx, cancel := context.WithCancel(c.clientCtx)
+	defer cancel()
+
+	for c.stream.Next(ctx) {
 		select {
 
 		case c.streamChan <- c.stream.ResumeToken():
