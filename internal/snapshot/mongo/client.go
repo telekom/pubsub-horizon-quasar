@@ -7,6 +7,7 @@ package mongo
 import (
 	"context"
 	"sync"
+	"time"
 
 	zlog "github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
@@ -120,16 +121,48 @@ func (c *Client) readStream() {
 	ctx, cancel := context.WithCancel(c.clientCtx)
 	defer cancel()
 
-	for c.stream.Next(ctx) {
-		select {
+	for {
+		for c.stream.Next(ctx) {
+			select {
 
-		case c.streamChan <- c.stream.ResumeToken():
-			// Just pass the current resume token
+			case c.streamChan <- c.stream.ResumeToken():
+				// Just pass the current resume token
+
+			case <-c.clientCtx.Done():
+				return
+
+			}
+		}
+
+		if c.stream.Err() != nil {
+			c.reconnect()
+		}
+	}
+}
+
+func (c *Client) reconnect() {
+	log.Warn().
+		Msg("attempting to reconnect change stream")
+
+	for {
+		select {
 
 		case <-c.clientCtx.Done():
 			return
 
+		case <-time.After(5 * time.Second):
+
 		}
+
+		stream, err := c.openStream(c.ResumeToken())
+		if err == nil {
+			c.stream = stream
+			break
+		}
+
+		log.Error().
+			Err(err).
+			Msg("failed to re-establish change stream")
 	}
 }
 
