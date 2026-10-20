@@ -125,6 +125,7 @@ func (c *Client) CreateSnapshot() (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
+	defer cursor.Close(ctx)
 
 	bulk, err := c.readCursor(cursor, snapshotId)
 	if err != nil {
