@@ -17,8 +17,10 @@ import (
 	"github.com/telekom/quasar/internal/test"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
 const streamTimeout = 10 * time.Second
@@ -144,6 +146,42 @@ func TestClient_ReplicaSet(t *testing.T) {
 
 		case <-time.After(streamTimeout):
 			t.Fatal("timed out waiting for resumed change stream event")
+		}
+	})
+
+	t.Run("UnusableResumeToken", func(t *testing.T) {
+		require.NotEmpty(t, firstResumeToken, "resume token should have been captured from the first event")
+
+		// A token from another collection is never found in this collection's history (ChangeStreamFatalError).
+		otherClient, err := NewClient(uri, "quasar_replicaset_test", "other_source", "target")
+		require.NoError(t, err)
+		defer otherClient.Close()
+
+		// The server only rejects the token once the collection has an event newer than the token.
+		// w=3 ensures the nearest member, which may be any secondary, already has that event.
+		allMembers := otherClient.sourceCollection.Database().Collection("other_source",
+			options.Collection().SetWriteConcern(&writeconcern.WriteConcern{W: 3}))
+		_, err = allMembers.InsertOne(context.Background(), bson.M{"_id": "doc-3"})
+		require.NoError(t, err)
+
+		_, err = otherClient.sourceCollection.Watch(
+			context.Background(),
+			mongo.Pipeline{},
+			options.ChangeStream().SetResumeAfter(firstResumeToken),
+		)
+		require.True(t, isResumeTokenErr(err), "precondition: the server must reject the token, got %v", err)
+
+		require.NoError(t, otherClient.Connect(firstResumeToken), "an unusable resume token must fall back to a fresh stream")
+
+		_, err = otherClient.sourceCollection.InsertOne(context.Background(), bson.M{"_id": "doc-4"})
+		require.NoError(t, err)
+
+		select {
+		case payload := <-otherClient.streamChan:
+			assert.NotEqual(t, firstResumeToken, payload)
+
+		case <-time.After(streamTimeout):
+			t.Fatal("timed out waiting for change stream event after resume token fallback")
 		}
 	})
 

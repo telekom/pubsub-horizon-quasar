@@ -8,6 +8,7 @@ import (
 	"context"
 	"sync"
 
+	zlog "github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,6 +16,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
+
+var log = zlog.With().Str("pkg", "mongo").Logger()
 
 type Client struct {
 	mongoClient *mongo.Client
@@ -98,6 +101,15 @@ func (c *Client) openStream(resumeToken bson.Raw) (*mongo.ChangeStream, error) {
 
 	stream, err := c.sourceCollection.Watch(ctx, mongo.Pipeline{}, streamOpts)
 	if err != nil {
+		if isResumeTokenErr(err) {
+			log.Warn().
+				Err(err).
+				Msg("could not open change stream with existing resume token, opening channel without one")
+
+			streamOpts.SetResumeAfter(nil)
+			return c.sourceCollection.Watch(ctx, mongo.Pipeline{}, streamOpts)
+		}
+
 		return nil, err
 	}
 
