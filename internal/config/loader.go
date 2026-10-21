@@ -19,9 +19,6 @@ var Current = LoadConfiguration()
 func LoadConfiguration() *Configuration {
 	setDefaults()
 	config := readConfig()
-	if err := config.SubscriptionSnapshots.Validate(); err != nil {
-		log.Fatal().Err(err).Msg("Invalid subscriptionSnapshots configuration")
-	}
 	applyLogLevel(config.LogLevel)
 	return config
 }
@@ -88,7 +85,19 @@ func setDefaults() {
 	viper.SetDefault("metrics.port", 8080)
 	viper.SetDefault("metrics.timeout", "5s")
 
-	setSubscriptionSnapshotsDefaults()
+	viper.SetDefault("snapshot.enabled", false)
+	viper.SetDefault("snapshot.rebuildInterval", "120s")
+	viper.SetDefault("snapshot.activationDelay", "60s")
+	viper.SetDefault("snapshot.cleanupInterval", "300s")
+
+	viper.SetDefault("snapshot.mongo.uri", "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0")
+	viper.SetDefault("snapshot.mongo.database", "horizon-config")
+	viper.SetDefault("snapshot.mongo.sourceCollection", "subscriptions.subscriber.horizon.telekom.de.v1")
+	viper.SetDefault("snapshot.mongo.targetCollection", "subscriptions.subscriber.horizon.telekom.de.v1-snapshots")
+	viper.SetDefault("snapshot.mongo.reconnectInterval", "10s")
+
+	viper.SetDefault("snapshot.zookeeper.addresses", []string{"localhost:2181", "localhost:2182", "localhost:2183"})
+	viper.SetDefault("snapshot.zookeeper.sessionTimeout", "10s")
 }
 
 func readConfig() *Configuration {
