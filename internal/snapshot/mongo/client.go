@@ -29,12 +29,14 @@ type Client struct {
 	sourceCollection *mongo.Collection
 	targetCollection *mongo.Collection
 
+	reconnectInterval time.Duration
+
 	stream     *mongo.ChangeStream
 	streamChan chan bson.Raw
 	streamWg   sync.WaitGroup
 }
 
-func NewClient(mongoUri string, databaseName string, sourceColName string, targetColName string) (*Client, error) {
+func NewClient(mongoUri string, databaseName string, sourceColName string, targetColName string, reconnectInterval time.Duration) (*Client, error) {
 	clientOpts := options.Client().
 		SetReadPreference(readpref.Nearest()).
 		SetWriteConcern(writeconcern.Majority()).
@@ -57,13 +59,14 @@ func NewClient(mongoUri string, databaseName string, sourceColName string, targe
 	targetCollection := database.Collection(targetColName)
 
 	return &Client{
-		mongoClient:      client,
-		clientCtx:        ctx,
-		clientCancel:     cancel,
-		sourceCollection: sourceCollection,
-		targetCollection: targetCollection,
-		streamChan:       make(chan bson.Raw),
-		streamWg:         sync.WaitGroup{},
+		mongoClient:       client,
+		clientCtx:         ctx,
+		clientCancel:      cancel,
+		sourceCollection:  sourceCollection,
+		targetCollection:  targetCollection,
+		reconnectInterval: reconnectInterval,
+		streamChan:        make(chan bson.Raw),
+		streamWg:          sync.WaitGroup{},
 	}, nil
 }
 
@@ -150,7 +153,7 @@ func (c *Client) reconnect() {
 		case <-c.clientCtx.Done():
 			return
 
-		case <-time.After(5 * time.Second):
+		case <-time.After(c.reconnectInterval):
 
 		}
 

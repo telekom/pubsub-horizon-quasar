@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 
 func TestClient_NewClient(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
-		client, err := NewClient(standaloneMongoUri, "quasar_client_test", "source", "target")
+		client, err := NewClient(standaloneMongoUri, "quasar_client_test", "source", "target", 5*time.Second)
 		require.NoError(t, err)
 		require.NotNil(t, client)
 
@@ -54,7 +54,7 @@ func TestClient_NewClient(t *testing.T) {
 	})
 
 	t.Run("ConnectionFailure", func(t *testing.T) {
-		client, err := NewClient("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1000", "quasar_client_test", "source", "target")
+		client, err := NewClient("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1000", "quasar_client_test", "source", "target", 5*time.Second)
 		assert.Error(t, err)
 		assert.Nil(t, client)
 	})
@@ -63,7 +63,7 @@ func TestClient_NewClient(t *testing.T) {
 func TestClient_ReadCursor(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewClient(standaloneMongoUri, "quasar_read_cursor_test", "source", "target")
+	client, err := NewClient(standaloneMongoUri, "quasar_read_cursor_test", "source", "target", 5*time.Second)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -99,7 +99,7 @@ func TestClient_ReplicaSet(t *testing.T) {
 
 	t.Run("ConnectAndReadStream", func(t *testing.T) {
 		var err error
-		client, err = NewClient(uri, "quasar_replicaset_test", "source", "target")
+		client, err = NewClient(uri, "quasar_replicaset_test", "source", "target", 5*time.Second)
 		require.NoError(t, err)
 
 		require.NoError(t, client.Connect(nil))
@@ -130,7 +130,7 @@ func TestClient_ReplicaSet(t *testing.T) {
 
 		client.Close()
 
-		resumedClient, err := NewClient(uri, "quasar_replicaset_test", "source", "target")
+		resumedClient, err := NewClient(uri, "quasar_replicaset_test", "source", "target", 5*time.Second)
 		require.NoError(t, err)
 		defer resumedClient.Close()
 
@@ -153,7 +153,7 @@ func TestClient_ReplicaSet(t *testing.T) {
 		require.NotEmpty(t, firstResumeToken, "resume token should have been captured from the first event")
 
 		// A token from another collection is never found in this collection's history (ChangeStreamFatalError).
-		otherClient, err := NewClient(uri, "quasar_replicaset_test", "other_source", "target")
+		otherClient, err := NewClient(uri, "quasar_replicaset_test", "other_source", "target", 5*time.Second)
 		require.NoError(t, err)
 		defer otherClient.Close()
 
@@ -186,7 +186,7 @@ func TestClient_ReplicaSet(t *testing.T) {
 	})
 
 	t.Run("Close", func(t *testing.T) {
-		closeClient, err := NewClient(uri, "quasar_replicaset_test", "source", "target")
+		closeClient, err := NewClient(uri, "quasar_replicaset_test", "source", "target", 5*time.Second)
 		require.NoError(t, err)
 		require.NoError(t, closeClient.Connect(nil))
 
@@ -205,7 +205,7 @@ func TestClient_ReplicaSet(t *testing.T) {
 	})
 
 	t.Run("CreateSnapshot", func(t *testing.T) {
-		snapshotClient, err := NewClient(uri, "quasar_snapshot_test", "snapshot_source", "snapshot_target")
+		snapshotClient, err := NewClient(uri, "quasar_snapshot_test", "snapshot_source", "snapshot_target", 5*time.Second)
 		require.NoError(t, err)
 
 		sourceDocs := []any{
