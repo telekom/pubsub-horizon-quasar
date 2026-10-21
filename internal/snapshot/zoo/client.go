@@ -33,6 +33,18 @@ func NewClient(addresses []string, sessionTimeout time.Duration) (*Client, error
 	return &Client{conn}, nil
 }
 
+func (c *Client) Exists(zNode string) (bool, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ok, _, err := c.conn.Exists(ctx, zNode)
+	if err != nil && !errors.Is(err, zk.ErrNoNode) {
+		return false, err
+	}
+
+	return ok, nil
+}
+
 func (c *Client) Read(zNode string) ([]byte, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
