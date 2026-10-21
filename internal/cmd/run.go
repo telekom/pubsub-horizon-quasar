@@ -16,6 +16,8 @@ import (
 	"github.com/telekom/quasar/internal/metrics"
 	"github.com/telekom/quasar/internal/provisioning"
 	"github.com/telekom/quasar/internal/snapshot"
+	"github.com/telekom/quasar/internal/snapshot/mongo"
+	"github.com/telekom/quasar/internal/snapshot/zoo"
 	"github.com/telekom/quasar/internal/utils"
 )
 
@@ -36,9 +38,8 @@ var runCmd = &cobra.Command{
 			log.Fatal().Err(err).Msg("Invalid mode configuration")
 		}
 
-		// Start independently before mode-specific setup, which may block during cache population.
-		if err := snapshot.Start(config.Current.SubscriptionSnapshots); err != nil {
-			log.Fatal().Err(err).Msg("Could not start subscription snapshot worker")
+		if snapshotConfig := config.Current.Snapshot; snapshotConfig.Enabled {
+			startSnapshotService(&snapshotConfig)
 		}
 
 		startMode()
@@ -58,4 +59,39 @@ var runCmd = &cobra.Command{
 
 func init() {
 	runCmd.Flags().StringP("kubeconfig", "k", "", "sets the kubeconfig that should be used (service account will be used if unset)")
+}
+
+func startSnapshotService(snapshotConfig *config.Snapshot) {
+	mongoClient, err := mongo.NewClient(
+		snapshotConfig.Mongo.Uri,
+		snapshotConfig.Mongo.Database,
+		snapshotConfig.Mongo.SourceCollection,
+		snapshotConfig.Mongo.TargetCollection,
+		snapshotConfig.Mongo.ReconnectInterval,
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not create snapshot mongo client")
+	}
+
+	zooClient, err := zoo.NewClient(snapshotConfig.ZooKeeper.Addresses, snapshotConfig.ZooKeeper.SessionTimeout)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Could not create snapshot zookeeper client")
+	}
+
+	snapshotService := snapshot.NewService(
+		mongoClient,
+		zooClient,
+		snapshotConfig.RebuildInterval,
+		snapshotConfig.ActivationDelay,
+		snapshotConfig.CleanupInterval,
+	)
+	if err := snapshotService.Start(); err != nil {
+		log.Fatal().Err(err).Msg("Could not start snapshot service")
+	}
+
+	utils.RegisterShutdownHook(func() {
+		snapshotService.Stop()
+		mongoClient.Close()
+		zooClient.Disconnect()
+	}, 0)
 }
