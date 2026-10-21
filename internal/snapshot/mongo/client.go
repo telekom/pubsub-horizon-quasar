@@ -137,6 +137,13 @@ func (c *Client) readStream() {
 			}
 		}
 
+		if err := c.clientCtx.Err(); err != nil {
+			log.Error().
+				Err(err).
+				Msg("stopped reading change-stream due to an error")
+			return
+		}
+
 		if c.stream.Err() != nil {
 			c.reconnect()
 		}
