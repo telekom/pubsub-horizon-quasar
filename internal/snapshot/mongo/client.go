@@ -18,7 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 )
 
-var log = zlog.With().Str("pkg", "mongo").Logger()
+var log = zlog.With().Str("logger", "mongo").Logger()
 
 type Client struct {
 	mongoClient *mongo.Client

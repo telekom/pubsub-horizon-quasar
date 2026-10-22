@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	log = zlog.With().Str("pkg", "snapshot").Logger()
+	log = zlog.With().Str("logger", "snapshot").Logger()
 )
 
 type Service struct {
