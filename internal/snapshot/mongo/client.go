@@ -40,6 +40,7 @@ func NewClient(mongoUri string, databaseName string, sourceColName string, targe
 	clientOpts := options.Client().
 		SetReadPreference(readpref.Nearest()).
 		SetWriteConcern(writeconcern.Majority()).
+		SetAppName("Horizon Quasar").
 		ApplyURI(mongoUri)
 
 	ctx, cancel := context.WithCancel(context.Background())
