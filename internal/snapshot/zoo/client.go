@@ -23,7 +23,7 @@ type Client struct {
 }
 
 func NewClient(addresses []string, sessionTimeout time.Duration) (*Client, error) {
-	zookeeperLog := log.With().Str("pkg", "zoo").Logger()
+	zookeeperLog := log.With().Str("logger", "zoo").Logger()
 
 	conn, _, err := zk.Connect(addresses, sessionTimeout, zk.WithLogger(slog.New(zerolog.NewSlogHandler(zookeeperLog))))
 	if err != nil {
