@@ -17,6 +17,7 @@ Quasar is a Kubernetes configuration controller that synchronizes caches (Hazelc
 ## Commands
 
 ### Build
+Requires Go 1.26 or newer. Use golangci-lint v2.14.0 built with Go 1.26.
 ```bash
 go build
 ```
@@ -90,6 +91,16 @@ golangci-lint run --fix
 - `Mode` type: `provisioning` or `watcher`
 - Dual store configuration per mode
 
+**Subscription Snapshots** (`internal/snapshot/`):
+- Independent sequential worker in both modes, with dedicated MongoDB and Shopify/zk v1.0.14 clients.
+- Startup always waits `initialRefreshDelay` (default `120s`, `0` disables) before the first source scan/snapshot, including MongoDB fallback. Connection/schema setup stays immediate; after startup, fallback skips only the activation delay.
+- Complete snapshot -> ZooKeeper `prepared` -> activation delay -> MongoDB head/history CAS -> ZooKeeper `activated`.
+- ZooKeeper outages leave MongoDB publication and HTTP readiness independent; bounded retries catch up to the latest confirmed head.
+- Cleanup protects both ZooKeeper references and uncertain candidates; see `docs/subscription-snapshots.md`.
+- `service.go` owns the iterative event cycle and coalesced `refreshRequested`; `mongo_snapshots.go` owns the MongoDB `proposal`, and `zookeeper_publication.go` owns its independent fixed `candidate` and `latestConfirmedHead`.
+- Regular cleanup can delete multiple unprotected snapshots, including orphans, and is attempted at most once per worker cycle. Leftovers from a failed snapshot insert may also be deleted before the next source scan.
+- Runtime remains a static Go binary on `scratch`; ZooKeeper test/server containers alone require Java.
+
 **Reconciliation** (`internal/reconciliation/`):
 - Periodic reconciliation to detect drift between Kubernetes state and store state
 - Two modes: `full` (re-sync all resources) or `incremental` (detect and sync only missing entries)
@@ -132,7 +143,8 @@ golangci-lint run --fix
 - Uses **table-driven tests** (see convention guidelines)
 - Mocks generated with **Mockery**
 - Test files include `//go:build testing` tag
-- Integration tests use `dockertest` for spinning up MongoDB/Hazelcast containers
+- Integration tests use `dockertest` for MongoDB/Hazelcast and isolated three-member ZooKeeper ensembles
+- Async snapshot tests advance virtual time through `scheduledService.advance` before `synctest.Wait()`. The serialized control channel orders test mutations/assertions before future worker actions; `Wait()` alone only acquires completed worker activity.
 - Mock expectations defined in `mockExpectations` mutation functions within test tables
 
 ## Code Conventions
