@@ -32,7 +32,7 @@ type MongoStore struct {
 func (m *MongoStore) Initialize() {
 	var err error
 	m.ctx = context.Background()
-	m.client, err = mongo.Connect(m.ctx, options.Client().ApplyURI(config.Current.Store.Mongo.Uri))
+	m.client, err = mongo.Connect(m.ctx, options.Client().SetAppName("Horizon Quasar").ApplyURI(config.Current.Store.Mongo.Uri))
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not create mongo-store")
 		m.connected.Store(false)
