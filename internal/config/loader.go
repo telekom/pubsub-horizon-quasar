@@ -84,6 +84,20 @@ func setDefaults() {
 	viper.SetDefault("metrics.enabled", false)
 	viper.SetDefault("metrics.port", 8080)
 	viper.SetDefault("metrics.timeout", "5s")
+
+	viper.SetDefault("snapshot.enabled", false)
+	viper.SetDefault("snapshot.rebuildInterval", "120s")
+	viper.SetDefault("snapshot.activationDelay", "60s")
+	viper.SetDefault("snapshot.cleanupInterval", "300s")
+
+	viper.SetDefault("snapshot.mongo.uri", "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0")
+	viper.SetDefault("snapshot.mongo.database", "horizon-config")
+	viper.SetDefault("snapshot.mongo.sourceCollection", "subscriptions.subscriber.horizon.telekom.de.v1")
+	viper.SetDefault("snapshot.mongo.targetCollection", "subscriptions.subscriber.horizon.telekom.de.v1-snapshots")
+	viper.SetDefault("snapshot.mongo.reconnectInterval", "10s")
+
+	viper.SetDefault("snapshot.zookeeper.addresses", []string{"localhost:2181", "localhost:2182", "localhost:2183"})
+	viper.SetDefault("snapshot.zookeeper.sessionTimeout", "10s")
 }
 
 func readConfig() *Configuration {
@@ -111,7 +125,7 @@ func applyLogLevel(level string) {
 		log.Info().Msgf("Invalid log level %s. Info log level is used", logLevel)
 	}
 
-	log.Logger = log.Logger.Level(logLevel).With().Timestamp().Logger()
+	log.Logger = log.Logger.Level(logLevel).With().Logger()
 	if logLevel == zerolog.DebugLevel {
 		log.Logger = log.Logger.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
