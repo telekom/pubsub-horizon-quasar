@@ -319,25 +319,6 @@ All snapshot-related settings are located under the `snapshot` configuration pre
 | `snapshot.zookeeper.addresses` | `QUASAR_SNAPSHOT_ZOOKEEPER_ADDRESSES` | `[]string` | `["localhost:2181", "localhost:2182", "localhost:2183"]` | ZooKeeper ensemble server addresses (`host:port`). |
 | `snapshot.zookeeper.sessionTimeout` | `QUASAR_SNAPSHOT_ZOOKEEPER_SESSIONTIMEOUT` | `duration` | `10s` | ZooKeeper session timeout. |
 
-## Logging reference
-
-The snapshot service uses `rs/zerolog` with structured loggers:
-
-| Logger | Level | Event / Message | Description |
-| --- | --- | --- | --- |
-| `snapshot` | `INFO` | `no existing head found, creating initial snapshot` | Initial startup when no prepared znode exists in ZooKeeper. |
-| `snapshot` | `INFO` | `existing head found` | Startup recovery resuming from existing prepared head in ZooKeeper. |
-| `snapshot` | `INFO` | `changes detected, creating new snapshot` | Change Stream detected mutations; aggregation pipeline started. |
-| `snapshot` | `INFO` | `prepared head updated` | New snapshot metadata successfully published to `/horizon/subscriptions/prepared`. |
-| `snapshot` | `DEBUG` | `waiting for activation delay to pass` | Activation delay countdown initiated. |
-| `snapshot` | `INFO` | `activated head updated` | Snapshot metadata successfully published to `/horizon/subscriptions/activated`. |
-| `snapshot` | `DEBUG` | `resumeToken updated` | New Change Stream token received from MongoDB. |
-| `snapshot` | `DEBUG` | `no changes therefore skipping snapshot creation` | Rebuild tick elapsed with no change stream events. |
-| `snapshot` | `DEBUG` | `cleaned up stale snapshots` | Completed periodic retention job and purged unreferenced snapshots. |
-| `mongo` | `WARN` | `attempting to reconnect change stream` | Change Stream encountered an error and is reconnecting. |
-| `mongo` | `ERROR` | `failed to create snapshot` / `change stream error` | Aggregation or change stream failure. |
-| `zoo` | `ERROR` | `failed to read/write znode` | ZooKeeper communication failure. |
-
 ## Operation and development
 
 - **Single Active Instance:** Quasar runs the snapshot engine as a background worker when `snapshot.enabled` is `true`.
