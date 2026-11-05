@@ -157,7 +157,6 @@ Quasar starts
   -> write activated snapshot metadata to ZooKeeper (/horizon/subscriptions/activated)
 ```
 
-Missing ZooKeeper sessions or failed ZooKeeper operations enable MongoDB fallback.
 ZooKeeper connection attempts continue in the background.
 
 ZooKeeper contains snapshot metadata, not subscriptions. For consumers:
