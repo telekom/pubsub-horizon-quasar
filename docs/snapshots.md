@@ -71,37 +71,42 @@ classDiagram
         fetchHead()
         initializeHead()
         waitForChanges()
+        changesPresent()
+        isActivationPending()
         activatePrepared()
+        updateHead()
         runCleanupJob()
     }
     class stateHeadFile["state/head.go"] {
-        NewHead()
-        UpdateHead()
         GetSnapshotIds()
     }
     class stateResumeTokenFile["state/resume_token.go"] {
         ParseResumeToken()
-        SerializeResumeToken()
+        Bson()
+        MarshalJSON()
+        UnmarshalJSON()
     }
     class mongoClientFile["mongo/client.go"] {
         NewClient()
+        Connect()
+        ResumeToken()
         GetUpdates()
         CreateSnapshot()
         DeleteStaleSnapshots()
         Close()
     }
     class mongoAggregationsFile["mongo/aggregations.go"] {
-        aggregateSnapshot()
+        aggregateSnapshot
     }
     class mongoErrorsFile["mongo/errors.go"] {
-        isInvalidResumeTokenError()
+        isResumeTokenErr()
     }
     class zooClientFile["zoo/client.go"] {
         NewClient()
         Read()
         Write()
         Exists()
-        Close()
+        Disconnect()
     }
     class zooZnodesFile["zoo/znodes.go"] {
         ZNodeHead
