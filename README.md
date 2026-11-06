@@ -25,7 +25,7 @@ Quasar is a tiny service for synchronizing the state of custom resources with ca
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/telekom/pubsub-horizon-quasar)
 
 ## Overview
-Quasar is the config-controller powering the Horizon ecosystem. 
+Quasar is the config-controller powering the Horizon ecosystem.
 
 > **Note:** Quasar is an essential part of the Horizon ecosystem. Please refer to [documentation of the entire system](https://github.com/telekom/pubsub-horizon) to get the full picture.
 
@@ -124,8 +124,7 @@ Quasar can be configured using environment variables and/or a configuration file
 
 Quasar stores complete subscription snapshots in MongoDB so consumers can preload
 a new cache and switch to it once activated.
-ZooKeeper addresses must be configured when enabled, but Quasar can start while
-ZooKeeper is unavailable.
+ZooKeeper addresses must be configured when enabled, and ZooKeeper must be available.
 
 ```yaml
 snapshot:
@@ -169,9 +168,7 @@ Quasar does not wait for consumers to finish loading.
 
 ```text
 ZooKeeper is available again
-  -> finish an interrupted update, if needed
-  -> latest active MongoDB snapshot: prepared -> wait activationDelay -> activated
-  -> continue normal operation
+  -> with the next loop resynchronization happens
 ```
 
 Recovery does not create another snapshot or replay every missed version.
@@ -184,8 +181,7 @@ Recovery does not create another snapshot or replay every missed version.
 - If the initial MongoDB connection fails, Quasar stops. Later MongoDB change-stream disconnections retry at `reconnectInterval`.
 - Run one replica with `Recreate` and no autoscaling; multiple publishers are unsupported.
 
-See [architecture and consumer contract](docs/snapshots.md) for
-publication and consumer fallback details.
+See [architecture and consumer contract](docs/subscription-snapshots.md) for more detailed information.
 
 ### Configuring resources
 The `resources` configuration option is a list of custom resources that should be synchronized. Each resource has the following fields:
@@ -245,7 +241,7 @@ Once you have prepared your configuration, you can run Quasar by executing the f
 ```
 
 ## Contributing
-We're committed to open source, so we welcome and encourage everyone to join its developer community and contribute, whether it's through code or feedback.  
+We're committed to open source, so we welcome and encourage everyone to join its developer community and contribute, whether it's through code or feedback.
 By participating in this project, you agree to abide by its [Code of Conduct](./CODE_OF_CONDUCT.md) at all times.
 
 ## Code of Conduct
@@ -254,6 +250,6 @@ This project has adopted the [Contributor Covenant](https://www.contributor-cove
 By participating in this project, you agree to abide by its [Code of Conduct](./CODE_OF_CONDUCT.md) at all times.
 
 ## Licensing
-This project follows the [REUSE standard for software licensing](https://reuse.software/).    
-Each file contains copyright and license information, and license texts can be found in the [LICENSES](./LICENSES) folder. For more information visit https://reuse.software/. 
-You can find a guide for developers at https://telekom.github.io/reuse-template/.   
+This project follows the [REUSE standard for software licensing](https://reuse.software/).
+Each file contains copyright and license information, and license texts can be found in the [LICENSES](./LICENSES) folder. For more information visit https://reuse.software/.
+You can find a guide for developers at https://telekom.github.io/reuse-template/.
