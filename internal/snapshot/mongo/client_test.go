@@ -55,17 +55,24 @@ func TestClient_NewClient(t *testing.T) {
 		cursor, err := client.targetCollection.Indexes().List(context.Background())
 		require.NoError(t, err)
 
-		var indexes []bson.M
+		type indexSpec struct {
+			Name   string `bson:"name"`
+			Key    bson.D `bson:"key"`
+			Unique bool   `bson:"unique"`
+		}
+
+		var indexes []indexSpec
 		require.NoError(t, cursor.All(context.Background(), &indexes))
 
-		var snapshotIdIndex bson.M
+		var snapshotIdIndex *indexSpec
 		for _, index := range indexes {
-			if index["name"] == "snapshotId" {
-				snapshotIdIndex = index
+			if index.Name == "snapshotId_1_subscriptionId_1" {
+				snapshotIdIndex = &index
 			}
 		}
-		require.NotNil(t, snapshotIdIndex, "target collection must have a snapshotId index")
-		assert.Equal(t, bson.M{"snapshotId": int32(1)}, snapshotIdIndex["key"])
+		require.NotNil(t, snapshotIdIndex, "target collection must have a snapshotId/subscriptionId index")
+		assert.Equal(t, bson.D{{Key: "snapshotId", Value: int32(1)}, {Key: "subscriptionId", Value: int32(1)}}, snapshotIdIndex.Key)
+		assert.True(t, snapshotIdIndex.Unique)
 	})
 
 	t.Run("ConnectionFailure", func(t *testing.T) {
