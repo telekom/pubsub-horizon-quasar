@@ -70,7 +70,7 @@ func NewClient(mongoUri string, databaseName string, sourceColName string, targe
 		streamWg:          sync.WaitGroup{},
 	}
 
-	if err := c.ensureIndex(bson.D{{"snapshotId", 1}}); err != nil {
+	if err := c.ensureIndex(bson.D{{"snapshotId", 1}, {"subscriptionId", 1}}, true); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -78,13 +78,13 @@ func NewClient(mongoUri string, databaseName string, sourceColName string, targe
 	return c, nil
 }
 
-func (c *Client) ensureIndex(keys bson.D) error {
+func (c *Client) ensureIndex(keys bson.D, unique bool) error {
 	ctx, cancel := context.WithCancel(c.clientCtx)
 	defer cancel()
 
 	snapshotIdIndex := mongo.IndexModel{
 		Keys:    keys,
-		Options: options.Index().SetName("snapshotId"),
+		Options: options.Index().SetUnique(unique),
 	}
 
 	if _, err := c.targetCollection.Indexes().CreateOne(ctx, snapshotIdIndex); err != nil && !isIndexExistsErr(err) {
