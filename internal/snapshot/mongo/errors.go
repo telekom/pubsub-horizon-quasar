@@ -15,7 +15,18 @@ const (
 	errCodeInvalidResumeToken      = 260
 	errCodeChangeStreamFatal       = 280
 	errCodeChangeStreamHistoryLost = 286
+	errCodeIndexOptionsConflict    = 85
+	errCodeIndexKeySpecsConflict   = 86
 )
+
+func isIndexExistsErr(err error) bool {
+	if serr, ok := errors.AsType[mongo.ServerError](err); ok {
+		return serr.HasErrorCode(errCodeIndexOptionsConflict) ||
+			serr.HasErrorCode(errCodeIndexKeySpecsConflict)
+	}
+
+	return false
+}
 
 func isResumeTokenErr(err error) bool {
 	if serr, ok := errors.AsType[mongo.ServerError](err); ok {

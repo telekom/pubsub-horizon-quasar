@@ -59,7 +59,7 @@ func NewClient(mongoUri string, databaseName string, sourceColName string, targe
 	sourceCollection := database.Collection(sourceColName)
 	targetCollection := database.Collection(targetColName)
 
-	return &Client{
+	c := &Client{
 		mongoClient:       client,
 		clientCtx:         ctx,
 		clientCancel:      cancel,
@@ -68,7 +68,30 @@ func NewClient(mongoUri string, databaseName string, sourceColName string, targe
 		reconnectInterval: reconnectInterval,
 		streamChan:        make(chan bson.Raw),
 		streamWg:          sync.WaitGroup{},
-	}, nil
+	}
+
+	if err := c.ensureIndex(bson.D{{"snapshotId", 1}}); err != nil {
+		cancel()
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (c *Client) ensureIndex(keys bson.D) error {
+	ctx, cancel := context.WithCancel(c.clientCtx)
+	defer cancel()
+
+	snapshotIdIndex := mongo.IndexModel{
+		Keys:    keys,
+		Options: options.Index().SetName("snapshotId"),
+	}
+
+	if _, err := c.targetCollection.Indexes().CreateOne(ctx, snapshotIdIndex); err != nil && !isIndexExistsErr(err) {
+		return err
+	}
+
+	return nil
 }
 
 func (c *Client) Connect(resumeToken bson.Raw) error {

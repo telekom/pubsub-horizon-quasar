@@ -51,6 +51,21 @@ func TestClient_NewClient(t *testing.T) {
 
 		assert.Equal(t, "source", client.sourceCollection.Name())
 		assert.Equal(t, "target", client.targetCollection.Name())
+
+		cursor, err := client.targetCollection.Indexes().List(context.Background())
+		require.NoError(t, err)
+
+		var indexes []bson.M
+		require.NoError(t, cursor.All(context.Background(), &indexes))
+
+		var snapshotIdIndex bson.M
+		for _, index := range indexes {
+			if index["name"] == "snapshotId" {
+				snapshotIdIndex = index
+			}
+		}
+		require.NotNil(t, snapshotIdIndex, "target collection must have a snapshotId index")
+		assert.Equal(t, bson.M{"snapshotId": int32(1)}, snapshotIdIndex["key"])
 	})
 
 	t.Run("ConnectionFailure", func(t *testing.T) {
